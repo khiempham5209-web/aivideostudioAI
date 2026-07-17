@@ -10,6 +10,7 @@ import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { findVoiceOption, VOICE_OPTIONS } from "./tts/voice-catalog.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
+import { downloadR2ToFile, isR2Configured, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import {
   createProject,
   createSession,
@@ -217,6 +218,19 @@ function contentType(pathname: string): string {
   }
 }
 
+function isR2Path(pathname: string) {
+  return pathname.startsWith("r2://");
+}
+
+function r2Key(ownerEmail: string, projectId: string, category: string, fileName: string) {
+  return [
+    sanitizeFileName(ownerEmail.replace("@", "_at_")),
+    projectId,
+    category,
+    `${timestampForPath()}-${sanitizeFileName(fileName)}`,
+  ].join("/");
+}
+
 function isAllowedFilePath(pathname: string, extraRoots: string[] = []): boolean {
   const target = resolve(pathname).toLowerCase();
   const allowedRoots = [resolve("output").toLowerCase(), resolve("storage").toLowerCase(), ...extraRoots.map((root) => resolve(root).toLowerCase())];
@@ -415,12 +429,15 @@ async function handleUploadAsset(req: IncomingMessage, res: ServerResponse, proj
   const safeName = `${Date.now()}-${sanitizeFileName(file.fileName)}`;
   const filePath = join(targetDir, safeName);
   await writeFile(filePath, file.buffer);
+  const storedPath = isR2Configured()
+    ? await uploadFileToR2(filePath, r2Key(user.email, projectId, folder, file.fileName), file.mimeType)
+    : filePath;
   const asset = createAsset({
     projectId,
     type,
     fileName: file.fileName,
     mimeType: file.mimeType,
-    filePath,
+    filePath: storedPath,
     fileSize: file.buffer.length,
   });
   sendJson(res, 201, { ok: true, asset });
@@ -456,12 +473,15 @@ async function handleCreatePresetSfx(req: IncomingMessage, res: ServerResponse, 
     filePath,
   ]);
   const info = await stat(filePath);
+  const storedPath = isR2Configured()
+    ? await uploadFileToR2(filePath, r2Key(user.email, projectId, "audio", spec.label), "audio/mpeg")
+    : filePath;
   const asset = createAsset({
     projectId,
     type: "audio",
     fileName: spec.label,
     mimeType: "audio/mpeg",
-    filePath,
+    filePath: storedPath,
     fileSize: info.size,
     duration: spec.duration,
   });
@@ -477,6 +497,43 @@ function resultPaths(outputDir: string) {
     audio: resolve(outputDir, "voice.mp3"),
     subtitle: resolve(outputDir, "subtitles", "subtitle.srt"),
     video: resolve(outputDir, "video.mp4"),
+  };
+}
+
+async function localFileForRender(ownerEmail: string, projectId: string, filePath: string, fileName: string) {
+  if (!isR2Path(filePath)) return filePath;
+  const targetPath = resolve(
+    STORAGE_DIR,
+    projectId,
+    "r2-cache",
+    `${Date.now()}-${sanitizeFileName(fileName)}`,
+  );
+  await downloadR2ToFile(filePath, targetPath);
+  return targetPath;
+}
+
+async function publishResultPaths(ownerEmail: string, projectId: string, paths: ReturnType<typeof resultPaths>) {
+  const localPaths = await copyResultToSaveRoot(ownerEmail, projectId, paths);
+  if (!isR2Configured()) return localPaths;
+  const uploadIfExists = async (localPath: string, fileName: string, mimeType: string) => {
+    const info = await stat(localPath).catch(() => null);
+    if (!info?.isFile()) return localPath;
+    return uploadFileToR2(localPath, r2Key(ownerEmail, projectId, "output", fileName), mimeType);
+  };
+  const [scriptJson, scriptText, audio, subtitle, video] = await Promise.all([
+    uploadIfExists(localPaths.scriptJson, "script.json", "application/json"),
+    uploadIfExists(localPaths.scriptText, "script.txt", "text/plain; charset=utf-8"),
+    uploadIfExists(localPaths.audio, "voice.mp3", "audio/mpeg"),
+    uploadIfExists(localPaths.subtitle, "subtitle.srt", "text/plain; charset=utf-8"),
+    uploadIfExists(localPaths.video, "video.mp4", "video/mp4"),
+  ]);
+  return {
+    ...localPaths,
+    scriptJson,
+    scriptText,
+    audio,
+    subtitle,
+    video,
   };
 }
 
@@ -654,27 +711,33 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string, b
 
       const assets = listAssets(projectId);
       const scenes = listScenes(projectId);
-      const footagePlan = Object.fromEntries(
+      const footageEntries = await Promise.all(
         scenes
-          .map((scene, index) => {
+          .map(async (scene, index) => {
             const asset = assets.find((item) => item.id === scene.source_asset_id && item.type === "video");
             if (!asset) return null;
             const sceneId = scene.scene_key || `scene-${index + 1}`;
-            return [sceneId, { path: asset.file_path, startSec: scene.source_start, endSec: scene.source_end }];
+            const path = await localFileForRender(project.owner_email, projectId, asset.file_path, asset.file_name);
+            return [sceneId, { path, startSec: scene.source_start, endSec: scene.source_end }];
           })
-          .filter(Boolean) as Array<[string, { path: string; startSec: number | null; endSec: number | null }]>,
+      );
+      const footagePlan = Object.fromEntries(
+        footageEntries.filter(Boolean) as Array<[string, { path: string; startSec: number | null; endSec: number | null }]>,
       );
       const hasVideoAssets = assets.some((asset) => asset.type === "video");
       const backgroundAudio = assets.find((asset) => asset.type === "audio" && !asset.file_name.startsWith("voiceover-"));
+      const backgroundAudioPath = backgroundAudio
+        ? await localFileForRender(project.owner_email, projectId, backgroundAudio.file_path, backgroundAudio.file_name)
+        : undefined;
       await runTemplatePipeline(generated.scriptPath, {
         footageDir: hasVideoAssets ? resolve(STORAGE_DIR, projectId, "source") : undefined,
         footagePlan,
-        backgroundAudioPath: backgroundAudio?.file_path ?? undefined,
+        backgroundAudioPath,
         burnSubtitles,
       });
       if (isCancelled()) return;
 
-      const paths = await copyResultToSaveRoot(project.owner_email, projectId, resultPaths(generated.outputDir));
+      const paths = await publishResultPaths(project.owner_email, projectId, resultPaths(generated.outputDir));
       updateProject(projectId, {
         status: "completed",
         output_path: paths.video,
@@ -731,8 +794,9 @@ function startAudioJob(projectId: string, jobId: string) {
         audioOnly: true,
       });
       if (isCancelled()) return;
-      const paths = await copyResultToSaveRoot(project.owner_email, projectId, resultPaths(generated.outputDir));
-      const audioInfo = await stat(paths.audio).catch(() => null);
+      const localPaths = await copyResultToSaveRoot(project.owner_email, projectId, resultPaths(generated.outputDir));
+      const audioInfo = await stat(localPaths.audio).catch(() => null);
+      const paths = await publishResultPaths(project.owner_email, projectId, resultPaths(generated.outputDir));
       if (audioInfo?.isFile()) {
         createAsset({
           projectId,
@@ -1078,6 +1142,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const path = url.searchParams.get("path");
       if (!path) {
         sendJson(res, 400, { error: "Missing path" });
+        return;
+      }
+      if (isR2Path(path)) {
+        if (!isUserFile(user.email, path)) {
+          sendJson(res, 403, { error: "File does not belong to the current user" });
+          return;
+        }
+        const url = await signedR2Url(path, 900);
+        res.writeHead(302, { Location: url, "Cache-Control": "private, max-age=0, no-store" });
+        res.end();
         return;
       }
       const resolvedPath = resolve(path);
