@@ -590,7 +590,7 @@ function jobResponse(projectId: string, jobId: string) {
   };
 }
 
-function startRenderJob(projectId: string, jobId: string, folderName?: string) {
+function startRenderJob(projectId: string, jobId: string, folderName?: string, burnSubtitles = false) {
   void (async () => {
     const project = getProject(projectId);
     if (!project) return;
@@ -637,6 +637,7 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string) {
         footageDir: hasVideoAssets ? resolve(STORAGE_DIR, projectId, "source") : undefined,
         footagePlan,
         backgroundAudioPath: backgroundAudio?.file_path ?? undefined,
+        burnSubtitles,
       });
       if (isCancelled()) return;
 
@@ -823,8 +824,9 @@ async function handleStartProjectRender(req: IncomingMessage, res: ServerRespons
   const folderName = typeof (body as { folderName?: unknown }).folderName === "string"
     ? (body as { folderName: string }).folderName
     : undefined;
+  const burnSubtitles = (body as { burnSubtitles?: unknown }).burnSubtitles === true;
   const job = createRenderJob(projectId);
-  startRenderJob(projectId, job.id, folderName);
+  startRenderJob(projectId, job.id, folderName, burnSubtitles);
   sendJson(res, 202, { ok: true, project, job });
 }
 

@@ -77,6 +77,7 @@ export interface TemplatePipelineOptions {
   footagePlan?: Record<string, { path: string; startSec?: number | null; endSec?: number | null }>;
   backgroundAudioPath?: string;
   audioOnly?: boolean;
+  burnSubtitles?: boolean;
 }
 
 export async function runTemplatePipeline(scriptPath: string, options: TemplatePipelineOptions = {}): Promise<void> {
@@ -269,7 +270,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const silentVideo = join(outputDir, "video-silent.mp4");
   const videoPath = join(outputDir, "video.mp4");
   await concatVideos(fittedClips, silentVideo);
-  await muxAudioOntoVideo(silentVideo, voiceMp3, videoPath);
+  await muxAudioOntoVideo(silentVideo, voiceMp3, videoPath, options.burnSubtitles ? subtitlePath : undefined);
 
   // STEP 8 — done
   log.step(8, TOTAL_STEPS, "Done");

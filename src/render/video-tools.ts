@@ -111,16 +111,31 @@ export async function muxAudioOntoVideo(
   videoPath: string,
   audioPath: string,
   outPath: string,
+  subtitlePath?: string,
 ): Promise<void> {
-  await run(FFMPEG_BIN, [
+  const args = [
     "-y",
     "-i", videoPath,
     "-i", audioPath,
     "-map", "0:v:0",
     "-map", "1:a:0",
-    "-c:v", "copy",
     "-c:a", "aac",
     "-b:a", "192k",
-    outPath,
-  ]);
+  ];
+
+  if (subtitlePath) {
+    const escapedSubtitle = resolve(subtitlePath).replace(/\\/g, "/").replace(/:/g, "\\:");
+    args.push(
+      "-vf",
+      `subtitles='${escapedSubtitle}':force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=60'`,
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "23",
+    );
+  } else {
+    args.push("-c:v", "copy");
+  }
+
+  args.push(outPath);
+  await run(FFMPEG_BIN, args);
 }

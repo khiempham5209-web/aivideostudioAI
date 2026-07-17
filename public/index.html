@@ -1140,7 +1140,7 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "" };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "" };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -1255,7 +1255,7 @@
           $("#workflowStatus").insertAdjacentHTML("beforebegin", `<div class="empty" id="activeProjectBanner" style="margin-bottom:12px;text-align:left;">Chưa chọn dự án.</div>`);
         }
         if (!$("#exportProjectPanel")) {
-          $("#export .page-head").insertAdjacentHTML("afterend", `<div class="panel" id="exportProjectPanel" style="margin-bottom:14px;"><div class="panel-body field-stack"><div><label>Dự án sẽ xuất</label><select id="exportProjectSelect"></select></div><div><label>Folder lưu/xuất</label><input id="exportFolderName" placeholder="Tự tạo theo tên dự án nếu để trống" /></div><p class="tiny" id="exportFolderHint">Chưa có folder output. Sau khi xuất sẽ hiện đường dẫn và nút mở thư mục/tải file.</p></div></div>`);
+          $("#export .page-head").insertAdjacentHTML("afterend", `<div class="panel" id="exportProjectPanel" style="margin-bottom:14px;"><div class="panel-body field-stack"><div><label>Dự án sẽ xuất</label><select id="exportProjectSelect"></select></div><div><label>Folder lưu/xuất</label><input id="exportFolderName" placeholder="Tự tạo theo tên dự án nếu để trống" /></div><label style="display:flex;gap:10px;align-items:center;"><input id="burnSubtitles" type="checkbox" checked /> Bật phụ đề vào video MP4</label><p class="tiny" id="exportFolderHint">Chưa có folder output. Sau khi xuất sẽ hiện đường dẫn và nút mở thư mục/tải file.</p></div></div>`);
         }
         const fakeTracks = document.querySelector("#timeline .tracks");
         if (fakeTracks) {
@@ -1272,7 +1272,8 @@
 
       async function api(url, options) {
         const resp = await fetch(url, options);
-        const data = await resp.json();
+        const contentType = resp.headers.get("content-type") || "";
+        const data = contentType.includes("application/json") ? await resp.json() : { error: await resp.text() };
         if (!resp.ok) throw data;
         return data;
       }
@@ -1535,13 +1536,17 @@
 
       function renderVoiceOutputs() {
         const audioAssets = projectAudioAssets();
+        const currentJob = state.currentJob;
         if ($("#audioJobStatus")) {
-          const running = state.activeJobId && $("#jobBadge")?.textContent && !["Hoàn thành", "Lỗi"].includes($("#jobBadge").textContent);
           $("#audioJobStatus").innerHTML = audioAssets.length
             ? `Đã có ${audioAssets.length} MP3 trong dự án. Có thể nghe, tải hoặc dùng khi xuất video.`
-            : running
-              ? "Đang tạo voice MP3. Theo dõi thanh tiến trình xử lý."
-              : "Chưa tạo voice MP3 cho dự án này. Chọn voice rồi bấm Tạo voice MP3 từ kịch bản.";
+            : state.lastAudioPath
+              ? `Đã tạo xong MP3: ${state.lastAudioPath}`
+              : currentJob?.status === "running" || currentJob?.status === "queued"
+                ? `Đang tạo voice MP3: ${currentJob.current_step || "Đang xử lý"} (${currentJob.progress || 0}%).`
+                : currentJob?.status === "failed"
+                  ? `Tạo MP3 lỗi: ${currentJob.error_message || "Không rõ lỗi."}`
+                  : "Chưa tạo voice MP3 cho dự án này. Chọn voice rồi bấm Tạo voice MP3 từ kịch bản.";
         }
         if (!$("#voiceOutputList")) return;
         $("#voiceOutputList").innerHTML = audioAssets.length
@@ -1647,6 +1652,7 @@
       }
 
       function setJob(project, job) {
+        state.currentJob = job;
         $("#jobBadge").textContent = label(job.status);
         $("#jobBadge").className = `pill ${job.status === "completed" ? "ok" : "warn"}`;
         setProgress(job.progress || 0, job.current_step || label(job.status));
@@ -1771,7 +1777,12 @@
         } else {
           $("#serverChip").textContent = "Có lỗi";
           $("#serverChip").className = "chip warn";
-          toast(error?.error || error?.message || "Có lỗi khi xử lý.");
+          const message = error?.error || error?.message || "Có lỗi khi xử lý.";
+          if (/request entity too large|request body is too large|payload too large/i.test(message)) {
+            toast("File upload quá lớn khi đi qua Vercel. Cần cắm R2 direct upload để upload MP4 lớn ổn định.");
+          } else {
+            toast(message);
+          }
         }
       }
 
@@ -1982,7 +1993,7 @@
           const data = await api(`/api/projects/${state.activeProjectId}/render`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ folderName: $("#exportFolderName")?.value || "" }),
+            body: JSON.stringify({ folderName: $("#exportFolderName")?.value || "", burnSubtitles: $("#burnSubtitles")?.checked === true }),
           });
           state.activeJobId = data.job.id;
           setJob(data.project, data.job);
