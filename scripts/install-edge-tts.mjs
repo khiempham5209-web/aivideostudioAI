@@ -8,6 +8,10 @@ const edgeTtsBin =
   process.platform === "win32"
     ? join(venvDir, "Scripts", "edge-tts.exe")
     : join(venvDir, "bin", "edge-tts");
+const pythonBin =
+  process.platform === "win32"
+    ? join(venvDir, "Scripts", "python.exe")
+    : join(venvDir, "bin", "python");
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -42,8 +46,13 @@ function findPython() {
   return null;
 }
 
-if (existsSync(edgeTtsBin)) {
-  console.log(`edge-tts already installed: ${edgeTtsBin}`);
+if (existsSync(edgeTtsBin) && existsSync(pythonBin)) {
+  console.log(`edge-tts virtualenv already exists: ${edgeTtsBin}`);
+  console.log("Ensuring gTTS fallback is installed");
+  if (!run(pythonBin, ["-m", "pip", "install", "gTTS"])) {
+    console.error("Failed to install gTTS fallback.");
+    process.exit(1);
+  }
   process.exit(0);
 }
 
@@ -59,13 +68,8 @@ if (!run(python.command, [...python.prefixArgs, "-m", "venv", venvDir])) {
   process.exit(1);
 }
 
-const pip =
-  process.platform === "win32"
-    ? join(venvDir, "Scripts", "python.exe")
-    : join(venvDir, "bin", "python");
-
-console.log("Installing edge-tts into virtualenv");
-if (!run(pip, ["-m", "pip", "install", "--upgrade", "pip", "edge-tts"])) {
+console.log("Installing edge-tts and gTTS into virtualenv");
+if (!run(pythonBin, ["-m", "pip", "install", "--upgrade", "pip", "edge-tts", "gTTS"])) {
   console.error("Failed to install edge-tts.");
   process.exit(1);
 }

@@ -24,6 +24,15 @@ function localEdgeTtsBinary(): string | undefined {
   return undefined;
 }
 
+function localEdgeTtsPython(): string | undefined {
+  const win = resolve(".edge-tts-venv", "Scripts", "python.exe");
+  const linux = resolve(".edge-tts-venv", "bin", "python");
+  if (existsSync(win)) return win;
+  if (existsSync(linux)) return linux;
+  return undefined;
+}
+
 export const FFMPEG_BIN = process.env.FFMPEG_PATH ?? packageBinary("ffmpeg-static") ?? "ffmpeg";
 export const FFPROBE_BIN = process.env.FFPROBE_PATH ?? packageBinary("ffprobe-static") ?? "ffprobe";
 export const EDGE_TTS_BIN = process.env.EDGE_TTS_BIN ?? localEdgeTtsBinary() ?? "edge-tts";
+export const EDGE_TTS_PYTHON = process.env.EDGE_TTS_PYTHON ?? localEdgeTtsPython() ?? "python";
