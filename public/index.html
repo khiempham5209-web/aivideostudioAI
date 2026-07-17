@@ -1065,7 +1065,7 @@
         <section class="page" id="timeline">
           <div class="page-head">
             <div><h2>Edit video</h2><p class="muted">Xem video thật, thêm MP4/voice MP3, bật phụ đề, trim và chuẩn bị xuất.</p></div>
-            <div class="top-actions"><button class="btn timeline-tool" data-tool="Trim">Trim</button><button class="btn timeline-tool" data-tool="Split">Split</button><button class="btn timeline-tool" data-tool="Move">Move</button></div>
+            <div class="top-actions"><button class="btn timeline-tool" data-tool="Trim">Trim</button><button class="btn timeline-tool" data-tool="Split">Split</button><button class="btn timeline-tool" data-tool="Move">Move</button><button class="btn timeline-tool" data-tool="Delete">Xoa media</button></div>
           </div>
           <div class="grid export-grid">
             <div class="panel">
@@ -1140,7 +1140,7 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "" };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "" };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -1569,15 +1569,15 @@
         const videos = projectVideoAssets();
         const audios = projectAudioAssets();
         const audioRows = audios.length ? audios : (state.lastAudioPath ? [{ file_name: "voice.mp3", file_path: state.lastAudioPath }] : []);
-        const clip = (text, className, color, title = "") => `<div class="clip ${className}" title="${title || text}" style="--clip:${color};">${text}</div>`;
+        const clip = (text, className, color, title = "", assetId = "") => `<div class="clip ${className}" data-asset-id="${assetId}" title="${title || text}" style="--clip:${color};">${text}</div>`;
         tracks.innerHTML = `
           <div class="track">
             <strong>Video Track</strong>
-            ${videos.length ? videos.slice(0, 3).map((asset, index) => clip(asset.file_name, ["c1", "c2", "c3"][index] || "c3", "#2563eb", asset.file_path)).join("") : `<button class="btn" id="trackAddVideoButton" type="button">+ Add video MP4</button>`}
+            ${videos.length ? videos.slice(0, 6).map((asset, index) => clip(asset.file_name, ["c1", "c2", "c3"][index] || "c3", "#2563eb", asset.file_path, asset.id)).join("") : `<button class="btn" id="trackAddVideoButton" type="button">+ Add video MP4</button>`}
           </div>
           <div class="track">
             <strong>Voice / Audio Track</strong>
-            ${audioRows.length ? audioRows.slice(0, 3).map((asset, index) => clip(asset.file_name, ["c4", "c2", "c3"][index] || "c3", "#16a34a", asset.file_path)).join("") : `<button class="btn" id="trackAddAudioButton" type="button">+ Add voice/MP3</button>`}
+            ${audioRows.length ? audioRows.slice(0, 6).map((asset, index) => clip(asset.file_name, ["c4", "c2", "c3"][index] || "c3", "#16a34a", asset.file_path, asset.id || "")).join("") : `<button class="btn" id="trackAddAudioButton" type="button">+ Add voice/MP3</button>`}
           </div>
           <div class="track">
             <strong>Subtitle Track</strong>
@@ -1589,6 +1589,27 @@
             ${clip("Xuất theo cài đặt", "c3", "#db2777")}
           </div>
         `;
+        tracks.querySelectorAll(".clip[data-asset-id]").forEach((clipEl) => {
+          clipEl.addEventListener("click", () => {
+            const assetId = clipEl.dataset.assetId || "";
+            if (!assetId) return;
+            state.selectedTimelineAssetId = assetId;
+            tracks.querySelectorAll(".clip").forEach((el) => el.classList.remove("selected"));
+            clipEl.classList.add("selected");
+            const asset = state.assets.find((item) => item.id === assetId);
+            if (asset?.type === "video" || asset?.type === "audio") {
+              const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
+              const url = fileUrl(asset.file_path);
+              if (frame) {
+                frame.innerHTML = asset.type === "video"
+                  ? `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${url}" /></video>`
+                  : `<div style="position:relative;z-index:1;width:min(720px,90%);display:grid;gap:12px;"><strong>${asset.file_name}</strong><audio controls src="${url}" style="width:100%;"></audio></div>`;
+                attachMediaErrorHandlers(frame);
+              }
+            }
+            toast(`Đã chọn ${asset?.file_name || "media"} để trim/split/move/xóa.`);
+          });
+        });
         $("#trackAddVideoButton")?.addEventListener("click", triggerVideoUpload);
         $("#trackAddAudioButton")?.addEventListener("click", triggerAudioUpload);
       }
@@ -1667,7 +1688,7 @@
                 : "";
           const actionText = asset.type === "video" ? "Dùng video cho scene đang chọn" : asset.type === "audio" ? "Dùng MP3/audio cho project" : "Dùng media cho scene";
           item.innerHTML = `${preview}<footer><strong>${asset.file_name}</strong><p class="tiny">${asset.type} · ${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</p><a class="btn" href="${url}" target="_blank" download>Tải/Mở file</a></footer>`;
-          item.querySelector("footer")?.insertAdjacentHTML("beforeend", `<button class="btn use-asset" data-id="${asset.id}" data-type="${asset.type}" type="button" style="margin-top:8px;">${actionText}</button>`);
+          item.querySelector("footer")?.insertAdjacentHTML("beforeend", `<button class="btn use-asset" data-id="${asset.id}" data-type="${asset.type}" type="button" style="margin-top:8px;">${actionText}</button><button class="btn delete-asset" data-id="${asset.id}" type="button" style="margin-top:8px;">Xoa file nhap</button>`);
           $("#mediaGrid").appendChild(item);
         });
         attachMediaErrorHandlers($("#mediaGrid"));
@@ -1851,6 +1872,43 @@
         }
       }
 
+      function putFileToSignedUrl(uploadUrl, file, onProgress) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl);
+          xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && onProgress) onProgress(Math.round((event.loaded / event.total) * 100));
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject({ error: `R2 upload failed (${xhr.status}): ${xhr.responseText || xhr.statusText}` });
+          };
+          xhr.onerror = () => reject({ error: "Không upload được trực tiếp lên R2. Kiểm tra CORS Policy của bucket R2 cho domain Vercel." });
+          xhr.send(file);
+        });
+      }
+
+      async function uploadAssetDirectToR2(file, onProgress) {
+        const mimeType = file.type || "application/octet-stream";
+        const start = await api(`/api/projects/${state.activeProjectId}/assets/direct-upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: file.name, mimeType, fileSize: file.size }),
+        });
+        await putFileToSignedUrl(start.uploadUrl, file, onProgress);
+        return api(`/api/projects/${state.activeProjectId}/assets/confirm-upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: start.asset.fileName,
+            mimeType: start.asset.mimeType,
+            fileSize: start.asset.fileSize,
+            filePath: start.filePath,
+          }),
+        });
+      }
+
       $$("[data-page]").forEach((btn) => btn.addEventListener("click", () => switchPage(btn.dataset.page)));
       $$(".segmented, .quality").forEach((group) => group.addEventListener("click", (e) => {
         if (e.target.tagName !== "BUTTON") return;
@@ -1934,27 +1992,38 @@
         }
       });
       async function uploadSelectedAsset() {
-        if (!state.activeProjectId) return alert("Hãy chọn hoặc tạo project trước.");
-        if (!$("#assetFile").files.length) return alert("Hãy chọn file media.");
+        if (!state.activeProjectId) return alert("Hay chon hoac tao project truoc.");
+        if (!$("#assetFile").files.length) return alert("Hay chon file media.");
         const file = $("#assetFile").files[0];
         const uploadKind = state.pendingUploadKind;
-        const fd = new FormData();
-        fd.append("file", file);
         $("#uploadButton").disabled = true;
-        $("#uploadButton").textContent = "Đang upload...";
-        toast(`Đang upload ${file.name}...`);
-        await api(`/api/projects/${state.activeProjectId}/assets`, { method: "POST", body: fd }).then(async () => {
+        $("#uploadButton").textContent = "Dang upload...";
+        toast(`Dang upload truc tiep len R2: ${file.name}...`);
+        try {
+          try {
+            await uploadAssetDirectToR2(file, (percent) => {
+              $("#uploadButton").textContent = `Upload ${percent}%`;
+            });
+          } catch (directError) {
+            if (!/R2 is not configured/i.test(directError?.error || "")) throw directError;
+            const fd = new FormData();
+            fd.append("file", file);
+            toast("R2 chua cau hinh, tam upload qua backend. File lon co the loi.");
+            await api(`/api/projects/${state.activeProjectId}/assets`, { method: "POST", body: fd });
+          }
           $("#assetFile").value = "";
           await loadAssets(state.activeProjectId);
           await loadStats();
           renderEditorWorkspace();
           switchPage(uploadKind ? "timeline" : "media");
-          toast(`Đã upload ${file.name}. File đã hiện trong ${uploadKind ? "màn Edit" : "Thư viện Media"}.`);
-        }).catch(showError).finally(() => {
+          toast(`Da upload ${file.name}. File da luu R2 va hien trong ${uploadKind ? "man Edit" : "Thu vien Media"}.`);
+        } catch (error) {
+          showError(error);
+        } finally {
           $("#uploadButton").disabled = false;
           $("#uploadButton").textContent = "Upload";
           state.pendingUploadKind = "";
-        });
+        }
       }
 
       $("#uploadButton").addEventListener("click", async () => {
@@ -1966,7 +2035,19 @@
       });
       $("#mediaGrid").addEventListener("click", async (event) => {
         const target = event.target;
-        if (!(target instanceof HTMLElement) || !target.classList.contains("use-asset")) return;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.classList.contains("delete-asset")) {
+          const assetId = target.dataset.id;
+          if (!assetId) return;
+          await api(`/api/assets/${assetId}`, { method: "DELETE" }).then(async () => {
+            await loadAssets(state.activeProjectId);
+            await loadStats();
+            renderEditorWorkspace();
+            toast("Da xoa file nhap khoi thu vien va R2 cache.");
+          }).catch(showError);
+          return;
+        }
+        if (!target.classList.contains("use-asset")) return;
         if (target.dataset.type === "audio") {
           renderVoiceOutputs();
           renderEditorWorkspace();
@@ -2041,6 +2122,17 @@
         toast("Đang preview giọng đọc bằng trình duyệt.");
       });
       $$(".timeline-tool").forEach((button) => button.addEventListener("click", () => {
+        if (button.dataset.tool === "Delete") {
+          if (!state.selectedTimelineAssetId) return toast("Hay chon clip media tren timeline truoc.");
+          api(`/api/assets/${state.selectedTimelineAssetId}`, { method: "DELETE" }).then(async () => {
+            state.selectedTimelineAssetId = "";
+            await loadAssets(state.activeProjectId);
+            await loadStats();
+            renderEditorWorkspace();
+            toast("Da xoa media nhap khoi timeline va R2 cache.");
+          }).catch(showError);
+          return;
+        }
         toast(`${button.dataset.tool} đã chọn. Chỉnh timeline chi tiết sẽ áp dụng vào scene/media đang chọn.`);
       }));
       $("#renderButton").addEventListener("click", async (event) => {
@@ -2221,7 +2313,11 @@
         await api(`/api/scenes/${state.selectedTimelineSceneId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sourceStart: Number($("#trimStart").value || 0), sourceEnd: Number($("#trimEnd").value || 0) }),
+          body: JSON.stringify({
+            sourceAssetId: state.selectedTimelineAssetId || undefined,
+            sourceStart: Number($("#trimStart").value || 0),
+            sourceEnd: Number($("#trimEnd").value || 0)
+          }),
         }).then(async () => {
           await loadScenes(state.activeProjectId);
           toast("Đã lưu trim cho scene.");

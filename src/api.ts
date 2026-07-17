@@ -10,7 +10,7 @@ import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { findVoiceOption, VOICE_OPTIONS } from "./tts/voice-catalog.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
-import { downloadR2ToFile, isR2Configured, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
+import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import {
   createProject,
   createSession,
@@ -18,7 +18,9 @@ import {
   createAsset,
   createRenderJob,
   deleteSession,
+  deleteAsset,
   deleteScene,
+  getAsset,
   getUserSettings,
   getSession,
   getScene,
@@ -439,6 +441,91 @@ async function handleUploadAsset(req: IncomingMessage, res: ServerResponse, proj
     mimeType: file.mimeType,
     filePath: storedPath,
     fileSize: file.buffer.length,
+  });
+  sendJson(res, 201, { ok: true, asset });
+}
+
+async function handleCreateDirectAssetUpload(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  if (!isR2Configured()) {
+    sendJson(res, 503, { error: "R2 is not configured. Direct upload requires R2 env variables." });
+    return;
+  }
+  const body = await readJsonBody(req) as CreateVideoBody & {
+    fileName?: string;
+    mimeType?: string;
+    fileSize?: number;
+  };
+  const fileName = sanitizeFileName(String(body.fileName || ""));
+  const mimeType = String(body.mimeType || "application/octet-stream");
+  const fileSize = Number(body.fileSize || 0);
+  if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
+    sendJson(res, 400, { error: "fileName and fileSize are required" });
+    return;
+  }
+  const type = assetType(mimeType, fileName);
+  const folder = type === "video" ? "source" : type === "audio" ? "audio" : type === "image" ? "image" : "other";
+  const objectName = `${Date.now()}-${fileName}`;
+  const key = r2Key(user.email, projectId, folder, objectName);
+  const upload = await signedR2UploadUrl(key, mimeType, 900);
+  sendJson(res, 200, {
+    ok: true,
+    uploadUrl: upload.uploadUrl,
+    filePath: upload.filePath,
+    key: upload.key,
+    expiresIn: upload.expiresIn,
+    asset: {
+      type,
+      fileName,
+      mimeType,
+      fileSize,
+    },
+  });
+}
+
+async function handleConfirmDirectAssetUpload(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  const body = await readJsonBody(req) as CreateVideoBody & {
+    fileName?: string;
+    mimeType?: string;
+    fileSize?: number;
+    filePath?: string;
+  };
+  const fileName = sanitizeFileName(String(body.fileName || ""));
+  const mimeType = String(body.mimeType || "application/octet-stream");
+  const fileSize = Number(body.fileSize || 0);
+  const filePath = String(body.filePath || "");
+  if (!fileName || !filePath.startsWith(`r2://${process.env.R2_BUCKET}/`) || !Number.isFinite(fileSize) || fileSize <= 0) {
+    sendJson(res, 400, { error: "Invalid direct upload confirmation" });
+    return;
+  }
+  if (!isUserFile(user.email, filePath)) {
+    const expectedPrefix = `r2://${process.env.R2_BUCKET}/${sanitizeFileName(user.email.replace("@", "_at_"))}/${projectId}/`;
+    if (!filePath.startsWith(expectedPrefix)) {
+      sendJson(res, 403, { error: "Uploaded file does not belong to the current project" });
+      return;
+    }
+  }
+  const type = assetType(mimeType, fileName);
+  const asset = createAsset({
+    projectId,
+    type,
+    fileName,
+    mimeType,
+    filePath,
+    fileSize,
   });
   sendJson(res, 201, { ok: true, asset });
 }
@@ -1422,6 +1509,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
+    const directAssetUploadMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/assets\/direct-upload$/);
+    if (req.method === "POST" && directAssetUploadMatch) {
+      await handleCreateDirectAssetUpload(req, res, directAssetUploadMatch[1]);
+      return;
+    }
+
+    const confirmAssetUploadMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/assets\/confirm-upload$/);
+    if (req.method === "POST" && confirmAssetUploadMatch) {
+      await handleConfirmDirectAssetUpload(req, res, confirmAssetUploadMatch[1]);
+      return;
+    }
+
     const assetsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/assets$/);
     if (req.method === "GET" && assetsMatch) {
       const user = requireUser(req, res);
@@ -1437,6 +1536,31 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === "POST" && assetsMatch) {
       await handleUploadAsset(req, res, assetsMatch[1]);
+      return;
+    }
+
+    const assetMatch = url.pathname.match(/^\/api\/assets\/([^/]+)$/);
+    if (req.method === "DELETE" && assetMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const asset = getAsset(assetMatch[1]);
+      if (!asset) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      if (!getUserProject(user.email, asset.project_id)) {
+        sendJson(res, 403, { error: "Asset does not belong to the current user" });
+        return;
+      }
+      const deleted = deleteAsset(asset.id);
+      if (deleted?.file_path.startsWith("r2://")) {
+        try {
+          await deleteR2Object(deleted.file_path);
+        } catch (error) {
+          console.warn(`Failed to delete R2 object for asset ${deleted.id}:`, error);
+        }
+      }
+      sendJson(res, 200, { ok: true, asset: deleted });
       return;
     }
 

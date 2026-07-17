@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 function configured() {
@@ -78,4 +78,25 @@ export async function downloadR2ToFile(uri: string, targetPath: string) {
 export async function signedR2Url(uri: string, expiresIn = 900) {
   const { bucket, key } = parseR2Uri(uri);
   return getSignedUrl(client(), new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
+}
+
+export async function signedR2UploadUrl(key: string, contentType = "application/octet-stream", expiresIn = 900) {
+  const bucket = process.env.R2_BUCKET!;
+  const objectKey = key.replace(/^\/+/, "");
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: objectKey,
+    ContentType: contentType,
+  });
+  return {
+    uploadUrl: await getSignedUrl(client(), command, { expiresIn }),
+    filePath: r2Uri(objectKey),
+    key: objectKey,
+    expiresIn,
+  };
+}
+
+export async function deleteR2Object(uri: string) {
+  const { bucket, key } = parseR2Uri(uri);
+  await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }

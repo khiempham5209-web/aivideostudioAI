@@ -379,6 +379,18 @@ export function listAssets(projectId: string): AssetRecord[] {
   return db.prepare("SELECT * FROM assets WHERE project_id = ? ORDER BY created_at DESC").all(projectId) as AssetRecord[];
 }
 
+export function getAsset(assetId: string): AssetRecord | undefined {
+  return db.prepare("SELECT * FROM assets WHERE id = ?").get(assetId) as AssetRecord | undefined;
+}
+
+export function deleteAsset(assetId: string): AssetRecord | undefined {
+  const asset = getAsset(assetId);
+  if (!asset) return undefined;
+  db.prepare("DELETE FROM assets WHERE id = ?").run(assetId);
+  db.prepare("UPDATE scenes SET source_asset_id = NULL WHERE source_asset_id = ?").run(assetId);
+  return asset;
+}
+
 export function replaceProjectScenes(
   projectId: string,
   scenes: Array<{ id: string; type: string; voiceText: string; templateId: string }>,
