@@ -223,7 +223,7 @@ function isAllowedFilePath(pathname: string, extraRoots: string[] = []): boolean
   return allowedRoots.some((root) => target === root || target.startsWith(`${root}\\`));
 }
 
-async function sendFileByPath(res: ServerResponse, pathname: string, headOnly = false, extraRoots: string[] = []) {
+async function sendFileByPath(req: IncomingMessage, res: ServerResponse, pathname: string, headOnly = false, extraRoots: string[] = []) {
   const filePath = resolve(pathname);
   if (!isAllowedFilePath(filePath, extraRoots)) {
     sendJson(res, 403, { error: "File path is not allowed" });
@@ -235,10 +235,43 @@ async function sendFileByPath(res: ServerResponse, pathname: string, headOnly = 
       sendJson(res, 404, { error: "File not found" });
       return;
     }
-    res.writeHead(200, {
-      "Content-Type": contentType(filePath),
-      "Content-Length": info.size,
+    const range = req.headers.range;
+    const type = contentType(filePath);
+    const baseHeaders = {
+      "Accept-Ranges": "bytes",
+      "Content-Type": type,
       "Content-Disposition": `inline; filename="${filePath.split(/[\\/]/).pop() ?? "file"}"`,
+      "Cache-Control": "private, max-age=0, no-store",
+    };
+    if (range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (!match) {
+        res.writeHead(416, { ...baseHeaders, "Content-Range": `bytes */${info.size}` });
+        res.end();
+        return;
+      }
+      const start = match[1] ? Number(match[1]) : 0;
+      const end = match[2] ? Math.min(Number(match[2]), info.size - 1) : info.size - 1;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= info.size) {
+        res.writeHead(416, { ...baseHeaders, "Content-Range": `bytes */${info.size}` });
+        res.end();
+        return;
+      }
+      res.writeHead(206, {
+        ...baseHeaders,
+        "Content-Length": end - start + 1,
+        "Content-Range": `bytes ${start}-${end}/${info.size}`,
+      });
+      if (headOnly) {
+        res.end();
+        return;
+      }
+      createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
+    res.writeHead(200, {
+      ...baseHeaders,
+      "Content-Length": info.size,
     });
     if (headOnly) {
       res.end();
@@ -1054,7 +1087,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       }
       const settings = getUserSettings(user.email);
       const extraRoots = settings.save_root ? [settings.save_root] : [];
-      await sendFileByPath(res, resolvedPath, req.method === "HEAD", extraRoots);
+      await sendFileByPath(req, res, resolvedPath, req.method === "HEAD", extraRoots);
       return;
     }
 
