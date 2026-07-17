@@ -86,10 +86,11 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   log.info(`Output directory: ${outputDir}`);
 
   // STEP 1 — load + validate
-  log.step(1, TOTAL_STEPS, `Load + validate template script (TTS: ${cfg.ttsProvider})`);
   const fileText = await readFile(scriptPath, "utf8");
   const raw = JSON.parse(fileText.replace(/^\uFEFF/, ""));
   const script: TemplateScript = TemplateScriptSchema.parse(raw);
+  const effectiveTtsProvider = script.voice.provider ?? cfg.ttsProvider;
+  log.step(1, TOTAL_STEPS, `Load + validate template script (TTS: ${effectiveTtsProvider})`);
 
   // STEP 2 — script.txt for CapCut
   log.step(2, TOTAL_STEPS, "Write script.txt");
@@ -98,6 +99,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   // STEP 3 — TTS per scene (idempotent)
   log.step(3, TOTAL_STEPS, "TTS each scene");
   const ttsClient = createTtsClient(cfg, {
+    provider: effectiveTtsProvider,
     voiceName: script.voice.name,
     speed: script.voice.speed,
   });

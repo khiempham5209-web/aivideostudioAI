@@ -18,9 +18,9 @@ describe("loadConfig", () => {
     });
   });
 
-  it("defaults to omnivoice with sensible defaults", () => {
+  it("defaults to edge with sensible defaults", () => {
     const cfg = loadConfig();
-    expect(cfg.ttsProvider).toBe("omnivoice");
+    expect(cfg.ttsProvider).toBe("edge");
     expect(cfg.omnivoiceEndpoint).toBe("http://127.0.0.1:8123");
     expect(cfg.ttsConcurrency).toBe(1);
     expect(cfg.ttsVoiceName).toBe("vi-VN-HoaiMyNeural");

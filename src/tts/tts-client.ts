@@ -5,17 +5,19 @@ export interface TtsClient {
   generate(text: string, audioOutPath: string, srtOutPath?: string): Promise<void>;
 }
 
-import type { Config } from "../config.js";
+import type { Config, TtsProvider } from "../config.js";
 import { EdgeTtsClient } from "./edge-client.js";
 import { OmniVoiceClient } from "./omnivoice-client.js";
 
 export interface TtsSelection {
+  provider?: TtsProvider;
   voiceName?: string;
   speed?: number;
 }
 
 export function createTtsClient(cfg: Config, selection: TtsSelection = {}): TtsClient {
-  if (cfg.ttsProvider === "edge") {
+  const provider = selection.provider ?? cfg.ttsProvider;
+  if (provider === "edge") {
     return new EdgeTtsClient({
       voice: selection.voiceName ?? cfg.ttsVoiceName,
       speed: selection.speed ?? cfg.ttsSpeed,

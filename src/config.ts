@@ -36,7 +36,7 @@ function floatDefault(name: string, def: number): number {
 }
 
 export function loadConfig(): Config {
-    const provider = (process.env.TTS_PROVIDER ?? "omnivoice") as TtsProvider;
+    const provider = (process.env.TTS_PROVIDER ?? "edge") as TtsProvider;
     if (provider !== "omnivoice" && provider !== "edge") {
         throw new Error(
             `TTS_PROVIDER must be "omnivoice" or "edge", got "${provider}"`,
