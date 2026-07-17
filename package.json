@@ -5,6 +5,7 @@
   "main": "src/cli.ts",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/install-edge-tts.mjs",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

@@ -17,8 +17,10 @@ function packageBinary(packageName: string): string | undefined {
 function localEdgeTtsBinary(): string | undefined {
   const exe = resolve(".edge-tts-venv", "Scripts", "edge-tts.exe");
   const cmd = resolve(".edge-tts-venv", "Scripts", "edge-tts.cmd");
+  const linux = resolve(".edge-tts-venv", "bin", "edge-tts");
   if (existsSync(exe)) return exe;
   if (existsSync(cmd)) return cmd;
+  if (existsSync(linux)) return linux;
   return undefined;
 }
 
