@@ -1140,7 +1140,7 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "" };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -1185,7 +1185,7 @@
           $("#regenerateButton").insertAdjacentHTML("afterend", `<button class="btn primary" id="createAudioButton" type="button">Tạo MP3 từ kịch bản</button>`);
         }
         if (!$("#voiceAudioPreview")) {
-          $("#previewVoiceButton").insertAdjacentHTML("afterend", `<div class="field-stack"><label>MP3 đã tạo từ kịch bản</label><audio id="voiceAudioPreview" controls style="display:none;width:100%;"></audio><button class="btn" id="openExportFromVoiceButton" type="button">Mở màn Xuất video</button></div>`);
+          $("#previewVoiceButton").insertAdjacentHTML("afterend", `<div class="field-stack"><label>MP3 đã tạo từ kịch bản</label><div class="empty" id="audioJobStatus" style="text-align:left;">Chưa tạo voice MP3 cho dự án này.</div><audio id="voiceAudioPreview" controls style="display:none;width:100%;"></audio><div class="top-actions"><button class="btn primary" id="createVoiceMp3Button" type="button">Tạo voice MP3 từ kịch bản</button><button class="btn" id="openExportFromVoiceButton" type="button">Mở màn Xuất video</button></div><div id="voiceOutputList" class="field-stack"></div></div>`);
         }
         if (!$("#workflowStatus")) {
           $("#sceneList").insertAdjacentHTML("beforebegin", `<div class="empty" id="workflowStatus" style="margin-bottom:12px;text-align:left;">Bước hiện tại: tạo hoặc chọn project, kiểm tra scene, bấm Tạo MP3 để nghe thử, sau đó Xuất video.</div>`);
@@ -1199,6 +1199,7 @@
                 <button class="btn" id="timelineAddAudioButton" type="button">+ Add voice/MP3</button>
                 <button class="btn" id="timelineOpenMediaButton" type="button">Mở thư viện Media</button>
               </div>
+              <div class="empty" id="timelineAssetStatus" style="text-align:left;">Chưa có video/voice MP3 được gắn vào project.</div>
               <div id="timelineSceneList" class="scene-list"></div>
               <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
                 <div><label for="trimStart">Trim start (giây)</label><input id="trimStart" type="number" min="0" step="0.1" value="0" /></div>
@@ -1520,29 +1521,74 @@
         });
       }
 
+      function fileUrl(path) {
+        return `/api/files?path=${encodeURIComponent(path)}`;
+      }
+
+      function projectAudioAssets() {
+        return (state.assets || []).filter((asset) => asset.type === "audio");
+      }
+
+      function projectVideoAssets() {
+        return (state.assets || []).filter((asset) => asset.type === "video");
+      }
+
+      function renderVoiceOutputs() {
+        const audioAssets = projectAudioAssets();
+        if ($("#audioJobStatus")) {
+          const running = state.activeJobId && $("#jobBadge")?.textContent && !["Hoàn thành", "Lỗi"].includes($("#jobBadge").textContent);
+          $("#audioJobStatus").innerHTML = audioAssets.length
+            ? `Đã có ${audioAssets.length} MP3 trong dự án. Có thể nghe, tải hoặc dùng khi xuất video.`
+            : running
+              ? "Đang tạo voice MP3. Theo dõi thanh tiến trình xử lý."
+              : "Chưa tạo voice MP3 cho dự án này. Chọn voice rồi bấm Tạo voice MP3 từ kịch bản.";
+        }
+        if (!$("#voiceOutputList")) return;
+        $("#voiceOutputList").innerHTML = audioAssets.length
+          ? audioAssets.map((asset) => `<div class="asset-row"><div><strong>${asset.file_name}</strong><p class="tiny">${Math.round((asset.file_size || 0) / 1024)} KB · ${asset.file_path}</p><audio controls src="${fileUrl(asset.file_path)}" style="width:100%;margin-top:8px;"></audio></div><a class="btn" href="${fileUrl(asset.file_path)}" target="_blank" download>Tải MP3</a></div>`).join("")
+          : '<div class="empty">MP3 tạo từ kịch bản sẽ hiện ở đây sau khi job hoàn thành.</div>';
+      }
+
+      function renderTimelineAssetStatus() {
+        if (!$("#timelineAssetStatus")) return;
+        const videos = projectVideoAssets();
+        const audios = projectAudioAssets();
+        const assigned = (state.scenes || []).filter((scene) => scene.source_asset_id).length;
+        $("#timelineAssetStatus").innerHTML = `
+          <strong>Media thật trong project:</strong>
+          ${videos.length} video MP4 · ${audios.length} MP3/audio · ${assigned}/${state.scenes.length || 0} scene đã gán video.
+          <div class="tiny" style="margin-top:6px;">Upload video/MP3 ở Thư viện Media, chọn scene trên timeline, rồi bấm “Dùng cho scene đang chọn”.</div>
+        `;
+      }
+
       function renderAssetsRich(assets) {
         $("#assetCount").textContent = `${assets.length} file`;
         $("#mediaGrid").innerHTML = "";
         if (!assets.length) {
           $("#mediaGrid").innerHTML = '<div class="empty">Chưa có media trong project này. Upload MP4/MP3/hình ảnh để bắt đầu.</div>';
+          renderVoiceOutputs();
+          renderTimelineAssetStatus();
           return;
         }
         assets.forEach((asset, index) => {
           const item = document.createElement("div");
           item.className = "media-thumb";
           item.style.setProperty("--art", art[index % art.length]);
-          const fileUrl = `/api/files?path=${encodeURIComponent(asset.file_path)}`;
+          const url = fileUrl(asset.file_path);
           const preview = asset.type === "video"
-            ? `<video controls muted playsinline style="width:100%;height:150px;object-fit:cover;border-radius:8px 8px 0 0;background:#000;"><source src="${fileUrl}" /></video>`
+            ? `<video controls muted playsinline style="width:100%;height:150px;object-fit:cover;border-radius:8px 8px 0 0;background:#000;"><source src="${url}" /></video>`
             : asset.type === "audio"
-              ? `<div style="padding:14px;"><audio controls src="${fileUrl}" style="width:100%;"></audio></div>`
-              : asset.type === "image"
-                ? `<img src="${fileUrl}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:8px 8px 0 0;" />`
+              ? `<div style="padding:14px;"><audio controls src="${url}" style="width:100%;"></audio></div>`
+            : asset.type === "image"
+                ? `<img src="${url}" alt="" style="width:100%;height:150px;object-fit:cover;border-radius:8px 8px 0 0;" />`
                 : "";
-          item.innerHTML = `${preview}<footer><strong>${asset.file_name}</strong><p class="tiny">${asset.type} · ${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</p><a class="btn" href="${fileUrl}" target="_blank">Mở file</a></footer>`;
-          item.querySelector("footer")?.insertAdjacentHTML("beforeend", `<button class="btn use-asset" data-id="${asset.id}" type="button" style="margin-top:8px;">Dùng cho scene đang chọn</button>`);
+          const actionText = asset.type === "video" ? "Dùng video cho scene đang chọn" : asset.type === "audio" ? "Dùng MP3/audio cho project" : "Dùng media cho scene";
+          item.innerHTML = `${preview}<footer><strong>${asset.file_name}</strong><p class="tiny">${asset.type} · ${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</p><a class="btn" href="${url}" target="_blank" download>Tải/Mở file</a></footer>`;
+          item.querySelector("footer")?.insertAdjacentHTML("beforeend", `<button class="btn use-asset" data-id="${asset.id}" data-type="${asset.type}" type="button" style="margin-top:8px;">${actionText}</button>`);
           $("#mediaGrid").appendChild(item);
         });
+        renderVoiceOutputs();
+        renderTimelineAssetStatus();
       }
 
       function selectTimelineScene(scene) {
@@ -1557,18 +1603,24 @@
         $("#timelineSceneList").innerHTML = "";
         if (!rows.length) {
           $("#timelineSceneList").innerHTML = '<div class="empty">Chưa có scene để dựng timeline.</div>';
+          renderTimelineAssetStatus();
           return;
         }
         rows.forEach((row, index) => {
+          const assignedAsset = state.assets.find((asset) => asset.id === row.source_asset_id);
+          const assignedInfo = assignedAsset
+            ? `Media đã gán: ${assignedAsset.file_name} (${assignedAsset.type})`
+            : "Chưa gán video/media cho scene này";
           const item = document.createElement("button");
           item.className = "scene";
           item.dataset.id = row.id;
-          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><strong>${row.label}</strong><p class="tiny">${row.voice_text || ""}</p><p class="tiny">Trim: ${row.source_start ?? 0}s → ${row.source_end ?? 0}s</p></div>`;
+          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><strong>${row.label}</strong><p class="tiny">${row.voice_text || ""}</p><p class="tiny">${assignedInfo}</p><p class="tiny">Trim: ${row.source_start ?? 0}s → ${row.source_end ?? 0}s</p></div>`;
           item.addEventListener("click", () => selectTimelineScene(row));
           $("#timelineSceneList").appendChild(item);
         });
         const selected = rows.find((row) => row.id === state.selectedTimelineSceneId) || rows[0];
         selectTimelineScene(selected);
+        renderTimelineAssetStatus();
       }
 
       function renderScenes(scenes) {
@@ -1600,7 +1652,14 @@
         setProgress(job.progress || 0, job.current_step || label(job.status));
         state.lastVideoPath = job.video_path || state.lastVideoPath || "";
         state.lastAudioPath = job.audio_path || state.lastAudioPath || "";
-        const links = [["Tải/Xem Video MP4", job.video_path], ["Nghe/Tải Audio MP3", job.audio_path], ["Script JSON", job.script_path]].filter((x) => x[1]).map(([name, path]) => `<a class="btn" href="/api/files?path=${encodeURIComponent(path)}" target="_blank" download>${name}</a><span class="tiny">${path}</span>`);
+        if ($("#audioJobStatus")) {
+          $("#audioJobStatus").innerHTML = job.audio_path
+            ? `Đã tạo xong MP3: ${job.audio_path}`
+            : job.status === "running"
+              ? `Đang xử lý: ${job.current_step || "Đang tạo"} (${job.progress || 0}%)`
+              : "Chưa tạo voice MP3 cho dự án này.";
+        }
+        const links = [["Tải/Xem Video MP4", job.video_path], ["Nghe/Tải Audio MP3", job.audio_path], ["Script JSON", job.script_path]].filter((x) => x[1]).map(([name, path]) => `<a class="btn" href="${fileUrl(path)}" target="_blank" download>${name}</a><span class="tiny">${path}</span>`);
         if (job.output_dir) {
           links.push(`<button class="btn" id="openOutputFolderButton" type="button" data-path="${job.output_dir.replace(/"/g, "&quot;")}">Mở thư mục output</button>`);
           if ($("#exportFolderHint")) $("#exportFolderHint").textContent = `Folder output: ${job.output_dir}`;
@@ -1612,19 +1671,21 @@
             : `Bước hiện tại: ${job.current_step || label(job.status)} (${job.progress || 0}%).`;
         }
         if (job.audio_path && $("#exportAudioPreview")) {
-          $("#exportAudioPreview").src = `/api/files?path=${encodeURIComponent(job.audio_path)}`;
+          $("#exportAudioPreview").src = fileUrl(job.audio_path);
           $("#exportAudioPreview").style.display = "block";
         }
         if (job.audio_path && $("#voiceAudioPreview")) {
-          $("#voiceAudioPreview").src = `/api/files?path=${encodeURIComponent(job.audio_path)}`;
+          $("#voiceAudioPreview").src = fileUrl(job.audio_path);
           $("#voiceAudioPreview").style.display = "block";
         }
         if (job.video_path && $("#exportPreviewFrame")) {
-          const player = `<video controls playsinline style="width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="/api/files?path=${encodeURIComponent(job.video_path)}" type="video/mp4" /></video>`;
+          const player = `<video controls playsinline style="width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${fileUrl(job.video_path)}" type="video/mp4" /></video>`;
           $("#exportPreviewFrame").innerHTML = player;
           if ($("#dashboardPreviewFrame")) $("#dashboardPreviewFrame").innerHTML = player;
           if ($("#timelinePreviewFrame")) $("#timelinePreviewFrame").innerHTML = player;
         }
+        renderVoiceOutputs();
+        renderTimelineAssetStatus();
       }
 
       async function loadProjects() {
@@ -1796,20 +1857,45 @@
           $("#createProjectButton").disabled = false;
         }
       });
-      $("#uploadButton").addEventListener("click", async () => {
+      async function uploadSelectedAsset() {
         if (!state.activeProjectId) return alert("Hãy chọn hoặc tạo project trước.");
         if (!$("#assetFile").files.length) return alert("Hãy chọn file media.");
+        const file = $("#assetFile").files[0];
         const fd = new FormData();
-        fd.append("file", $("#assetFile").files[0]);
+        fd.append("file", file);
+        $("#uploadButton").disabled = true;
+        $("#uploadButton").textContent = "Đang upload...";
+        toast(`Đang upload ${file.name}...`);
         await api(`/api/projects/${state.activeProjectId}/assets`, { method: "POST", body: fd }).then(async () => {
+          $("#assetFile").value = "";
           await loadAssets(state.activeProjectId);
           await loadStats();
-          toast("Đã upload media.");
-        }).catch(showError);
+          switchPage("media");
+          toast(`Đã upload ${file.name}. File đã hiện trong Thư viện Media.`);
+        }).catch(showError).finally(() => {
+          $("#uploadButton").disabled = false;
+          $("#uploadButton").textContent = "Upload";
+          state.pendingUploadKind = "";
+        });
+      }
+
+      $("#uploadButton").addEventListener("click", async () => {
+        await uploadSelectedAsset();
+      });
+      $("#assetFile").addEventListener("change", async () => {
+        if (!$("#assetFile").files.length) return;
+        if (state.pendingUploadKind) await uploadSelectedAsset();
       });
       $("#mediaGrid").addEventListener("click", async (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement) || !target.classList.contains("use-asset")) return;
+        if (target.dataset.type === "audio") {
+          renderVoiceOutputs();
+          renderTimelineAssetStatus();
+          switchPage("timeline");
+          toast("Đã có MP3/audio trong project. Khi xuất video, audio sẽ được dùng cùng kịch bản/voice của dự án.");
+          return;
+        }
         if (!state.selectedTimelineSceneId) return toast("Hãy chọn scene trên Timeline trước, rồi bấm dùng media.");
         await api(`/api/scenes/${state.selectedTimelineSceneId}`, {
           method: "PUT",
@@ -1996,22 +2082,42 @@
         }).catch(showError);
       });
 
-      $("#createAudioButton").addEventListener("click", async () => {
+      async function startProjectAudioJob() {
         if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước.");
+        if ((state.scenes || []).length < 3) {
+          switchPage("script");
+          return toast("Cần ít nhất 3 scene trước khi tạo voice MP3.");
+        }
         $("#createAudioButton").disabled = true;
+        $("#createVoiceMp3Button").disabled = true;
         try {
+          $("#audioJobStatus").innerHTML = "Đang lưu giọng đọc đã chọn...";
+          await api(`/api/projects/${state.activeProjectId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1) }),
+          });
+          $("#audioJobStatus").innerHTML = "Đang tạo voice MP3 từ kịch bản đã chỉnh...";
           const data = await api(`/api/projects/${state.activeProjectId}/audio`, { method: "POST" });
           state.activeJobId = data.job.id;
           setJob(data.project, data.job);
           switchPage("voice");
-          toast("Đã bắt đầu tạo MP3 từ kịch bản đã chỉnh.");
+          toast("Đã bắt đầu tạo voice MP3 từ kịch bản đã chỉnh.");
           if (state.pollTimer) clearInterval(state.pollTimer);
           state.pollTimer = setInterval(() => pollJob(state.activeJobId).catch(showError), 2500);
         } catch (error) {
           showError(error);
         } finally {
           $("#createAudioButton").disabled = false;
+          $("#createVoiceMp3Button").disabled = false;
         }
+      }
+
+      $("#createAudioButton").addEventListener("click", async () => {
+        await startProjectAudioJob();
+      });
+      $("#createVoiceMp3Button").addEventListener("click", async () => {
+        await startProjectAudioJob();
       });
       $("#openExportFromVoiceButton").addEventListener("click", () => switchPage("export"));
       $("#saveVoiceToProjectButton").addEventListener("click", async () => {
@@ -2077,15 +2183,17 @@
       }));
 
       $("#timelineAddVideoButton")?.addEventListener("click", () => {
+        state.pendingUploadKind = "video";
         $("#assetFile").accept = "video/*";
         $("#assetFile").click();
-        toast("Chọn file MP4/video, sau đó bấm Upload trong Thư viện Media.");
+        toast("Chọn file MP4/video. Sau khi chọn, app sẽ upload vào project.");
         switchPage("media");
       });
       $("#timelineAddAudioButton")?.addEventListener("click", () => {
+        state.pendingUploadKind = "audio";
         $("#assetFile").accept = "audio/*";
         $("#assetFile").click();
-        toast("Chọn file MP3/voice, sau đó bấm Upload trong Thư viện Media.");
+        toast("Chọn file MP3/voice. Sau khi chọn, app sẽ upload vào project.");
         switchPage("media");
       });
       $("#timelineOpenMediaButton")?.addEventListener("click", () => switchPage("media"));

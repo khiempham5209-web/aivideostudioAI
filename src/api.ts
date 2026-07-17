@@ -632,7 +632,7 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string) {
           .filter(Boolean) as Array<[string, { path: string; startSec: number | null; endSec: number | null }]>,
       );
       const hasVideoAssets = assets.some((asset) => asset.type === "video");
-      const backgroundAudio = assets.find((asset) => asset.type === "audio");
+      const backgroundAudio = assets.find((asset) => asset.type === "audio" && !asset.file_name.startsWith("voiceover-"));
       await runTemplatePipeline(generated.scriptPath, {
         footageDir: hasVideoAssets ? resolve(STORAGE_DIR, projectId, "source") : undefined,
         footagePlan,
@@ -693,10 +693,7 @@ function startAudioJob(projectId: string, jobId: string) {
         output_dir: resolve(generated.outputDir),
         script_path: resolve(generated.scriptPath),
       });
-      const assets = listAssets(projectId);
-      const backgroundAudio = assets.find((asset) => asset.type === "audio");
       await runTemplatePipeline(generated.scriptPath, {
-        backgroundAudioPath: backgroundAudio?.file_path ?? undefined,
         audioOnly: true,
       });
       if (isCancelled()) return;
@@ -706,7 +703,7 @@ function startAudioJob(projectId: string, jobId: string) {
         createAsset({
           projectId,
           type: "audio",
-          fileName: `voice-${timestampForPath()}.mp3`,
+          fileName: `voiceover-${timestampForPath()}.mp3`,
           mimeType: "audio/mpeg",
           filePath: paths.audio,
           fileSize: audioInfo.size,
