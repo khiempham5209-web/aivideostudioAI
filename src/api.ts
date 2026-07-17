@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
@@ -80,6 +80,36 @@ interface AuthUser {
 function isAllowedEmail(email: string): boolean {
   if (ALLOWED_EMAILS.length === 0) return !IS_PRODUCTION;
   return ALLOWED_EMAILS.includes(email.trim().toLowerCase());
+}
+
+function signOAuthState(payload: string): string {
+  return createHmac("sha256", GOOGLE_CLIENT_SECRET).update(payload).digest("base64url");
+}
+
+function createOAuthState(): string {
+  const payload = Buffer.from(
+    JSON.stringify({
+      nonce: randomBytes(16).toString("hex"),
+      iat: Date.now(),
+    }),
+  ).toString("base64url");
+  return `${payload}.${signOAuthState(payload)}`;
+}
+
+function isValidOAuthState(state: string): boolean {
+  const [payload, signature] = state.split(".");
+  if (!payload || !signature) return false;
+  const expected = signOAuthState(payload);
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+  if (expectedBuffer.length !== signatureBuffer.length) return false;
+  if (!timingSafeEqual(expectedBuffer, signatureBuffer)) return false;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { iat?: unknown };
+    return typeof decoded.iat === "number" && Date.now() - decoded.iat <= 10 * 60 * 1000;
+  } catch {
+    return false;
+  }
 }
 
 function sendJson(res: ServerResponse, statusCode: number, data: unknown) {
@@ -862,7 +892,7 @@ async function handleGoogleStart(req: IncomingMessage, res: ServerResponse) {
     });
     return;
   }
-  const state = randomBytes(16).toString("hex");
+  const state = createOAuthState();
   setCookie(res, "avs_oauth_state", state, "Path=/; HttpOnly; SameSite=Lax; Max-Age=600");
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -880,7 +910,8 @@ async function handleGoogleCallback(req: IncomingMessage, res: ServerResponse, u
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const expectedState = cookies(req).avs_oauth_state;
-  if (!code || !state || state !== expectedState) {
+  const cookieMatches = Boolean(expectedState && state && state === expectedState);
+  if (!code || !state || (!cookieMatches && !isValidOAuthState(state))) {
     sendJson(res, 400, { error: "Invalid Google OAuth response" });
     return;
   }
