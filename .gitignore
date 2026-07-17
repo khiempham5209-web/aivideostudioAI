@@ -2,9 +2,9 @@ node_modules/
 .edge-tts-venv/
 dist/
 output/
-storage/
-clips/
-voice/
+/storage/
+/clips/
+/voice/
 data/*.db
 data/*.db-*
 coverage/
