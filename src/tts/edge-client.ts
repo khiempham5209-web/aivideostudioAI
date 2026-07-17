@@ -18,11 +18,13 @@ function errorMessage(err: unknown): string {
 export class EdgeTtsClient {
   private voice: string;
   private speed: number;
+  private mode: "fallback-first" | "edge-first";
   private static queue: Promise<void> = Promise.resolve();
 
   constructor(options?: { voice?: string; speed?: number }) {
     this.voice = options?.voice ?? "vi-VN-HoaiMyNeural";
     this.speed = options?.speed ?? 1;
+    this.mode = process.env.EDGE_TTS_MODE === "edge-first" ? "edge-first" : "fallback-first";
   }
 
   private rateArg(): string {
@@ -43,6 +45,15 @@ export class EdgeTtsClient {
 
   async generate(text: string, audioOutPath: string, srtOutPath?: string): Promise<void> {
     EdgeTtsClient.queue = EdgeTtsClient.queue.then(async () => {
+      if (this.mode === "fallback-first") {
+        await this.generateWithFallback(text, audioOutPath);
+        if (srtOutPath) {
+          await writeFile(srtOutPath, "", "utf-8");
+        }
+        await sleep(500);
+        return;
+      }
+
       let lastError: unknown;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
