@@ -47,6 +47,19 @@
         box-sizing: border-box;
       }
 
+      .page,
+      .grid,
+      .panel,
+      .panel-body,
+      .card,
+      .scene,
+      .voice,
+      .asset-row,
+      .track,
+      .clip {
+        min-width: 0;
+      }
+
       html {
         scroll-behavior: smooth;
       }
@@ -369,6 +382,8 @@
 
       .panel-body {
         padding: 16px;
+        min-width: 0;
+        overflow: hidden;
       }
 
       .dashboard-grid {
@@ -492,6 +507,28 @@
         border-radius: 9px;
         background: rgba(7, 10, 16, 0.38);
         padding: 12px;
+        overflow: hidden;
+      }
+
+      .asset-row audio,
+      .asset-row video,
+      .panel audio,
+      .panel video {
+        max-width: 100%;
+      }
+
+      .asset-row strong,
+      .asset-row p,
+      .voice strong,
+      .voice p,
+      .clip {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .asset-row strong,
+      .clip {
+        white-space: nowrap;
       }
 
       .scene {
@@ -524,6 +561,24 @@
       .voice-top {
         display: flex;
         justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        min-width: 0;
+      }
+
+      .voice-top > * {
+        min-width: 0;
+      }
+
+      #voiceOutputList {
+        max-height: 340px;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      #voiceOutputList .asset-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 10px;
       }
 
@@ -593,6 +648,12 @@
         color: #fff;
         font-size: 12px;
         background: var(--clip, #2563eb);
+        cursor: pointer;
+      }
+
+      .clip.selected {
+        outline: 2px solid rgba(255, 255, 255, 0.9);
+        outline-offset: 2px;
       }
 
       .c1 { grid-column: 2 / 5; }
@@ -1210,6 +1271,7 @@
               <div class="top-actions"><button class="btn" id="moveSceneUpButton" type="button">Move trái</button><button class="btn" id="moveSceneDownButton" type="button">Move phải</button></div>
             </div>
           `);
+          $("#timelineAssetStatus")?.insertAdjacentHTML("beforebegin", `<label style="display:flex;gap:10px;align-items:center;margin:0;"><input id="editBurnSubtitles" type="checkbox" checked /> Phu de: bat/tat tai man Edit va dung khi xuat MP4</label>`);
         }
         if (!$("#sfxPresetBar")) {
           document.querySelector("#media .panel .panel-body")?.insertAdjacentHTML("afterbegin", `
@@ -1257,12 +1319,29 @@
         if (!$("#exportProjectPanel")) {
           $("#export .page-head").insertAdjacentHTML("afterend", `<div class="panel" id="exportProjectPanel" style="margin-bottom:14px;"><div class="panel-body field-stack"><div><label>Dự án sẽ xuất</label><select id="exportProjectSelect"></select></div><div><label>Folder lưu/xuất</label><input id="exportFolderName" placeholder="Tự tạo theo tên dự án nếu để trống" /></div><label style="display:flex;gap:10px;align-items:center;"><input id="burnSubtitles" type="checkbox" checked /> Bật phụ đề vào video MP4</label><p class="tiny" id="exportFolderHint">Chưa có folder output. Sau khi xuất sẽ hiện đường dẫn và nút mở thư mục/tải file.</p></div></div>`);
         }
+        const exportFolderInput = $("#exportFolderName");
+        const exportFolderLabel = exportFolderInput?.closest("div")?.querySelector("label");
+        if (exportFolderLabel) exportFolderLabel.textContent = "Ten du an / ten file xuat";
+        if (exportFolderInput) exportFolderInput.placeholder = "Tu tao theo ten du an neu de trong";
+        $("#burnSubtitles")?.closest("label")?.remove();
+        if (!$("#burnSubtitles")) document.body.insertAdjacentHTML("beforeend", `<input id="burnSubtitles" type="checkbox" checked hidden />`);
         renderEditorWorkspace();
       }
 
       ensureRealWorkflowControls();
 
+      function stopAllMedia() {
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+        document.querySelectorAll("audio, video").forEach((media) => {
+          try {
+            media.pause();
+            media.currentTime = 0;
+          } catch (error) {}
+        });
+      }
+
       function switchPage(page) {
+        stopAllMedia();
         $$(".page").forEach((el) => el.classList.toggle("active", el.id === page));
         $$("[data-page]").forEach((el) => el.classList.toggle("active", el.dataset.page === page));
       }
@@ -2158,7 +2237,7 @@
           const data = await api(`/api/projects/${state.activeProjectId}/render`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ folderName: $("#exportFolderName")?.value || "", burnSubtitles: $("#burnSubtitles")?.checked === true }),
+            body: JSON.stringify({ folderName: $("#exportFolderName")?.value || "", burnSubtitles: $("#editBurnSubtitles")?.checked !== false }),
           });
           state.activeJobId = data.job.id;
           setJob(data.project, data.job);
@@ -2366,7 +2445,10 @@
       $("#timelineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
       $("#timelineAddAudioButton")?.addEventListener("click", triggerAudioUpload);
       $("#timelineOpenMediaButton")?.addEventListener("click", () => switchPage("media"));
-      $("#burnSubtitles")?.addEventListener("change", renderEditorWorkspace);
+      $("#editBurnSubtitles")?.addEventListener("change", () => {
+        if ($("#burnSubtitles")) $("#burnSubtitles").checked = $("#editBurnSubtitles").checked;
+        renderEditorWorkspace();
+      });
 
       $("#chooseBrowserFolderButton")?.addEventListener("click", async () => {
         if (!("showDirectoryPicker" in window)) {
