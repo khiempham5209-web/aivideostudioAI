@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ai-video-studio-private
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: NODE_NO_WARNINGS
+        value: "1"
+      - key: ALLOWED_EMAILS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: APP_PUBLIC_URL
+        value: https://videostudioai-iota.vercel.app
+      - key: GEMINI_API_KEY
+        sync: false

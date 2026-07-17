@@ -1,0 +1,58 @@
+{
+  "name": "aicoding-template-video",
+  "version": "2.0.0",
+  "description": "Auto-generate Vietnamese 9:16 short news videos from URL/txt using professional HyperFrames templates — Claude Code skill + OmniVoice TTS",
+  "main": "src/cli.ts",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "pipeline": "tsx src/cli.ts",
+    "api": "tsx src/api.ts",
+    "start": "node dist/api.js",
+    "start:prod": "node dist/api.js",
+    "once": "tsx src/run-once.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "db:init": "tsx scripts/init-postgres.ts",
+    "cloud:check": "tsx scripts/check-cloud-env.ts",
+    "generate": "tsx src/agent/prompt-to-script.ts",
+    "sfx:download": "tsx scripts/download-sfx.ts",
+    "sfx:filter": "tsx scripts/filter-sfx.ts"
+  },
+  "keywords": [
+    "video",
+    "tts",
+    "news",
+    "vietnamese",
+    "tiktok",
+    "shorts",
+    "hyperframes",
+    "claude-code",
+    "omnivoice"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1089.0",
+    "@aws-sdk/s3-request-presigner": "^3.1089.0",
+    "@google/genai": "^2.10.0",
+    "@types/pg": "^8.20.0",
+    "axios": "^1.15.2",
+    "dotenv": "^17.4.2",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "p-limit": "^7.3.0",
+    "pg": "^8.22.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "nock": "^14.0.13",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

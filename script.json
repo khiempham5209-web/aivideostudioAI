@@ -1,0 +1,123 @@
+﻿{
+  "version": "1.0",
+  "renderer": "hyperframes",
+  "metadata": {
+    "title": "review phim Kung Fu Panda dài 2 phút",
+    "source": {
+      "url": "https://google.com",
+      "domain": "google.com",
+      "image": null
+    },
+    "channel": "Khiempham AI"
+  },
+  "voice": {
+    "provider": "edge",
+    "speed": 1
+  },
+  "aspect": "9:16",
+  "scenes": [
+    {
+      "id": "1",
+      "type": "hook",
+      "voiceText": "Tin được không? Một chú gấu trúc mê ăn lại thành anh hùng Kung Fu! Kung Fu Panda sẽ cho bạn thấy điều phi thường.",
+      "templateId": "frame-liquid-bg-hero",
+      "inputs": {
+        "kicker": "REVIEW",
+        "headline": "review phim Kung Fu Panda dài 2 phút",
+        "subheadline": "Tóm tắt nhanh",
+        "cta": "Xem ngay",
+        "brand": "Khiempham AI"
+      }
+    },
+    {
+      "id": "2",
+      "type": "body",
+      "voiceText": [
+        {
+          "sceneId": 1,
+          "visualDescription": "Cảnh Po đang bán mì trong quán ăn của cha, mơ mộng và lơ đãng nhìn ra ngoài. Hình ảnh mơ ước của Po là một chiến binh Kung Fu oai phong hiện lên mờ ảo.",
+          "voiceText": "Po là chú gấu trúc bán mì, vụng về nhưng luôn mơ thành Thần Long Đại Hiệp. Ước mơ đối lập hoàn toàn với cuộc sống thực tại."
+        },
+        {
+          "sceneId": 2,
+          "visualDescription": "Đám đông hò reo tại buổi lễ chọn Thần Long Đại Hiệp. Po vô tình rơi xuống giữa vòng tròn, Sư phụ Oogway chỉ tay chọn Po.",
+          "voiceText": "Định mệnh bất ngờ gọi tên Po khi cậu được chọn làm Thần Long Đại Hiệp. Mọi người đều sốc, và hành trình của Po bắt đầu."
+        },
+        {
+          "sceneId": 3,
+          "visualDescription": "Sư phụ Shifu và Ngũ Đại Hào Kiệt nhìn Po với vẻ hoài nghi, khó chịu. Po thì bối rối, ngượng ngùng.",
+          "voiceText": "Sư phụ Shifu và Ngũ Đại Hào Kiệt không chấp nhận Po lúc đầu. Họ nghi ngờ khả năng của chú gấu trúc mập mạp này."
+        },
+        {
+          "sceneId": 4,
+          "visualDescription": "Po tập luyện thất bại thảm hại: đập đầu, té ngã, phá hỏng các dụng cụ tập. Shifu đứng nhìn với vẻ bất lực, sau đó nảy ra ý tưởng.",
+          "voiceText": "Những buổi tập luyện của Po đầy rẫy sự vụng về nhưng vô cùng hài hước. Các pha 'phá hoại' sẽ khiến bạn cười không ngớt."
+        },
+        {
+          "sceneId": 5,
+          "visualDescription": "Cảnh Shifu dùng đồ ăn để huấn luyện Po, Po nhanh nhẹn chộp lấy bánh bao, di chuyển linh hoạt bất ngờ. Po bắt đầu tiến bộ rõ rệt.",
+          "voiceText": "Shifu dần khám phá cách huấn luyện Po qua tình yêu đồ ăn. Tiềm năng chiến binh ẩn giấu của cậu được khai phá."
+        },
+        {
+          "sceneId": 6,
+          "visualDescription": "Tai Lung hùng dũng phá ngục, vượt qua vô số chướng ngại vật và binh lính. Hắn ta tiến về Thung lũng Hòa Bình với ánh mắt đầy thù hận.",
+          "voiceText": "Kẻ thù nguy hiểm Tai Lung thoát ngục, đe dọa bình yên Thung lũng. Hắn mang trong mình mối thù sâu sắc."
+        },
+        {
+          "sceneId": 7,
+          "visualDescription": "Po ngồi buồn bã, thất vọng về bản thân. Sau đó, cảnh Po hồi tưởng lời khuyên của Sư phụ Oogway, ánh mắt cậu dần kiên định hơn.",
+          "voiceText": "Po phải đối mặt với nỗi sợ và tìm thấy sức mạnh bên trong mình. Cậu nhận ra giá trị bản thân không nằm ở hình dáng."
+        },
+        {
+          "sceneId": 8,
+          "visualDescription": "Po mở Cuộn Giấy Rồng, bên trong không có chữ mà chỉ là một tấm gương phản chiếu. Po ngạc nhiên nhìn vào đó.",
+          "voiceText": "Cuộn Giấy Rồng, chìa khóa sức mạnh, ẩn chứa bí mật bất ngờ. Đó không phải công thức, mà là một bài học sâu sắc."
+        },
+        {
+          "sceneId": 9,
+          "visualDescription": "Po và Tai Lung đối đầu trong trận chiến hoành tráng. Po sử dụng các kỹ năng độc đáo dựa trên thân hình của mình, đánh bại Tai Lung.",
+          "voiceText": "Trận chiến cuối cùng Po vs Tai Lung mãn nhãn, hài hước và độc đáo. Po chứng minh phong cách chiến đấu riêng biệt."
+        },
+        {
+          "sceneId": 10,
+          "visualDescription": "Po đứng giữa Thung lũng Hòa Bình, được mọi người công nhận và tung hô. Ánh mắt cậu toát lên sự tự tin và hạnh phúc.",
+          "voiceText": "Phim truyền tải thông điệp về niềm tin vào bản thân và tìm thấy giá trị riêng. Bạn không cần giống ai để thành anh hùng."
+        },
+        {
+          "sceneId": 11,
+          "visualDescription": "Một montage nhanh các cảnh đẹp trong phim: núi non hùng vĩ, Cung điện Ngọc uy nghi, hiệu ứng võ thuật mượt mà.",
+          "voiceText": "Kỹ xảo hoạt hình tuyệt đẹp, từ hành động đến chi tiết nhỏ, đều chăm chút tỉ mỉ. Mỗi khung hình đều sống động và cuốn hút."
+        },
+        {
+          "sceneId": 12,
+          "visualDescription": "Cảnh các nhân vật chính phát biểu hoặc thể hiện cảm xúc, tập trung vào Po, Shifu, Oogway. Hiển thị tên diễn viên lồng tiếng.",
+          "voiceText": "Dàn diễn viên lồng tiếng xuất sắc, đặc biệt Jack Black, thổi hồn cho Po. Giọng điệu làm câu chuyện chân thật và cảm xúc."
+        },
+        {
+          "sceneId": 13,
+          "visualDescription": "Cảnh Po và Shifu cùng ngồi ăn mì, hoặc Po ôm Shifu một cách ấm áp. Nụ cười mãn nguyện của cả hai.",
+          "voiceText": "Kung Fu Panda không chỉ hành động mà còn nhiều khoảnh khắc xúc động, ý nghĩa. Tình thầy trò là điểm nhấn lớn."
+        }
+      ],
+      "templateId": "frame-build-minimal",
+      "inputs": {
+        "eyebrow": "NỘI DUNG",
+        "hero": "REVIEW",
+        "desc": "Tóm tắt nội dung chính",
+        "side_left": "FF AI",
+        "side_right": "2026"
+      }
+    },
+    {
+      "id": "3",
+      "type": "outro",
+      "voiceText": "Nếu chưa xem, hãy mở Kung Fu Panda ngay để Po truyền cảm hứng cho bạn! Like và share nếu bạn yêu thích chú gấu trúc này nhé!",
+      "templateId": "frame-statement-outro",
+      "inputs": {
+        "cta": "THEO DÕI ĐỂ XEM THÊM",
+        "channel": "Khiempham AI",
+        "source": "Nguồn: AI"
+      }
+    }
+  ]
+}
