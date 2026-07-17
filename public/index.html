@@ -889,7 +889,7 @@
           <button data-page="script">Kịch bản AI</button>
           <button data-page="voice">Giọng đọc AI</button>
           <button data-page="media">Thư viện Media</button>
-          <button data-page="timeline">Timeline dựng video</button>
+          <button data-page="timeline">Edit video</button>
           <button data-page="export">Xuất video</button>
           <button data-page="stats">Thống kê</button>
         </nav>
@@ -921,7 +921,7 @@
           <button data-page="script">Kịch bản</button>
           <button data-page="voice">Voice</button>
           <button data-page="media">Media</button>
-          <button data-page="timeline">Timeline</button>
+          <button data-page="timeline">Edit</button>
           <button data-page="export">Xuất</button>
           <button data-page="stats">Thống kê</button>
         </nav>
@@ -1064,13 +1064,13 @@
 
         <section class="page" id="timeline">
           <div class="page-head">
-            <div><h2>Timeline dựng video</h2><p class="muted">Video Track, Audio Track, Subtitle Track, Effect Track, Trim, Split, Move.</p></div>
+            <div><h2>Edit video</h2><p class="muted">Xem video thật, thêm MP4/voice MP3, bật phụ đề, trim và chuẩn bị xuất.</p></div>
             <div class="top-actions"><button class="btn timeline-tool" data-tool="Trim">Trim</button><button class="btn timeline-tool" data-tool="Split">Split</button><button class="btn timeline-tool" data-tool="Move">Move</button></div>
           </div>
           <div class="grid export-grid">
             <div class="panel">
-              <div class="panel-head"><h3>Program Preview</h3><span class="pill">00:00 / 02:01</span></div>
-              <div class="panel-body"><div class="preview-frame" style="--art:linear-gradient(135deg,#0f172a,#164e63 45%,#7f1d1d);"><div class="play">▶</div></div></div>
+              <div class="panel-head"><h3>Program Preview</h3><span class="pill" id="editorPreviewStatus">Chưa có video</span></div>
+              <div class="panel-body"><div class="preview-frame" id="editorPreviewFrame" style="--art:linear-gradient(135deg,#0f172a,#164e63 45%,#7f1d1d);"><button class="btn primary" id="editorAddVideoButton" type="button">+ Add video MP4</button></div></div>
             </div>
             <div class="panel">
               <div class="panel-head"><h3>Inspector</h3></div>
@@ -1193,14 +1193,14 @@
         if (!$("#timelineSceneList")) {
           document.querySelector("#timeline .timeline-shell")?.insertAdjacentHTML("afterbegin", `
             <div class="field-stack" style="margin-bottom:14px;">
-              <div class="voice-top"><strong>Timeline scene thật</strong><span class="tiny">Chọn scene để trim/split/move</span></div>
+              <div class="voice-top"><strong>Media & track chỉnh sửa</strong><span class="tiny">Thêm MP4, voice/MP3, bật phụ đề và chuẩn bị xuất</span></div>
               <div class="top-actions">
                 <button class="btn" id="timelineAddVideoButton" type="button">+ Add video MP4</button>
                 <button class="btn" id="timelineAddAudioButton" type="button">+ Add voice/MP3</button>
                 <button class="btn" id="timelineOpenMediaButton" type="button">Mở thư viện Media</button>
               </div>
               <div class="empty" id="timelineAssetStatus" style="text-align:left;">Chưa có video/voice MP3 được gắn vào project.</div>
-              <div id="timelineSceneList" class="scene-list"></div>
+              <div id="timelineSceneList" class="scene-list" style="display:none;"></div>
               <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;">
                 <div><label for="trimStart">Trim start (giây)</label><input id="trimStart" type="number" min="0" step="0.1" value="0" /></div>
                 <div><label for="trimEnd">Trim end (giây)</label><input id="trimEnd" type="number" min="0" step="0.1" value="0" /></div>
@@ -1257,10 +1257,7 @@
         if (!$("#exportProjectPanel")) {
           $("#export .page-head").insertAdjacentHTML("afterend", `<div class="panel" id="exportProjectPanel" style="margin-bottom:14px;"><div class="panel-body field-stack"><div><label>Dự án sẽ xuất</label><select id="exportProjectSelect"></select></div><div><label>Folder lưu/xuất</label><input id="exportFolderName" placeholder="Tự tạo theo tên dự án nếu để trống" /></div><label style="display:flex;gap:10px;align-items:center;"><input id="burnSubtitles" type="checkbox" checked /> Bật phụ đề vào video MP4</label><p class="tiny" id="exportFolderHint">Chưa có folder output. Sau khi xuất sẽ hiện đường dẫn và nút mở thư mục/tải file.</p></div></div>`);
         }
-        const fakeTracks = document.querySelector("#timeline .tracks");
-        if (fakeTracks) {
-          fakeTracks.innerHTML = `<div class="empty">Timeline thật hiển thị theo scene/media của project đang chọn. Không còn dữ liệu mẫu.</div>`;
-        }
+        renderEditorWorkspace();
       }
 
       ensureRealWorkflowControls();
@@ -1534,6 +1531,73 @@
         return (state.assets || []).filter((asset) => asset.type === "video");
       }
 
+      function triggerVideoUpload() {
+        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước khi thêm video.");
+        state.pendingUploadKind = "video";
+        $("#assetFile").accept = "video/*";
+        $("#assetFile").click();
+        switchPage("media");
+        toast("Chọn file MP4/video từ máy. Upload xong video sẽ hiện ở Edit preview.");
+      }
+
+      function triggerAudioUpload() {
+        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước khi thêm voice/MP3.");
+        state.pendingUploadKind = "audio";
+        $("#assetFile").accept = "audio/*";
+        $("#assetFile").click();
+        switchPage("media");
+        toast("Chọn file MP3/voice từ máy. Upload xong file sẽ hiện ở Voice/Audio Track.");
+      }
+
+      function renderEditorPreview() {
+        const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
+        if (!frame) return;
+        const video = projectVideoAssets()[0];
+        if ($("#editorPreviewStatus")) $("#editorPreviewStatus").textContent = video ? video.file_name : "Chưa có video";
+        if (video?.file_path) {
+          frame.innerHTML = `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${fileUrl(video.file_path)}" /></video>`;
+          return;
+        }
+        frame.innerHTML = `<div style="position:relative;z-index:1;text-align:center;display:grid;gap:10px;place-items:center;"><button class="btn primary" id="editorInlineAddVideoButton" type="button">+ Add video MP4</button><p class="tiny">Chưa có MP4 trong project. Upload từ máy hoặc mở Thư viện Media.</p></div>`;
+        $("#editorInlineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
+      }
+
+      function renderEditorTracks() {
+        const tracks = document.querySelector("#timeline .tracks");
+        if (!tracks) return;
+        const videos = projectVideoAssets();
+        const audios = projectAudioAssets();
+        const audioRows = audios.length ? audios : (state.lastAudioPath ? [{ file_name: "voice.mp3", file_path: state.lastAudioPath }] : []);
+        const clip = (text, className, color, title = "") => `<div class="clip ${className}" title="${title || text}" style="--clip:${color};">${text}</div>`;
+        tracks.innerHTML = `
+          <div class="track">
+            <strong>Video Track</strong>
+            ${videos.length ? videos.slice(0, 3).map((asset, index) => clip(asset.file_name, ["c1", "c2", "c3"][index] || "c3", "#2563eb", asset.file_path)).join("") : `<button class="btn" id="trackAddVideoButton" type="button">+ Add video MP4</button>`}
+          </div>
+          <div class="track">
+            <strong>Voice / Audio Track</strong>
+            ${audioRows.length ? audioRows.slice(0, 3).map((asset, index) => clip(asset.file_name, ["c4", "c2", "c3"][index] || "c3", "#16a34a", asset.file_path)).join("") : `<button class="btn" id="trackAddAudioButton" type="button">+ Add voice/MP3</button>`}
+          </div>
+          <div class="track">
+            <strong>Subtitle Track</strong>
+            ${clip($("#burnSubtitles")?.checked === false ? "Phụ đề OFF" : "Phụ đề ON từ kịch bản", "c5", "#f59e0b")}
+          </div>
+          <div class="track">
+            <strong>Effect Track</strong>
+            ${clip("Trim / Split / Move", "c1", "#9333ea")}
+            ${clip("Xuất theo cài đặt", "c3", "#db2777")}
+          </div>
+        `;
+        $("#trackAddVideoButton")?.addEventListener("click", triggerVideoUpload);
+        $("#trackAddAudioButton")?.addEventListener("click", triggerAudioUpload);
+      }
+
+      function renderEditorWorkspace() {
+        renderEditorPreview();
+        renderEditorTracks();
+        renderTimelineAssetStatus();
+      }
+
       function renderVoiceOutputs() {
         const audioAssets = projectAudioAssets();
         const currentJob = state.currentJob;
@@ -1558,11 +1622,10 @@
         if (!$("#timelineAssetStatus")) return;
         const videos = projectVideoAssets();
         const audios = projectAudioAssets();
-        const assigned = (state.scenes || []).filter((scene) => scene.source_asset_id).length;
         $("#timelineAssetStatus").innerHTML = `
           <strong>Media thật trong project:</strong>
-          ${videos.length} video MP4 · ${audios.length} MP3/audio · ${assigned}/${state.scenes.length || 0} scene đã gán video.
-          <div class="tiny" style="margin-top:6px;">Upload video/MP3 ở Thư viện Media, chọn scene trên timeline, rồi bấm “Dùng cho scene đang chọn”.</div>
+          ${videos.length} video MP4 · ${audios.length || (state.lastAudioPath ? 1 : 0)} voice/MP3 · ${state.scenes.length || 0} scene lời đọc.
+          <div class="tiny" style="margin-top:6px;">MP4 sẽ hiện trong Program Preview. Voice/MP3 sẽ hiện ở Voice / Audio Track. Scene chỉ dùng làm lời đọc ở màn Kịch bản AI.</div>
         `;
       }
 
@@ -1572,7 +1635,7 @@
         if (!assets.length) {
           $("#mediaGrid").innerHTML = '<div class="empty">Chưa có media trong project này. Upload MP4/MP3/hình ảnh để bắt đầu.</div>';
           renderVoiceOutputs();
-          renderTimelineAssetStatus();
+          renderEditorWorkspace();
           return;
         }
         assets.forEach((asset, index) => {
@@ -1593,7 +1656,7 @@
           $("#mediaGrid").appendChild(item);
         });
         renderVoiceOutputs();
-        renderTimelineAssetStatus();
+        renderEditorWorkspace();
       }
 
       function selectTimelineScene(scene) {
@@ -1605,27 +1668,10 @@
 
       function renderTimelineScenes(rows) {
         if (!$("#timelineSceneList")) return;
+        $("#timelineSceneList").style.display = "none";
+        state.selectedTimelineSceneId = rows[0]?.id || "";
         $("#timelineSceneList").innerHTML = "";
-        if (!rows.length) {
-          $("#timelineSceneList").innerHTML = '<div class="empty">Chưa có scene để dựng timeline.</div>';
-          renderTimelineAssetStatus();
-          return;
-        }
-        rows.forEach((row, index) => {
-          const assignedAsset = state.assets.find((asset) => asset.id === row.source_asset_id);
-          const assignedInfo = assignedAsset
-            ? `Media đã gán: ${assignedAsset.file_name} (${assignedAsset.type})`
-            : "Chưa gán video/media cho scene này";
-          const item = document.createElement("button");
-          item.className = "scene";
-          item.dataset.id = row.id;
-          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><strong>${row.label}</strong><p class="tiny">${row.voice_text || ""}</p><p class="tiny">${assignedInfo}</p><p class="tiny">Trim: ${row.source_start ?? 0}s → ${row.source_end ?? 0}s</p></div>`;
-          item.addEventListener("click", () => selectTimelineScene(row));
-          $("#timelineSceneList").appendChild(item);
-        });
-        const selected = rows.find((row) => row.id === state.selectedTimelineSceneId) || rows[0];
-        selectTimelineScene(selected);
-        renderTimelineAssetStatus();
+        renderEditorWorkspace();
       }
 
       function renderScenes(scenes) {
@@ -1691,7 +1737,7 @@
           if ($("#timelinePreviewFrame")) $("#timelinePreviewFrame").innerHTML = player;
         }
         renderVoiceOutputs();
-        renderTimelineAssetStatus();
+        renderEditorWorkspace();
       }
 
       async function loadProjects() {
@@ -1872,6 +1918,7 @@
         if (!state.activeProjectId) return alert("Hãy chọn hoặc tạo project trước.");
         if (!$("#assetFile").files.length) return alert("Hãy chọn file media.");
         const file = $("#assetFile").files[0];
+        const uploadKind = state.pendingUploadKind;
         const fd = new FormData();
         fd.append("file", file);
         $("#uploadButton").disabled = true;
@@ -1881,8 +1928,9 @@
           $("#assetFile").value = "";
           await loadAssets(state.activeProjectId);
           await loadStats();
-          switchPage("media");
-          toast(`Đã upload ${file.name}. File đã hiện trong Thư viện Media.`);
+          renderEditorWorkspace();
+          switchPage(uploadKind ? "timeline" : "media");
+          toast(`Đã upload ${file.name}. File đã hiện trong ${uploadKind ? "màn Edit" : "Thư viện Media"}.`);
         }).catch(showError).finally(() => {
           $("#uploadButton").disabled = false;
           $("#uploadButton").textContent = "Upload";
@@ -1902,12 +1950,18 @@
         if (!(target instanceof HTMLElement) || !target.classList.contains("use-asset")) return;
         if (target.dataset.type === "audio") {
           renderVoiceOutputs();
-          renderTimelineAssetStatus();
+          renderEditorWorkspace();
           switchPage("timeline");
-          toast("Đã có MP3/audio trong project. Khi xuất video, audio sẽ được dùng cùng kịch bản/voice của dự án.");
+          toast("Đã đưa MP3/audio vào Voice / Audio Track của màn Edit.");
           return;
         }
-        if (!state.selectedTimelineSceneId) return toast("Hãy chọn scene trên Timeline trước, rồi bấm dùng media.");
+        if (target.dataset.type === "video") {
+          renderEditorWorkspace();
+          switchPage("timeline");
+          toast("Đã đưa video vào Program Preview và Video Track của màn Edit.");
+          return;
+        }
+        if (!state.selectedTimelineSceneId) return toast("Hãy chọn scene ở màn Kịch bản AI trước khi gán media cho scene.");
         await api(`/api/scenes/${state.selectedTimelineSceneId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -2193,21 +2247,11 @@
         }).catch(showError);
       }));
 
-      $("#timelineAddVideoButton")?.addEventListener("click", () => {
-        state.pendingUploadKind = "video";
-        $("#assetFile").accept = "video/*";
-        $("#assetFile").click();
-        toast("Chọn file MP4/video. Sau khi chọn, app sẽ upload vào project.");
-        switchPage("media");
-      });
-      $("#timelineAddAudioButton")?.addEventListener("click", () => {
-        state.pendingUploadKind = "audio";
-        $("#assetFile").accept = "audio/*";
-        $("#assetFile").click();
-        toast("Chọn file MP3/voice. Sau khi chọn, app sẽ upload vào project.");
-        switchPage("media");
-      });
+      $("#editorAddVideoButton")?.addEventListener("click", triggerVideoUpload);
+      $("#timelineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
+      $("#timelineAddAudioButton")?.addEventListener("click", triggerAudioUpload);
       $("#timelineOpenMediaButton")?.addEventListener("click", () => switchPage("media"));
+      $("#burnSubtitles")?.addEventListener("change", renderEditorWorkspace);
 
       $("#chooseBrowserFolderButton")?.addEventListener("click", async () => {
         if (!("showDirectoryPicker" in window)) {
