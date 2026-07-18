@@ -1420,12 +1420,12 @@
           $("#sceneList").insertAdjacentHTML("beforebegin", `<div class="empty" id="workflowStatus" style="margin-bottom:12px;text-align:left;">Bước hiện tại: tạo hoặc chọn project, kiểm tra scene, bấm Tạo MP3 để nghe thử, sau đó Xuất video.</div>`);
         }
         if (!$("#timelineSceneList")) {
-          document.querySelector("#timeline .timeline-shell")?.insertAdjacentHTML("afterbegin", `
+          (document.querySelector("#timeline .timeline-v3") || document.querySelector("#timeline .editor-shell"))?.insertAdjacentHTML("beforebegin", `
             <div class="field-stack" style="margin-bottom:14px;">
               <div class="voice-top"><strong>Media & track chỉnh sửa</strong><span class="tiny">Thêm MP4, voice/MP3, bật phụ đề và chuẩn bị xuất</span></div>
               <div class="top-actions">
-                <button class="btn" id="timelineAddVideoButton" type="button">+ Add video MP4</button>
-                <button class="btn" id="timelineAddAudioButton" type="button">+ Add voice/MP3</button>
+                <button class="btn" id="timelineToolbarAddVideoButton" type="button">+ Add video MP4</button>
+                <button class="btn" id="timelineToolbarAddAudioButton" type="button">+ Add voice/MP3</button>
                 <button class="btn" id="timelineOpenMediaButton" type="button">Mở thư viện Media</button>
               </div>
               <div class="empty" id="timelineAssetStatus" style="text-align:left;">Chưa có video/voice MP3 được gắn vào project.</div>
@@ -1517,7 +1517,17 @@
       async function api(url, options) {
         const resp = await fetch(url, options);
         const contentType = resp.headers.get("content-type") || "";
-        const data = contentType.includes("application/json") ? await resp.json() : { error: await resp.text() };
+        const text = await resp.text();
+        let data;
+        if (contentType.includes("application/json")) {
+          try {
+            data = text ? JSON.parse(text) : {};
+          } catch {
+            data = { error: text || "Server returned invalid JSON" };
+          }
+        } else {
+          data = { error: text || resp.statusText };
+        }
         if (!resp.ok) throw data;
         return data;
       }
@@ -1810,7 +1820,80 @@
         $("#editorInlineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
       }
 
+      function renderEditorTimelineV3(root) {
+        if (!root) return;
+        const videos = projectVideoAssets();
+        const audios = projectAudioAssets();
+        const audioRows = audios.length ? audios : (state.lastAudioPath ? [{ file_name: "voice.mp3", file_path: state.lastAudioPath }] : []);
+        const sceneRows = state.scenes || [];
+        const assetClip = (asset, className, index, width = 260) => `
+          <button class="clip-v3 ${className}" data-asset-id="${asset.id || ""}" data-type="${asset.type || "audio"}" style="left:${18 + index * (width + 14)}px;width:${width}px;" title="${asset.file_path || ""}">
+            ${asset.type === "video" ? '<span class="clip-thumb"></span>' : ""}
+            ${asset.file_name || "voice.mp3"}
+          </button>`;
+        const sceneClip = (scene, index) => `
+          <button class="clip-v3 subtitle" data-scene-id="${scene.id}" style="left:${18 + index * 155}px;width:140px;" title="${scene.voice_text || ""}">
+            Scene ${index + 1}
+          </button>`;
+        root.innerHTML = `
+          <div class="timeline-inner">
+            <div class="timeline-tools-v3">
+              <button class="btn" id="timelineV3SplitButton" type="button">Split</button>
+              <button class="btn" id="timelineV3TrimButton" type="button">Trim</button>
+              <button class="btn" id="timelineV3DeleteButton" type="button">Delete</button>
+              <button class="btn" id="timelineV3AddVideoButton" type="button">+ Video</button>
+              <button class="btn" id="timelineV3AddAudioButton" type="button">+ Voice/MP3</button>
+              <label class="pill" style="gap:8px;"><input id="editBurnSubtitles" type="checkbox" ${$("#burnSubtitles")?.checked === false ? "" : "checked"} /> Subtitle</label>
+              <span class="pill">${activeProject()?.title || "Chua chon project"}</span>
+            </div>
+            <div class="time-ruler-v3"><strong>Track / Time</strong><span>00:00</span><span>00:05</span><span>00:10</span><span>00:15</span><span>00:20</span><span>00:25</span><span>00:30</span><span>00:35</span><span>00:40</span><span>00:45</span><span>00:50</span><span>00:55</span><span>01:00</span></div>
+            <div class="playhead-v3"></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Video Track</strong><div class="track-actions-v3"><button type="button">show</button><button type="button">lock</button></div></div><div class="track-lane-v3">${videos.length ? videos.map((asset, index) => assetClip(asset, "video", index, 260)).join("") : '<button class="btn" id="timelineV3EmptyVideoButton" type="button">+ Add video MP4</button>'}</div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Voice / Audio</strong><div class="track-actions-v3"><button type="button">vol</button><button type="button">lock</button></div></div><div class="track-lane-v3">${audioRows.length ? audioRows.map((asset, index) => assetClip(asset, "voice", index, 360)).join("") : '<button class="btn" id="timelineV3EmptyAudioButton" type="button">+ Tao/Add voice MP3</button>'}</div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Subtitle</strong><div class="track-actions-v3"><button type="button">show</button><button type="button">lock</button></div></div><div class="track-lane-v3">${sceneRows.length ? sceneRows.map(sceneClip).join("") : '<span class="tiny">Chua co scene de sinh subtitle.</span>'}</div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Effect / SFX</strong><div class="track-actions-v3"><button type="button">show</button><button type="button">lock</button></div></div><div class="track-lane-v3"><button class="clip-v3 transition sfx-preset" data-preset="whoosh" style="left:20px;width:180px;">Whoosh transition</button><button class="clip-v3 effect" style="left:230px;width:240px;">Subtitle + Color grade</button></div></div>
+          </div>`;
+        root.querySelectorAll("[id='timelineV3AddVideoButton'], [id='timelineV3EmptyVideoButton']").forEach((button) => button.addEventListener("click", triggerVideoUpload));
+        root.querySelectorAll("[id='timelineV3AddAudioButton'], [id='timelineV3EmptyAudioButton']").forEach((button) => button.addEventListener("click", triggerAudioUpload));
+        root.querySelector("#editBurnSubtitles")?.addEventListener("change", () => {
+          if ($("#burnSubtitles")) $("#burnSubtitles").checked = root.querySelector("#editBurnSubtitles").checked;
+          renderTimelineAssetStatus();
+        });
+        root.querySelectorAll(".clip-v3[data-asset-id]").forEach((clipEl) => {
+          clipEl.addEventListener("click", () => {
+            const assetId = clipEl.dataset.assetId || "";
+            if (!assetId) return;
+            state.selectedTimelineAssetId = assetId;
+            root.querySelectorAll(".clip-v3").forEach((el) => el.classList.remove("selected"));
+            clipEl.classList.add("selected");
+            const asset = state.assets.find((item) => item.id === assetId);
+            const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
+            if (asset && frame) {
+              const url = fileUrl(asset.file_path);
+              frame.innerHTML = asset.type === "video"
+                ? `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${url}" /></video>`
+                : `<div style="position:relative;z-index:1;width:min(720px,90%);display:grid;gap:12px;"><strong>${asset.file_name}</strong><audio controls src="${url}" style="width:100%;"></audio></div>`;
+              attachMediaErrorHandlers(frame);
+            }
+            toast(`Da chon ${asset?.file_name || "clip"} de edit.`);
+          });
+        });
+        root.querySelectorAll(".clip-v3[data-scene-id]").forEach((clipEl) => {
+          clipEl.addEventListener("click", () => {
+            state.selectedTimelineSceneId = clipEl.dataset.sceneId || "";
+            root.querySelectorAll(".clip-v3").forEach((el) => el.classList.remove("selected"));
+            clipEl.classList.add("selected");
+            toast("Da chon scene subtitle/voice text de trim/split.");
+          });
+        });
+      }
+
       function renderEditorTracks() {
+        const timelineV3 = document.querySelector("#timeline .timeline-v3");
+        if (timelineV3) {
+          renderEditorTimelineV3(timelineV3);
+          return;
+        }
         const tracks = document.querySelector("#timeline .tracks");
         if (!tracks) return;
         const videos = projectVideoAssets();
@@ -1861,8 +1944,39 @@
         $("#trackAddAudioButton")?.addEventListener("click", triggerAudioUpload);
       }
 
+      function renderEditorAssetsV3() {
+        const box = document.querySelector("#timeline .editor-assets");
+        if (!box) return;
+        if (!state.assets.length) {
+          box.innerHTML = '<div class="empty">Chua co media that. Bam + Video hoac + Audio de upload tu may.</div>';
+          return;
+        }
+        box.innerHTML = state.assets.slice(0, 12).map((asset, index) => `
+          <button class="editor-asset" data-asset-id="${asset.id}" style="background:${art[index % art.length]};">
+            <strong>${asset.file_name}</strong>
+            <span class="tiny">${asset.type} · ${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</span>
+          </button>`).join("");
+        box.querySelectorAll(".editor-asset[data-asset-id]").forEach((item) => {
+          item.addEventListener("click", () => {
+            const asset = state.assets.find((row) => row.id === item.dataset.assetId);
+            if (!asset) return;
+            state.selectedTimelineAssetId = asset.id;
+            const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
+            const url = fileUrl(asset.file_path);
+            if (frame) {
+              frame.innerHTML = asset.type === "video"
+                ? `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${url}" /></video>`
+                : `<div style="position:relative;z-index:1;width:min(720px,90%);display:grid;gap:12px;"><strong>${asset.file_name}</strong><audio controls src="${url}" style="width:100%;"></audio></div>`;
+              attachMediaErrorHandlers(frame);
+            }
+            toast(`Da chon ${asset.file_name} trong Asset Browser.`);
+          });
+        });
+      }
+
       function renderEditorWorkspace() {
         renderEditorPreview();
+        renderEditorAssetsV3();
         renderEditorTracks();
         renderTimelineAssetStatus();
       }
@@ -2420,24 +2534,6 @@
           $("#renderButton").disabled = false;
         }
       }, true);
-      $("#renderButton").addEventListener("click", async () => {
-        if (!state.activeProjectId) return alert("Hãy chọn hoặc tạo project trước.");
-        $("#renderButton").disabled = true;
-        try {
-          const data = await api(`/api/projects/${state.activeProjectId}/render`, { method: "POST" });
-          state.activeJobId = data.job.id;
-          setJob(data.project, data.job);
-          await loadStats();
-          switchPage("export");
-          toast("Đã bắt đầu render.");
-          if (state.pollTimer) clearInterval(state.pollTimer);
-          state.pollTimer = setInterval(() => pollJob(state.activeJobId).catch(showError), 2500);
-        } catch (error) {
-          showError(error);
-        } finally {
-          $("#renderButton").disabled = false;
-        }
-      });
       $("#cancelButton").addEventListener("click", async () => {
         if (!state.activeJobId) return alert("Chưa có job để hủy.");
         await api(`/api/render-jobs/${state.activeJobId}/cancel`, { method: "POST" }).then(async () => {
@@ -2555,7 +2651,7 @@
         }).catch(showError);
       });
 
-      $("#saveTrimButton").addEventListener("click", async () => {
+      $("#saveTrimButton")?.addEventListener("click", async () => {
         if (!state.selectedTimelineSceneId) return toast("Hãy chọn một scene trên timeline.");
         await api(`/api/scenes/${state.selectedTimelineSceneId}`, {
           method: "PUT",
@@ -2570,7 +2666,7 @@
           toast("Đã lưu trim cho scene.");
         }).catch(showError);
       });
-      $("#splitSceneButton").addEventListener("click", async () => {
+      $("#splitSceneButton")?.addEventListener("click", async () => {
         const selected = state.selectedTimelineSceneId;
         if (!selected) return toast("Hãy chọn một scene trên timeline.");
         const text = $(`#timelineSceneList .scene[data-id="${selected}"] .tiny`)?.textContent || "Scene mới sau split.";
@@ -2594,8 +2690,8 @@
           toast("Đã đổi thứ tự scene.");
         }).catch(showError);
       }
-      $("#moveSceneUpButton").addEventListener("click", () => moveSelectedScene("up"));
-      $("#moveSceneDownButton").addEventListener("click", () => moveSelectedScene("down"));
+      $("#moveSceneUpButton")?.addEventListener("click", () => moveSelectedScene("up"));
+      $("#moveSceneDownButton")?.addEventListener("click", () => moveSelectedScene("down"));
       $$(".sfx-preset").forEach((button) => button.addEventListener("click", async () => {
         if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước.");
         await api(`/api/projects/${state.activeProjectId}/sfx`, {
@@ -2611,7 +2707,9 @@
 
       $("#editorAddVideoButton")?.addEventListener("click", triggerVideoUpload);
       $("#timelineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
+      $("#timelineToolbarAddVideoButton")?.addEventListener("click", triggerVideoUpload);
       $("#timelineAddAudioButton")?.addEventListener("click", triggerAudioUpload);
+      $("#timelineToolbarAddAudioButton")?.addEventListener("click", triggerAudioUpload);
       $("#timelineOpenMediaButton")?.addEventListener("click", () => switchPage("media"));
       $("#editBurnSubtitles")?.addEventListener("change", () => {
         if ($("#burnSubtitles")) $("#burnSubtitles").checked = $("#editBurnSubtitles").checked;
@@ -2716,6 +2814,5 @@
       });
 
     </script>
-    <script src="/app-live-bindings.js"></script>
   </body>
 </html>
