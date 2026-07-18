@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
+import { Pool } from "pg";
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require("node:sqlite") as {
@@ -223,6 +224,166 @@ for (const statement of [
   }
 }
 
+type DbRow = Record<string, string | number | null>;
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const pgPool = DATABASE_URL
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
+    })
+  : null;
+let pgWriteQueue: Promise<void> = Promise.resolve();
+
+async function initPostgresMirror() {
+  if (!pgPool) return;
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      owner_email TEXT NOT NULL DEFAULT 'local@device',
+      title TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      status TEXT NOT NULL,
+      voice_id TEXT NOT NULL,
+      voice_name TEXT NOT NULL,
+      voice_speed DOUBLE PRECISION NOT NULL,
+      output_path TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      email TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      picture TEXT,
+      provider TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+      storage_quota_bytes BIGINT NOT NULL,
+      credits INTEGER NOT NULL,
+      default_language TEXT NOT NULL,
+      default_ratio TEXT NOT NULL,
+      default_quality TEXT NOT NULL,
+      theme TEXT NOT NULL DEFAULT 'dark',
+      ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1,
+      storage_mode TEXT NOT NULL DEFAULT 'server',
+      save_root TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS render_jobs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      progress INTEGER NOT NULL,
+      current_step TEXT NOT NULL,
+      output_dir TEXT,
+      script_path TEXT,
+      video_path TEXT,
+      audio_path TEXT,
+      error_message TEXT,
+      started_at TEXT,
+      finished_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      file_size BIGINT NOT NULL,
+      duration DOUBLE PRECISION,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS scenes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      scene_key TEXT NOT NULL,
+      scene_order INTEGER NOT NULL,
+      scene_type TEXT NOT NULL,
+      voice_text TEXT NOT NULL,
+      template_id TEXT NOT NULL,
+      source_asset_id TEXT,
+      source_start DOUBLE PRECISION,
+      source_end DOUBLE PRECISION,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_projects_owner_email ON projects(owner_email);
+    CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id);
+    CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id);
+    CREATE INDEX IF NOT EXISTS idx_scenes_project_id_order ON scenes(project_id, scene_order);
+  `);
+}
+
+async function pgExec(sql: string, params: unknown[] = []) {
+  if (!pgPool) return;
+  pgWriteQueue = pgWriteQueue
+    .then(() => pgPool.query(sql, params).then(() => undefined))
+    .catch((error) => {
+      console.warn("Postgres mirror write failed:", error instanceof Error ? error.message : error);
+    });
+  await pgWriteQueue;
+}
+
+function mirrorUpsert(table: string, row: DbRow, conflictKey: string) {
+  const cols = Object.keys(row);
+  const params = cols.map((col) => row[col]);
+  const placeholders = cols.map((_, index) => `$${index + 1}`).join(", ");
+  const updates = cols.filter((col) => col !== conflictKey).map((col) => `${col} = EXCLUDED.${col}`).join(", ");
+  void pgExec(
+    `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders}) ON CONFLICT (${conflictKey}) DO UPDATE SET ${updates}`,
+    params,
+  );
+}
+
+async function loadPostgresIntoSqlite() {
+  if (!pgPool) return;
+  await initPostgresMirror();
+  const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "sessions"] as const;
+  const rows = Object.fromEntries(await Promise.all(tables.map(async (table) => [table, (await pgPool.query(`SELECT * FROM ${table}`)).rows]))) as Record<
+    (typeof tables)[number],
+    DbRow[]
+  >;
+  db.exec("DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM projects; DELETE FROM users;");
+  const insertRows = (table: string, items: DbRow[]) => {
+    for (const row of items) {
+      const cols = Object.keys(row);
+      const placeholders = cols.map(() => "?").join(", ");
+      db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`).run(...cols.map((col) => row[col]));
+    }
+  };
+  insertRows("users", rows.users);
+  insertRows("user_settings", rows.user_settings);
+  insertRows("projects", rows.projects);
+  insertRows("render_jobs", rows.render_jobs);
+  insertRows("assets", rows.assets);
+  insertRows("scenes", rows.scenes);
+  insertRows("sessions", rows.sessions);
+  console.log(`Postgres metadata mirror enabled (${rows.projects.length} projects loaded).`);
+}
+
+await loadPostgresIntoSqlite();
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -271,6 +432,7 @@ export function createProject(data: {
     project.created_at,
     project.updated_at,
   );
+  mirrorUpsert("projects", project as unknown as DbRow, "id");
   return project;
 }
 
@@ -312,6 +474,7 @@ export function createRenderJob(projectId: string): RenderJobRecord {
     job.created_at,
     job.updated_at,
   );
+  mirrorUpsert("render_jobs", job as unknown as DbRow, "id");
   return job;
 }
 
@@ -372,6 +535,7 @@ export function createAsset(data: {
     asset.duration,
     asset.created_at,
   );
+  mirrorUpsert("assets", asset as unknown as DbRow, "id");
   return asset;
 }
 
@@ -388,6 +552,8 @@ export function deleteAsset(assetId: string): AssetRecord | undefined {
   if (!asset) return undefined;
   db.prepare("DELETE FROM assets WHERE id = ?").run(assetId);
   db.prepare("UPDATE scenes SET source_asset_id = NULL WHERE source_asset_id = ?").run(assetId);
+  void pgExec("DELETE FROM assets WHERE id = $1", [assetId]);
+  void pgExec("UPDATE scenes SET source_asset_id = NULL WHERE source_asset_id = $1", [assetId]);
   return asset;
 }
 
@@ -397,6 +563,7 @@ export function replaceProjectScenes(
 ): SceneRecord[] {
   const created = nowIso();
   db.prepare("DELETE FROM scenes WHERE project_id = ?").run(projectId);
+  void pgExec("DELETE FROM scenes WHERE project_id = $1", [projectId]);
   const insert = db.prepare(`
     INSERT INTO scenes
     (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, created_at, updated_at)
@@ -431,6 +598,7 @@ export function replaceProjectScenes(
       row.created_at,
       row.updated_at,
     );
+    mirrorUpsert("scenes", row as unknown as DbRow, "id");
     return row;
   });
   return rows;
@@ -471,6 +639,7 @@ export function addProjectScene(projectId: string, data: { voiceText: string; sc
     row.created_at,
     row.updated_at,
   );
+  mirrorUpsert("scenes", row as unknown as DbRow, "id");
   return row;
 }
 
@@ -497,16 +666,21 @@ export function updateScene(sceneId: string, data: Partial<Pick<SceneRecord, "vo
     nowIso(),
     sceneId,
   );
-  return db.prepare("SELECT * FROM scenes WHERE id = ?").get(sceneId) as SceneRecord | undefined;
+  const updated = db.prepare("SELECT * FROM scenes WHERE id = ?").get(sceneId) as SceneRecord | undefined;
+  if (updated) mirrorUpsert("scenes", updated as unknown as DbRow, "id");
+  return updated;
 }
 
 export function deleteScene(sceneId: string): SceneRecord | undefined {
   const current = db.prepare("SELECT * FROM scenes WHERE id = ?").get(sceneId) as SceneRecord | undefined;
   if (!current) return undefined;
   db.prepare("DELETE FROM scenes WHERE id = ?").run(sceneId);
+  void pgExec("DELETE FROM scenes WHERE id = $1", [sceneId]);
   const rows = db.prepare("SELECT id FROM scenes WHERE project_id = ? ORDER BY scene_order ASC").all(current.project_id) as Array<{ id: string }>;
   rows.forEach((row, index) => {
     db.prepare("UPDATE scenes SET scene_order = ?, updated_at = ? WHERE id = ?").run(index, nowIso(), row.id);
+    const updated = getScene(row.id);
+    if (updated) mirrorUpsert("scenes", updated as unknown as DbRow, "id");
   });
   return current;
 }
@@ -524,7 +698,11 @@ export function moveScene(sceneId: string, direction: "up" | "down"): SceneRecor
   const updated = nowIso();
   db.prepare("UPDATE scenes SET scene_order = ?, updated_at = ? WHERE id = ?").run(target.scene_order, updated, current.id);
   db.prepare("UPDATE scenes SET scene_order = ?, updated_at = ? WHERE id = ?").run(current.scene_order, updated, target.id);
-  return getScene(sceneId);
+  const currentUpdated = getScene(current.id);
+  const targetUpdated = getScene(target.id);
+  if (currentUpdated) mirrorUpsert("scenes", currentUpdated as unknown as DbRow, "id");
+  if (targetUpdated) mirrorUpsert("scenes", targetUpdated as unknown as DbRow, "id");
+  return currentUpdated;
 }
 
 export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "output_path" | "error_message">>) {
@@ -546,6 +724,8 @@ export function updateProject(projectId: string, data: Partial<Pick<ProjectRecor
     nowIso(),
     projectId,
   );
+  const updated = getProject(projectId);
+  if (updated) mirrorUpsert("projects", updated as unknown as DbRow, "id");
 }
 
 export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecord, "id" | "project_id" | "created_at" | "updated_at">>) {
@@ -570,6 +750,8 @@ export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecor
     nowIso(),
     jobId,
   );
+  const updated = getRenderJob(jobId);
+  if (updated) mirrorUpsert("render_jobs", updated as unknown as DbRow, "id");
 }
 
 export function upsertUser(data: { email: string; name: string; picture?: string | null; provider: string }): UserRecord {
@@ -593,7 +775,9 @@ export function upsertUser(data: { email: string; name: string; picture?: string
       timestamp,
     );
   }
-  return db.prepare("SELECT * FROM users WHERE email = ?").get(data.email) as UserRecord;
+  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(data.email) as UserRecord;
+  mirrorUpsert("users", user as unknown as DbRow, "email");
+  return user;
 }
 
 export function createSession(email: string, ttlDays = 30): SessionRecord {
@@ -611,6 +795,7 @@ export function createSession(email: string, ttlDays = 30): SessionRecord {
     session.expires_at,
     session.created_at,
   );
+  mirrorUpsert("sessions", session as unknown as DbRow, "id");
   return session;
 }
 
@@ -626,6 +811,7 @@ export function getSession(sessionId: string): (SessionRecord & { name: string; 
 
 export function deleteSession(sessionId: string) {
   db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+  void pgExec("DELETE FROM sessions WHERE id = $1", [sessionId]);
 }
 
 export function getStats(ownerEmail: string) {
@@ -709,7 +895,9 @@ export function getUserSettings(email: string): UserSettingsRecord {
     (email, storage_quota_bytes, credits, default_language, default_ratio, default_quality, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(email, 50 * 1024 * 1024 * 1024, 0, "Tiếng Việt", "9:16", "1080p", created, created);
-  return db.prepare("SELECT * FROM user_settings WHERE email = ?").get(email) as UserSettingsRecord;
+  const settings = db.prepare("SELECT * FROM user_settings WHERE email = ?").get(email) as UserSettingsRecord;
+  mirrorUpsert("user_settings", settings as unknown as DbRow, "email");
+  return settings;
 }
 
 export function updateUserSettings(
@@ -734,7 +922,9 @@ export function updateUserSettings(
     nowIso(),
     email,
   );
-  return getUserSettings(email);
+  const updated = getUserSettings(email);
+  mirrorUpsert("user_settings", updated as unknown as DbRow, "email");
+  return updated;
 }
 
 export { DB_PATH };
