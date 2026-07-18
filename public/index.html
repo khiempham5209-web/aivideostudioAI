@@ -1256,13 +1256,8 @@
         </section>
 
         <section class="page" id="music">
-          <div class="page-head"><div><h2>Nhạc nền</h2><p class="muted">Chọn nhạc theo mood, nghe thử, loop, fade và tự động ducking khi có voice.</p></div><button class="btn primary">+ Upload MP3</button></div>
-          <div class="grid music-grid">
-            <div class="card"><span class="pill ok">Cinematic</span><strong style="font-size:18px;">Epic Journey</strong><p class="tiny">02:16 · 128 kbps</p><audio controls style="width:100%;margin-top:12px;"></audio><button class="btn primary" style="margin-top:10px;width:100%;">Gắn vào dự án</button></div>
-            <div class="card"><span class="pill">Happy</span><strong style="font-size:18px;">Bright Morning</strong><p class="tiny">01:42 · 128 kbps</p><audio controls style="width:100%;margin-top:12px;"></audio><button class="btn" style="margin-top:10px;width:100%;">Gắn vào dự án</button></div>
-            <div class="card"><span class="pill warn">Dramatic</span><strong style="font-size:18px;">Tension Rise</strong><p class="tiny">01:58 · 128 kbps</p><audio controls style="width:100%;margin-top:12px;"></audio><button class="btn" style="margin-top:10px;width:100%;">Gắn vào dự án</button></div>
-          </div>
-          <div class="panel" style="margin-top:14px;"><div class="panel-head"><h3>Cài đặt nhạc nền</h3></div><div class="panel-body grid" style="grid-template-columns:repeat(4,minmax(0,1fr));"><div><label>Âm lượng</label><input type="range" value="25" /></div><div><label>Fade in</label><input value="1.5 giây" /></div><div><label>Fade out</label><input value="2 giây" /></div><label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" checked /> Auto ducking</label></div></div>
+          <div class="page-head"><div><h2>Nhạc nền</h2><p class="muted">Nhạc thật đã upload vào dự án. Gắn vào track Music trên Timeline để render kèm video.</p></div><button class="btn primary" id="musicUploadButton">+ Upload MP3</button></div>
+          <div class="grid music-grid" id="musicGrid"><div class="empty">Chưa có MP3 nào trong dự án. Bấm + Upload MP3 để thêm nhạc thật.</div></div>
         </section>
 
         <section class="page" id="templates">
@@ -1302,9 +1297,9 @@
           </div>
         </section>
 
-        <section class="page" id="transitions"><div class="page-head"><div><h2>Transition Library</h2><p class="muted">Kéo hiệu ứng chuyển cảnh vào vị trí nối giữa hai clip.</p></div><button class="btn primary" data-page="timeline">Mở Timeline</button></div><div class="grid screen-cards"><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#1d4ed8,#581c87);"><h3>Fade</h3></div><div class="panel-body"><p class="tiny">Mềm, phù hợp hầu hết nội dung</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#f59e0b,#7c2d12);"><h3>Flash</h3></div><div class="panel-body"><p class="tiny">Nhanh, tạo điểm nhấn</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#0f766e,#1e3a8a);"><h3>Zoom</h3></div><div class="panel-body"><p class="tiny">Phóng vào cảnh tiếp theo</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#be123c,#312e81);"><h3>Slide</h3></div><div class="panel-body"><p class="tiny">Trượt ngang hoặc dọc</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#164e63,#713f12);"><h3>Blur</h3></div><div class="panel-body"><p class="tiny">Mờ chuyển động điện ảnh</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#7c3aed,#db2777);"><h3>Spin</h3></div><div class="panel-body"><p class="tiny">Xoay nhanh cho clip ngắn</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div></div></section>
+        <section class="page" id="transitions"><div class="page-head"><div><h2>Transition Library</h2><p class="muted">Thêm 1 clip transition thật vào track Transition tại vị trí playhead — render sẽ tạo hiệu ứng dissolve tại điểm đó (chưa phân biệt hình dạng wipe/zoom/spin riêng từng loại, xem ghi chú).</p></div><button class="btn primary" data-page="timeline">Mở Timeline</button></div><div class="grid screen-cards"><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#1d4ed8,#581c87);"><h3>Fade</h3></div><div class="panel-body"><p class="tiny">Mềm, phù hợp hầu hết nội dung</p><button class="btn add-transition-btn" data-transition="fade" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#f59e0b,#7c2d12);"><h3>Flash</h3></div><div class="panel-body"><p class="tiny">Nhanh, tạo điểm nhấn</p><button class="btn add-transition-btn" data-transition="flash" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#0f766e,#1e3a8a);"><h3>Zoom</h3></div><div class="panel-body"><p class="tiny">Phóng vào cảnh tiếp theo</p><button class="btn add-transition-btn" data-transition="zoom" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#be123c,#312e81);"><h3>Slide</h3></div><div class="panel-body"><p class="tiny">Trượt ngang hoặc dọc</p><button class="btn add-transition-btn" data-transition="slide" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#164e63,#713f12);"><h3>Blur</h3></div><div class="panel-body"><p class="tiny">Mờ chuyển động điện ảnh</p><button class="btn add-transition-btn" data-transition="blur" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#7c3aed,#db2777);"><h3>Spin</h3></div><div class="panel-body"><p class="tiny">Xoay nhanh cho clip ngắn</p><button class="btn add-transition-btn" data-transition="spin" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div></div></section>
 
-        <section class="page" id="animations"><div class="page-head"><div><h2>Animation Library</h2><p class="muted">Animation cho text, ảnh, logo và video.</p></div><button class="btn primary" data-page="timeline">Áp dụng trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Text animation</h3></div><div class="panel-body field-stack"><button class="btn">Typewriter</button><button class="btn">Pop up</button><button class="btn">Slide up</button><button class="btn">Bounce</button><button class="btn">Karaoke highlight</button></div></div><div class="panel"><div class="panel-head"><h3>Image / Logo animation</h3></div><div class="panel-body field-stack"><button class="btn">Fade in</button><button class="btn">Zoom in</button><button class="btn">Pan left</button><button class="btn">Float</button><button class="btn">Pulse</button></div></div><div class="panel"><div class="panel-head"><h3>Video animation</h3></div><div class="panel-body field-stack"><button class="btn">Camera zoom</button><button class="btn">Shake</button><button class="btn">Speed ramp</button><button class="btn">Parallax</button><button class="btn">Ken Burns</button></div></div><div class="panel"><div class="panel-head"><h3>Cấu hình</h3></div><div class="panel-body field-stack"><div><label>Duration</label><input type="range" min="100" max="3000" value="600"></div><div><label>Easing</label><select><option>Ease out</option><option>Ease in</option><option>Linear</option><option>Bounce</option></select></div><button class="btn primary">Preview animation</button></div></div></div></section>
+        <section class="page" id="animations"><div class="page-head"><div><h2>Animation Library</h2><p class="muted">Chọn 1 clip trên Timeline trước, rồi bấm animation để áp dụng thật. Chỉ Fade in / Zoom in / Slide up có hỗ trợ áp dụng (khớp trường animation của clip); Zoom in hiện chỉ hiển thị trong editor, chưa render vào video.</p></div><button class="btn primary" data-page="timeline">Mở Timeline</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Text animation</h3></div><div class="panel-body field-stack"><button class="btn">Typewriter</button><button class="btn apply-animation-btn" data-animation="slide-up">Slide up</button><button class="btn">Bounce</button><button class="btn">Karaoke highlight</button></div></div><div class="panel"><div class="panel-head"><h3>Image / Logo animation</h3></div><div class="panel-body field-stack"><button class="btn apply-animation-btn" data-animation="fade-in">Fade in</button><button class="btn apply-animation-btn" data-animation="zoom-in">Zoom in</button><button class="btn">Pan left</button><button class="btn">Float</button><button class="btn">Pulse</button></div></div><div class="panel"><div class="panel-head"><h3>Video animation</h3></div><div class="panel-body field-stack"><button class="btn">Camera zoom</button><button class="btn">Shake</button><button class="btn">Speed ramp</button><button class="btn">Parallax</button><button class="btn">Ken Burns</button></div></div></div></section>
 
         <section class="page" id="history"><div class="page-head"><div><h2>Lịch sử dự án</h2><p class="muted">Theo dõi scene, media và job thay đổi trong dự án đang chọn.</p></div><button class="btn" id="refreshHistoryButton">Làm mới</button></div><div class="panel"><div class="panel-head"><h3>Hoạt động — <span id="historyProjectName">chưa chọn dự án</span></h3></div><div class="panel-body" id="historyListBody"><div class="empty">Hãy chọn 1 dự án để xem lịch sử.</div></div></div></section>
 
@@ -1505,6 +1500,7 @@
         if (page === "history") loadHistory().catch(showError);
         if (page === "account") renderAccountInfo();
         if (page === "ai-settings") loadSettingsStatus().catch(showError);
+        if (page === "music") renderMusicLibrary();
       }
 
       async function api(url, options) {
@@ -2050,6 +2046,42 @@
           toast(`Đã thêm ${asset.file_name} vào timeline.`);
         } catch (error) { showError(error); }
       }
+
+      async function addSpecificAssetToTrack(asset, trackType) {
+        if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
+        const track = (state.timelineTracks || []).find((t) => t.track_type === trackType);
+        if (!track) return;
+        const trackClips = (state.timelineClips || []).filter((c) => c.track_id === track.id);
+        const startTime = trackClips.reduce((max, c) => Math.max(max, c.start_time + c.duration), 0);
+        const duration = asset.duration && asset.duration > 0 ? asset.duration : 15;
+        try {
+          const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trackId: track.id, sourceAssetId: asset.id, label: asset.file_name, startTime, duration }),
+          });
+          state.timelineClips.push(data.clip);
+          toast(`Đã gắn ${asset.file_name} vào track ${track.label}.`);
+        } catch (error) { showError(error); }
+      }
+
+      function renderMusicLibrary() {
+        const grid = $("#musicGrid");
+        if (!grid) return;
+        const tracks = projectAudioAssets();
+        if (!tracks.length) {
+          grid.innerHTML = '<div class="empty">Chưa có MP3 nào trong dự án. Bấm + Upload MP3 để thêm nhạc thật.</div>';
+          return;
+        }
+        grid.innerHTML = tracks.map((asset) => `
+          <div class="card"><strong style="font-size:18px;">${asset.file_name}</strong><p class="tiny">${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</p><audio controls src="${fileUrl(asset.file_path)}" style="width:100%;margin-top:12px;"></audio><button class="btn primary attach-music-btn" data-asset-id="${asset.id}" style="margin-top:10px;width:100%;">Gắn vào track Music</button></div>`).join("");
+        attachMediaErrorHandlers(grid);
+        grid.querySelectorAll(".attach-music-btn").forEach((btn) => btn.addEventListener("click", () => {
+          const asset = state.assets.find((a) => a.id === btn.dataset.assetId);
+          if (asset) addSpecificAssetToTrack(asset, "music");
+        }));
+      }
+      $("#musicUploadButton")?.addEventListener("click", triggerAudioUpload);
 
       async function addTextClipPrompt() {
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
@@ -3337,6 +3369,28 @@
         if (previewPlayRaf) stopPreviewPlayback();
         else startPreviewPlayback();
       });
+      $$(".add-transition-btn").forEach((button) => button.addEventListener("click", async () => {
+        if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
+        const track = (state.timelineTracks || []).find((t) => t.track_type === "transition");
+        if (!track) return;
+        const label = button.closest(".template-card")?.querySelector("h3")?.textContent || "Transition";
+        const startTime = state.timelinePlayhead || 0;
+        try {
+          const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trackId: track.id, label, textContent: button.dataset.transition, startTime, duration: 1 }),
+          });
+          state.timelineClips.push(data.clip);
+          toast(`Đã thêm transition "${label}" vào timeline tại ${formatTimecode(startTime)}. Mở Edit V3 để kéo đúng vị trí giữa 2 clip.`);
+        } catch (error) { showError(error); }
+      }));
+      $$(".apply-animation-btn").forEach((button) => button.addEventListener("click", async () => {
+        const clip = selectedClip();
+        if (!clip) return toast("Hãy chọn 1 clip trên Timeline (Edit V3) trước khi áp dụng animation.");
+        await updateClipRemote(clip.id, { animation: button.dataset.animation });
+        toast(`Đã áp dụng animation "${button.textContent.trim()}" cho clip "${clip.label}".`);
+      }));
       $$(".apply-template-btn").forEach((button) => button.addEventListener("click", async () => {
         if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo dự án trước khi dùng mẫu.");
         button.disabled = true;
@@ -3384,7 +3438,7 @@
         }
       })();
       document.addEventListener("click", (event) => {
-        const demoButton = event.target.closest("#transitions .btn, #animations .btn, #assets .btn, #history .btn");
+        const demoButton = event.target.closest("#assets .btn");
         if (demoButton && !demoButton.dataset.page) {
           const toast = document.querySelector("#toast");
           if (toast) { toast.textContent = `${demoButton.textContent.trim()} — chưa hỗ trợ, sẽ làm ở bản sau.`; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 1800); }

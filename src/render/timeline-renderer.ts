@@ -100,11 +100,12 @@ export async function renderProjectTimeline(
     .sort((a, b) => a.start_time - b.start_time);
   const textClips = byType("text").sort((a, b) => a.start_time - b.start_time);
   const subtitleClips = byType("subtitle").sort((a, b) => a.start_time - b.start_time);
+  const transitionClips = byType("transition");
   const audioClips = [...byType("voice"), ...byType("music"), ...byType("sfx")].filter((c) => c.source_asset_id);
 
   report("Ghép video/overlay/text", 10);
   const silentVideoPath = join(outputDir, "timeline-silent.mp4");
-  await renderVisualComposite(visualClips, textClips, width, height, durationSec, silentVideoPath, resolveAssetPath);
+  await renderVisualComposite(visualClips, textClips, transitionClips, width, height, durationSec, silentVideoPath, resolveAssetPath);
 
   report("Trộn voice/nhạc/SFX", 55);
   const audioPath = join(outputDir, "voice.mp3");
@@ -134,9 +135,50 @@ export async function renderProjectTimeline(
   return { outputDir, videoPath, audioPath, subtitlePath, durationSec };
 }
 
+const ANIM_FADE_SEC = 0.5;
+const TRANSITION_FADE_SEC = 0.5;
+
+/**
+ * A transition clip only marks a moment in time (it has no source of its
+ * own). We turn it into a real effect by fading out whichever visual clip
+ * ends nearest that moment and fading in whichever visual clip starts
+ * nearest it — a dissolve-style transition. All transition presets
+ * currently produce the same fade; distinct wipe/zoom/spin geometry is not
+ * implemented yet.
+ */
+function computeTransitionFades(
+  visualClips: TimelineClipRecord[],
+  transitionClips: TimelineClipRecord[],
+): { fadeIn: Map<string, number>; fadeOut: Map<string, number> } {
+  const fadeIn = new Map<string, number>();
+  const fadeOut = new Map<string, number>();
+  for (const t of transitionClips) {
+    let bestOut: TimelineClipRecord | null = null;
+    let bestOutDelta = Infinity;
+    let bestIn: TimelineClipRecord | null = null;
+    let bestInDelta = Infinity;
+    for (const clip of visualClips) {
+      const endDelta = Math.abs(clip.start_time + clip.duration - t.start_time);
+      if (endDelta <= 1.0 && endDelta < bestOutDelta) {
+        bestOut = clip;
+        bestOutDelta = endDelta;
+      }
+      const startDelta = Math.abs(clip.start_time - t.start_time);
+      if (startDelta <= 1.0 && startDelta < bestInDelta) {
+        bestIn = clip;
+        bestInDelta = startDelta;
+      }
+    }
+    if (bestOut) fadeOut.set(bestOut.id, TRANSITION_FADE_SEC);
+    if (bestIn) fadeIn.set(bestIn.id, TRANSITION_FADE_SEC);
+  }
+  return { fadeIn, fadeOut };
+}
+
 async function renderVisualComposite(
   visualClips: TimelineClipRecord[],
   textClips: TimelineClipRecord[],
+  transitionClips: TimelineClipRecord[],
   width: number,
   height: number,
   durationSec: number,
@@ -147,6 +189,7 @@ async function renderVisualComposite(
   const filterParts: string[] = [];
   let base = "[0:v]";
   let inputIdx = 1;
+  const { fadeIn: transitionFadeIn, fadeOut: transitionFadeOut } = computeTransitionFades(visualClips, transitionClips);
 
   for (const clip of visualClips) {
     const asset = clip.source_asset_id ? getAsset(clip.source_asset_id) : undefined;
@@ -166,25 +209,36 @@ async function renderVisualComposite(
     const scaledW = Math.max(2, Math.round(width * scale));
     const scaledH = Math.max(2, Math.round(height * scale));
     const startExpr = clip.start_time.toFixed(3);
+    const endTimeNum = clip.start_time + clip.duration;
+    const halfDur = clip.duration / 2;
+    const fadeInDur = Math.min(halfDur, Math.max(clip.animation === "fade-in" ? ANIM_FADE_SEC : 0, transitionFadeIn.get(clip.id) || 0));
+    const fadeOutDur = Math.min(halfDur, transitionFadeOut.get(clip.id) || 0);
+    const slideDur = clip.animation === "slide-up" ? Math.min(halfDur, ANIM_FADE_SEC) : 0;
+    const fadeSteps = [
+      fadeInDur > 0 ? `fade=t=in:st=${startExpr}:d=${fadeInDur.toFixed(3)}:alpha=1` : "",
+      fadeOutDur > 0 ? `fade=t=out:st=${(endTimeNum - fadeOutDur).toFixed(3)}:d=${fadeOutDur.toFixed(3)}:alpha=1` : "",
+    ].filter(Boolean).map((f) => `,${f}`).join("");
 
     if (asset.type === "image") {
       filterParts.push(
         `[${idx}:v]scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity},` +
-          `trim=duration=${clip.duration.toFixed(3)},setpts=PTS-STARTPTS+${startExpr}/TB[${label}]`,
+          `trim=duration=${clip.duration.toFixed(3)},setpts=PTS-STARTPTS+${startExpr}/TB${fadeSteps}[${label}]`,
       );
     } else {
       const sourceSpan = clip.duration * speed;
       filterParts.push(
         `[${idx}:v]trim=${trimIn.toFixed(3)}:${(trimIn + sourceSpan).toFixed(3)},setpts=(PTS-STARTPTS)/${speed}+${startExpr}/TB,` +
-          `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity}[${label}]`,
+          `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity}${fadeSteps}[${label}]`,
       );
     }
 
     const x = `(W-w)/2+${Math.round(Number(clip.pos_x) || 0)}`;
-    const y = `(H-h)/2+${Math.round(Number(clip.pos_y) || 0)}`;
-    const endTime = (clip.start_time + clip.duration).toFixed(3);
+    const y = slideDur > 0
+      ? `(H-h)/2+${Math.round(Number(clip.pos_y) || 0)}+if(lt(t-${startExpr},${slideDur.toFixed(3)}),(1-(t-${startExpr})/${slideDur.toFixed(3)})*60,0)`
+      : `(H-h)/2+${Math.round(Number(clip.pos_y) || 0)}`;
+    const endTime = endTimeNum.toFixed(3);
     const nextLabel = `ov${idx}`;
-    filterParts.push(`${base}[${label}]overlay=x=${x}:y=${y}:enable='between(t,${startExpr},${endTime})'[${nextLabel}]`);
+    filterParts.push(`${base}[${label}]overlay=x=${x}:y='${y}':enable='between(t,${startExpr},${endTime})'[${nextLabel}]`);
     base = `[${nextLabel}]`;
   }
 
