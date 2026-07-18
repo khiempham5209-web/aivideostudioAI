@@ -1232,9 +1232,9 @@
           </div>
         </section>
 
-        <section class="page" id="assets"><div class="page-head"><div><h2>Kho tài nguyên</h2><p class="muted">Video, audio, image, logo, subtitle, sticker, transition, animation, LUT và effect dùng cho toàn bộ dự án.</p></div><div class="top-actions"><button class="btn">Đồng bộ kho</button><button class="btn primary">+ Upload tài nguyên</button></div></div><div class="grid asset-browser-grid"><div class="panel"><div class="panel-head"><h3>Danh mục</h3></div><div class="panel-body asset-category"><button class="btn primary">Tất cả</button><button class="btn">Video</button><button class="btn">Audio</button><button class="btn">Hình ảnh</button><button class="btn">Logo</button><button class="btn">Subtitle</button><button class="btn">Sticker</button><button class="btn">Transition</button><button class="btn">Animation</button><button class="btn">LUT / Effect</button></div></div><div class="panel"><div class="panel-head"><h3>Tài nguyên sẵn sàng</h3><input class="search" placeholder="Tìm asset..."></div><div class="panel-body"><div class="asset-item-grid"><div class="asset-item" style="--art:linear-gradient(135deg,#1d4ed8,#111827);"><strong>City drone.mp4</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#065f46,#111827);"><strong>Story voice.mp3</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#7c2d12,#111827);"><strong>Movie poster.png</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#581c87,#111827);"><strong>Logo white.png</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#713f12,#111827);"><strong>Whoosh.wav</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#164e63,#111827);"><strong>Cinematic LUT</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#be123c,#312e81);"><strong>Title preset</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#0f766e,#1e293b);"><strong>Fade zoom</strong></div></div></div></div><div class="panel"><div class="panel-head"><h3>Thông tin asset</h3></div><div class="panel-body field-stack"><div class="preview-frame" style="min-height:180px;--art:linear-gradient(135deg,#1d4ed8,#581c87);"></div><div><label>Tên</label><input value="City drone.mp4"></div><div><label>Tag</label><input value="city, drone, cinematic"></div><div><label>Nguồn / giấy phép</label><select><option>Upload cá nhân</option><option>Kho nội bộ</option><option>Stock có cấp phép</option></select></div><button class="btn primary">Thêm vào project</button></div></div></div></section>
+        <section class="page" id="assets"><div class="page-head"><div><h2>Kho tài nguyên</h2><p class="muted">Toàn bộ file thật đã upload vào dự án đang chọn (video, audio, hình ảnh).</p></div><div class="top-actions"><button class="btn" id="assetsRefreshButton">Làm mới</button><button class="btn primary" id="assetsUploadButton">+ Upload tài nguyên</button></div></div><div class="grid asset-browser-grid"><div class="panel"><div class="panel-head"><h3>Danh mục</h3></div><div class="panel-body asset-category" id="assetCategoryList"><button class="btn primary" data-category="all">Tất cả</button><button class="btn" data-category="video">Video</button><button class="btn" data-category="audio">Audio</button><button class="btn" data-category="image">Hình ảnh</button><button class="btn" data-category="other">Khác</button></div></div><div class="panel"><div class="panel-head"><h3>Tài nguyên sẵn sàng</h3><input class="search" id="assetSearchInput" placeholder="Tìm asset..."></div><div class="panel-body"><div class="asset-item-grid" id="assetLibraryGrid"><div class="empty">Chưa có tài nguyên nào trong dự án.</div></div></div></div><div class="panel"><div class="panel-head"><h3>Thông tin asset</h3></div><div class="panel-body field-stack" id="assetInfoPanel"><div class="empty">Chọn 1 tài nguyên bên trái để xem chi tiết.</div></div></div></div></section>
 
-        <section class="page" id="project-explorer"><div class="page-head"><div><h2>Project Explorer</h2><p class="muted">Quản lý toàn bộ thành phần của dự án theo cây thư mục.</p></div><button class="btn primary" data-page="timeline">Mở trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Review Kung Fu Panda</h3><span class="pill ok">Auto saved</span></div><div class="panel-body field-stack"><button class="btn" style="text-align:left;">▾ Scenes <span class="tiny">(6)</span></button><button class="btn" style="text-align:left;padding-left:30px;">Scene 01 — Hook</button><button class="btn" style="text-align:left;padding-left:30px;">Scene 02 — Giới thiệu</button><button class="btn" style="text-align:left;padding-left:30px;">Scene 03 — Điểm mạnh</button><button class="btn" style="text-align:left;">▾ Voice <span class="tiny">(1)</span></button><button class="btn" style="text-align:left;padding-left:30px;">Narration-final.mp3</button><button class="btn" style="text-align:left;">▾ Subtitle <span class="tiny">(1)</span></button><button class="btn" style="text-align:left;">▾ Music <span class="tiny">(2)</span></button><button class="btn" style="text-align:left;">▾ Export <span class="tiny">(3)</span></button></div></div><div class="panel"><div class="panel-head"><h3>Scene 02 — Giới thiệu</h3><div class="top-actions"><button class="btn">Nhân bản</button><button class="btn">Xóa</button></div></div><div class="panel-body field-stack"><div><label>Lời đọc</label><textarea>Po không phải mẫu anh hùng hoàn hảo, nhưng chính sự vụng về và chân thành khiến hành trình của cậu trở nên đáng nhớ.</textarea></div><div><label>Media gắn với scene</label><div class="asset-row"><strong>scene-02.mp4</strong><p class="tiny">12.4 giây · 1080p</p></div></div><div><label>Thời lượng</label><input value="12.4s"></div><button class="btn primary">Lưu scene</button></div></div></div></section>
+        <section class="page" id="project-explorer"><div class="page-head"><div><h2>Project Explorer</h2><p class="muted">Cây thành phần thật của dự án đang chọn: scene, media, timeline, export.</p></div><button class="btn primary" data-page="timeline">Mở trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3 id="explorerProjectTitle">Chưa chọn dự án</h3><span class="pill" id="explorerProjectStatus"></span></div><div class="panel-body field-stack" id="explorerTree"><div class="empty">Hãy chọn 1 dự án ở thanh trên.</div></div></div><div class="panel"><div class="panel-head"><h3>Chi tiết</h3></div><div class="panel-body field-stack" id="explorerDetail"><div class="empty">Chọn 1 mục trong cây bên trái để xem chi tiết.</div></div></div></div></section>
 
         <section class="page" id="timeline">
           <div class="page-head">
@@ -1353,7 +1353,7 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [] };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [], assetCategory: "all", selectedAssetId: "" };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -1501,6 +1501,8 @@
         if (page === "account") renderAccountInfo();
         if (page === "ai-settings") loadSettingsStatus().catch(showError);
         if (page === "music") renderMusicLibrary();
+        if (page === "assets") renderAssetLibrary();
+        if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
       }
 
       async function api(url, options) {
@@ -2082,6 +2084,177 @@
         }));
       }
       $("#musicUploadButton")?.addEventListener("click", triggerAudioUpload);
+
+      function assetTrackTypeFor(asset) {
+        if (asset.type === "video") return "video";
+        if (asset.type === "audio") return "voice";
+        return null;
+      }
+
+      function renderAssetLibrary() {
+        const grid = $("#assetLibraryGrid");
+        if (!grid) return;
+        const search = ($("#assetSearchInput")?.value || "").trim().toLowerCase();
+        const filtered = state.assets.filter((asset) => {
+          const matchesCategory = state.assetCategory === "all" || asset.type === state.assetCategory;
+          const matchesSearch = !search || asset.file_name.toLowerCase().includes(search);
+          return matchesCategory && matchesSearch;
+        });
+        if (!filtered.length) {
+          grid.innerHTML = '<div class="empty">Không có tài nguyên nào khớp. Bấm + Upload tài nguyên để thêm.</div>';
+        } else {
+          grid.innerHTML = filtered.map((asset, index) => `
+            <div class="asset-item${asset.id === state.selectedAssetId ? " selected" : ""}" data-asset-id="${asset.id}" style="--art:${art[index % art.length]};cursor:pointer;">
+              <strong>${asset.file_name}</strong>
+            </div>`).join("");
+          grid.querySelectorAll(".asset-item").forEach((el) => el.addEventListener("click", () => {
+            state.selectedAssetId = el.dataset.assetId;
+            renderAssetLibrary();
+          }));
+        }
+        renderAssetInfoPanel();
+      }
+
+      function renderAssetInfoPanel() {
+        const panel = $("#assetInfoPanel");
+        if (!panel) return;
+        const asset = state.assets.find((a) => a.id === state.selectedAssetId);
+        if (!asset) {
+          panel.innerHTML = '<div class="empty">Chọn 1 tài nguyên bên trái để xem chi tiết.</div>';
+          return;
+        }
+        const trackType = assetTrackTypeFor(asset);
+        const preview = asset.type === "video"
+          ? `<video controls muted style="width:100%;border-radius:10px;background:#000;"><source src="${fileUrl(asset.file_path)}" /></video>`
+          : asset.type === "audio"
+            ? `<audio controls src="${fileUrl(asset.file_path)}" style="width:100%;"></audio>`
+            : asset.type === "image"
+              ? `<img src="${fileUrl(asset.file_path)}" style="width:100%;border-radius:10px;" />`
+              : `<div class="empty">Không có preview cho loại file này.</div>`;
+        panel.innerHTML = `
+          <div class="preview-frame" style="min-height:auto;padding:0;">${preview}</div>
+          <div><label>Tên</label><input value="${asset.file_name}" disabled></div>
+          <div><label>Loại</label><input value="${asset.type}${asset.file_size ? ` · ${Math.round(asset.file_size / 1024)} KB` : ""}" disabled></div>
+          ${trackType ? `<button class="btn primary" id="assetAddToTimelineBtn">+ Thêm vào Timeline</button>` : ""}
+          <button class="btn" id="assetDeleteBtn">Xóa khỏi dự án</button>
+        `;
+        attachMediaErrorHandlers(panel);
+        $("#assetAddToTimelineBtn")?.addEventListener("click", () => addSpecificAssetToTrack(asset, trackType));
+        $("#assetDeleteBtn")?.addEventListener("click", async () => {
+          try {
+            await api(`/api/assets/${asset.id}`, { method: "DELETE" });
+            state.selectedAssetId = "";
+            toast("Đã xóa tài nguyên.");
+            await loadAssets(state.activeProjectId);
+          } catch (error) { showError(error); }
+        });
+      }
+      $("#assetCategoryList")?.addEventListener("click", (event) => {
+        const btn = event.target.closest("button[data-category]");
+        if (!btn) return;
+        state.assetCategory = btn.dataset.category;
+        $$("#assetCategoryList button").forEach((b) => b.classList.toggle("primary", b === btn));
+        renderAssetLibrary();
+      });
+      $("#assetSearchInput")?.addEventListener("input", () => renderAssetLibrary());
+      $("#assetsRefreshButton")?.addEventListener("click", () => loadAssets(state.activeProjectId).catch(showError));
+      $("#assetsUploadButton")?.addEventListener("click", () => {
+        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước.");
+        state.pendingUploadKind = "any";
+        $("#assetFile").accept = "video/*,audio/*,image/*";
+        $("#assetFile").click();
+      });
+
+      function explorerRow(text, opts = {}) {
+        const { indent = 0, id = "", cls = "", detailType = "", detailId = "" } = opts;
+        return `<button class="btn explorer-row ${cls}" style="text-align:left;padding-left:${12 + indent * 18}px;" ${id ? `data-id="${id}"` : ""} ${detailType ? `data-detail-type="${detailType}" data-detail-id="${detailId}"` : ""}>${text}</button>`;
+      }
+
+      function renderProjectExplorer() {
+        const tree = $("#explorerTree");
+        const title = $("#explorerProjectTitle");
+        const statusPill = $("#explorerProjectStatus");
+        if (!tree) return;
+        const project = activeProject();
+        if (!project) {
+          tree.innerHTML = '<div class="empty">Hãy chọn 1 dự án ở thanh trên.</div>';
+          if (title) title.textContent = "Chưa chọn dự án";
+          if (statusPill) statusPill.textContent = "";
+          return;
+        }
+        if (title) title.textContent = project.title || "Untitled video";
+        if (statusPill) { statusPill.textContent = label(project.status); statusPill.className = `pill ${project.status === "completed" ? "ok" : "warn"}`; }
+
+        const scenes = state.scenes || [];
+        const videos = projectVideoAssets();
+        const audios = projectAudioAssets();
+        const images = state.assets.filter((a) => a.type === "image");
+        const tracks = state.timelineTracks || [];
+        const clips = state.timelineClips || [];
+        const projectJobs = state.jobs.filter((j) => j.project_id === project.id && j.status === "completed");
+
+        let html = "";
+        html += explorerRow(`▾ Scenes <span class="tiny">(${scenes.length})</span>`);
+        scenes.forEach((s, i) => { html += explorerRow(`Scene ${i + 1}${s.voice_text ? ` — ${s.voice_text.slice(0, 24)}...` : ""}`, { indent: 1, detailType: "scene", detailId: s.id }); });
+        html += explorerRow(`▾ Media <span class="tiny">(${state.assets.length})</span>`);
+        videos.forEach((a) => { html += explorerRow(`🎬 ${a.file_name}`, { indent: 1, detailType: "asset", detailId: a.id }); });
+        audios.forEach((a) => { html += explorerRow(`🎵 ${a.file_name}`, { indent: 1, detailType: "asset", detailId: a.id }); });
+        images.forEach((a) => { html += explorerRow(`🖼 ${a.file_name}`, { indent: 1, detailType: "asset", detailId: a.id }); });
+        html += explorerRow(`▾ Timeline <span class="tiny">(${clips.length} clip / ${tracks.length} track)</span>`);
+        tracks.filter((t) => clips.some((c) => c.track_id === t.id)).forEach((t) => {
+          const count = clips.filter((c) => c.track_id === t.id).length;
+          html += explorerRow(`${t.label} <span class="tiny">(${count})</span>`, { indent: 1, detailType: "track", detailId: t.id });
+        });
+        html += explorerRow(`▾ Export <span class="tiny">(${projectJobs.length})</span>`);
+        projectJobs.forEach((j) => { html += explorerRow(`video.mp4 — ${formatDateTime(j.finished_at || j.updated_at)}`, { indent: 1, detailType: "job", detailId: j.id }); });
+        tree.innerHTML = html;
+
+        tree.querySelectorAll("[data-detail-type]").forEach((el) => el.addEventListener("click", () => {
+          renderExplorerDetail(el.dataset.detailType, el.dataset.detailId);
+        }));
+      }
+
+      function renderExplorerDetail(type, id) {
+        const detail = $("#explorerDetail");
+        if (!detail) return;
+        if (type === "scene") {
+          const scene = (state.scenes || []).find((s) => s.id === id);
+          if (!scene) return;
+          const index = state.scenes.findIndex((s) => s.id === id);
+          openSceneEditor("edit", scene.id, scene.voice_text || "");
+          detail.innerHTML = `<div><label>Scene ${index + 1}</label><p class="tiny">${scene.voice_text || ""}</p></div><p class="tiny">Đã mở form sửa lời đọc (modal). Lưu ở đó sẽ cập nhật ngay tại đây.</p>`;
+          return;
+        }
+        if (type === "asset") {
+          state.selectedAssetId = id;
+          const asset = state.assets.find((a) => a.id === id);
+          if (!asset) return;
+          const preview = asset.type === "video"
+            ? `<video controls muted style="width:100%;border-radius:10px;background:#000;"><source src="${fileUrl(asset.file_path)}" /></video>`
+            : asset.type === "audio"
+              ? `<audio controls src="${fileUrl(asset.file_path)}" style="width:100%;"></audio>`
+              : asset.type === "image"
+                ? `<img src="${fileUrl(asset.file_path)}" style="width:100%;border-radius:10px;" />`
+                : "";
+          detail.innerHTML = `<strong>${asset.file_name}</strong><p class="tiny">${asset.type} · ${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</p>${preview}`;
+          attachMediaErrorHandlers(detail);
+          return;
+        }
+        if (type === "track") {
+          const track = (state.timelineTracks || []).find((t) => t.id === id);
+          if (!track) return;
+          const trackClips = (state.timelineClips || []).filter((c) => c.track_id === id);
+          detail.innerHTML = `<strong>${track.label}</strong><p class="tiny">${trackClips.length} clip · ${track.muted ? "Đang mute" : "Đang bật"} · ${track.locked ? "Đã khóa" : "Chưa khóa"}</p><button class="btn primary" id="explorerOpenTimelineBtn">Mở trong Edit V3</button>`;
+          $("#explorerOpenTimelineBtn")?.addEventListener("click", () => switchPage("timeline"));
+          return;
+        }
+        if (type === "job") {
+          const job = state.jobs.find((j) => j.id === id);
+          if (!job) return;
+          detail.innerHTML = `<strong>Video xuất</strong><p class="tiny">${formatDateTime(job.finished_at || job.updated_at)}</p><a class="btn primary" href="${fileUrl(job.video_path)}" target="_blank">Xem video</a>`;
+          return;
+        }
+      }
 
       async function addTextClipPrompt() {
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
