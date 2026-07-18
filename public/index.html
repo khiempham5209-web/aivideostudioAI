@@ -1238,7 +1238,7 @@
         <section class="page" id="timeline">
           <div class="page-head">
             <div><h2>Edit video V3</h2><p class="muted">Editor hoàn chỉnh: asset browser, preview, inspector động, waveform, playhead, nhiều track và AI tối ưu timeline.</p></div>
-            <div class="top-actions"><button class="btn" data-demo="undo">↶ Undo</button><button class="btn" data-demo="redo">↷ Redo</button><button class="btn primary" id="aiAutoEditButton">✨ AI Optimize Timeline</button></div>
+            <div class="top-actions"><button class="btn" data-demo="undo">↶ Undo</button><button class="btn" data-demo="redo">↷ Redo</button><button class="btn primary" id="aiAutoEditButton">✨ AI Optimize Timeline</button><button class="btn primary" id="renderTimelineButton">🎬 Render video từ Timeline</button></div>
           </div>
           <div class="panel ai-edit-card" style="margin-bottom:12px;">
             <div class="panel-body">
@@ -3117,6 +3117,24 @@
       });
 
       $("#aiAutoEditButton")?.addEventListener("click", runAiAutoEdit);
+      $("#renderTimelineButton")?.addEventListener("click", async () => {
+        if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
+        if (!(state.timelineClips || []).length) return toast("Timeline chưa có clip nào để render.");
+        $("#renderTimelineButton").disabled = true;
+        try {
+          const data = await api(`/api/projects/${state.activeProjectId}/timeline/render`, { method: "POST" });
+          state.activeJobId = data.job.id;
+          setJob(data.project, data.job);
+          switchPage("export");
+          toast("Đã bắt đầu render video thật từ Timeline.");
+          if (state.pollTimer) clearInterval(state.pollTimer);
+          state.pollTimer = setInterval(() => pollJob(state.activeJobId).catch(showError), 2000);
+        } catch (error) {
+          showError(error);
+        } finally {
+          $("#renderTimelineButton").disabled = false;
+        }
+      });
 
       $("#applyClipInspectorButton")?.addEventListener("click", () => {
         const clip = selectedClip();
