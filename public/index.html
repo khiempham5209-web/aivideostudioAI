@@ -2903,7 +2903,22 @@
         if ($("#accountCompletedVideos")) $("#accountCompletedVideos").textContent = String(state.stats?.completedVideos ?? 0);
       }
 
+      function notifyJobDone(project, job) {
+        const title = job.status === "completed" ? "Render xong" : job.status === "failed" ? "Render lỗi" : "Render đã hủy";
+        const body = `${project?.title || "Dự án"} — ${job.status === "completed" ? "video đã sẵn sàng." : job.error_message || "đã dừng."}`;
+        toast(`${title}: ${body}`);
+        if (typeof Notification === "undefined") return;
+        if (Notification.permission === "granted") {
+          new Notification(title, { body });
+        } else if (Notification.permission === "default") {
+          Notification.requestPermission().then((perm) => {
+            if (perm === "granted") new Notification(title, { body });
+          });
+        }
+      }
+
       async function pollJob(jobId) {
+        const previousStatus = state.currentJob?.status;
         const data = await api(`/api/render-jobs/${jobId}`);
         setJob(data.project, data.job);
         await loadProjects();
@@ -2912,6 +2927,7 @@
           if (state.activeProjectId) await loadAssets(state.activeProjectId);
           clearInterval(state.pollTimer);
           state.pollTimer = 0;
+          if (previousStatus !== data.job.status) notifyJobDone(data.project, data.job);
         }
       }
 
@@ -3039,11 +3055,13 @@
           await loadStats();
           selectProject(data.project);
           toast("Đang sinh kịch bản AI...");
-          await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST" });
+          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST" });
           await loadProjects();
           await loadScenes(state.activeProjectId);
           switchPage("script");
-          toast("Đã tạo kịch bản AI.");
+          toast(scriptData.usedFallback
+            ? `Gemini chưa dùng được (${scriptData.fallbackReason || "không rõ lỗi"}) — đã tạo kịch bản mẫu dự phòng, không phải AI thật. Sửa tay lại lời đọc trước khi tạo MP3.`
+            : "Đã tạo kịch bản AI thật (Gemini).");
         } catch (error) {
           showError(error);
         } finally {
@@ -3135,10 +3153,12 @@
         $("#regenerateButton").disabled = true;
         try {
           toast("Đang regenerate kịch bản AI...");
-          await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST" });
+          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST" });
           await loadProjects();
           await loadScenes(state.activeProjectId);
-          toast("Đã regenerate kịch bản.");
+          toast(scriptData.usedFallback
+            ? `Gemini chưa dùng được (${scriptData.fallbackReason || "không rõ lỗi"}) — đã tạo kịch bản mẫu dự phòng, không phải AI thật.`
+            : "Đã regenerate kịch bản AI thật (Gemini).");
         } catch (error) {
           showError(error);
         } finally {

@@ -712,13 +712,18 @@ function buildLocalProjectScript(project: NonNullable<ReturnType<typeof getProje
 
 async function generateProjectScript(project: NonNullable<ReturnType<typeof getProject>>) {
   try {
-    return await generateScriptFromPrompt(project.topic, {
+    const generated = await generateScriptFromPrompt(project.topic, {
       voiceProvider: "edge",
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
     });
-  } catch {
-    return buildLocalProjectScript(project);
+    return { ...generated, usedFallback: false as const, fallbackReason: null as string | null };
+  } catch (error) {
+    return {
+      ...buildLocalProjectScript(project),
+      usedFallback: true as const,
+      fallbackReason: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -1142,6 +1147,8 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
     project: getProject(projectId),
     scenes,
     title: generated.script.metadata.title,
+    usedFallback: generated.usedFallback,
+    fallbackReason: generated.fallbackReason,
     paths: {
       outputDir: generated.outputDir ? resolve(generated.outputDir) : null,
       scriptJson: generated.scriptPath ? resolve(generated.scriptPath) : null,
