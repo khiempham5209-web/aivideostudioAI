@@ -1482,6 +1482,91 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/settings/status") {
+      const user = requireUser(req, res);
+      if (!user) return;
+      sendJson(res, 200, {
+        ffmpegBin: FFMPEG_BIN,
+        geminiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
+        geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+        edgeTtsMode: process.env.EDGE_TTS_MODE === "edge-first" ? "edge-first" : "fallback-first",
+        r2Configured: isR2Configured(),
+        databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
+        readyVoices: VOICE_OPTIONS.filter((v) => v.status === "ready").map((v) => v.label),
+      });
+      return;
+    }
+
+    const settingsTestMatch = url.pathname.match(/^\/api\/settings\/test\/(ai|tts|ffmpeg|storage)$/);
+    if (req.method === "POST" && settingsTestMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const target = settingsTestMatch[1];
+      try {
+        if (target === "ai") {
+          if (!process.env.GEMINI_API_KEY?.trim()) {
+            sendJson(res, 200, { ok: false, message: "Chưa cấu hình GEMINI_API_KEY trong .env.local — kịch bản AI sẽ không tạo được." });
+            return;
+          }
+          const { GoogleGenAI } = await import("@google/genai");
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+          const started = Date.now();
+          await ai.models.generateContent({ model, contents: "Reply with exactly one word: OK" });
+          sendJson(res, 200, { ok: true, message: `Gemini (${model}) phản hồi thật sau ${Date.now() - started}ms.` });
+          return;
+        }
+        if (target === "tts") {
+          const voice = VOICE_OPTIONS.find((v) => v.status === "ready");
+          if (!voice) {
+            sendJson(res, 200, { ok: false, message: "Không có giọng nào ở trạng thái sẵn sàng." });
+            return;
+          }
+          const previewDir = resolve("storage", "voice-previews");
+          await mkdir(previewDir, { recursive: true });
+          const testPath = join(previewDir, `healthcheck-${Date.now()}.mp3`);
+          const started = Date.now();
+          const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed: 1 });
+          await client.generate("Test", testPath);
+          const info = await stat(testPath).catch(() => null);
+          void rm(testPath, { force: true }).catch(() => undefined);
+          if (!info?.isFile() || info.size === 0) {
+            sendJson(res, 200, { ok: false, message: "TTS chạy nhưng không tạo ra file audio." });
+            return;
+          }
+          sendJson(res, 200, { ok: true, message: `Tạo được ${info.size} bytes audio thật (${voice.label}) sau ${Date.now() - started}ms.` });
+          return;
+        }
+        if (target === "ffmpeg") {
+          try {
+            const version = await new Promise<string>((resolveVersion, rejectVersion) => {
+              const proc = spawn(FFMPEG_BIN, ["-version"]);
+              let out = "";
+              proc.stdout.on("data", (d) => (out += d.toString()));
+              proc.on("error", rejectVersion);
+              proc.on("close", (code) => (code === 0 ? resolveVersion(out) : rejectVersion(new Error(`exit ${code}`))));
+            });
+            const firstLine = version.split("\n")[0]?.trim() || "ffmpeg";
+            sendJson(res, 200, { ok: true, message: `${firstLine} (${FFMPEG_BIN})` });
+          } catch (error) {
+            sendJson(res, 200, { ok: false, message: `Không chạy được ffmpeg tại ${FFMPEG_BIN}: ${error instanceof Error ? error.message : String(error)}` });
+          }
+          return;
+        }
+        if (target === "storage") {
+          const testFile = resolve(STORAGE_DIR, `.write-test-${Date.now()}`);
+          await mkdir(STORAGE_DIR, { recursive: true });
+          await writeFile(testFile, "ok", "utf8");
+          await rm(testFile, { force: true });
+          sendJson(res, 200, { ok: true, message: `Ghi/xóa file thử thành công tại ${STORAGE_DIR}.` });
+          return;
+        }
+      } catch (error) {
+        sendJson(res, 200, { ok: false, message: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/projects") {
       const user = requireUser(req, res);
       if (!user) return;

@@ -1293,12 +1293,12 @@
         </section>
 
         <section class="page" id="ai-settings">
-          <div class="page-head"><div><h2>Cài đặt AI và API</h2><p class="muted">Quản lý model viết kịch bản, TTS, FFmpeg, lưu trữ và giới hạn xử lý.</p></div><button class="btn primary">Lưu cấu hình</button></div>
+          <div class="page-head"><div><h2>Cài đặt AI và API</h2><p class="muted">Trạng thái thật của các dịch vụ đang chạy phía server — không phải cấu hình giả.</p></div><button class="btn" id="refreshSettingsStatusButton">Làm mới trạng thái</button></div>
           <div class="grid dashboard-grid">
-            <div class="panel"><div class="panel-head"><h3>AI viết kịch bản</h3><span class="pill ok">Connected</span></div><div class="panel-body field-stack"><div><label>Nhà cung cấp</label><select><option>OpenAI</option><option>Google Gemini</option><option>Anthropic</option></select></div><div><label>Model</label><select><option>GPT-5</option><option>GPT-4.1</option></select></div><div><label>API key</label><input type="password" value="sk-••••••••••••" /></div><div><label>Creativity</label><input type="range" min="0" max="100" value="60" /></div></div></div>
-            <div class="panel"><div class="panel-head"><h3>Text-to-Speech</h3><span class="pill ok">Ready</span></div><div class="panel-body field-stack"><div><label>Nhà cung cấp</label><select><option>Edge TTS</option><option>OpenAI TTS</option><option>ElevenLabs</option></select></div><div><label>Giọng mặc định</label><select><option>Nam miền Bắc</option><option>Nữ miền Nam</option></select></div><div><label>Tốc độ mặc định</label><input type="range" min="50" max="150" value="100" /></div></div></div>
-            <div class="panel"><div class="panel-head"><h3>Render và lưu trữ</h3></div><div class="panel-body field-stack"><div><label>Đường dẫn FFmpeg</label><input value="ffmpeg" /></div><div><label>Thư mục output</label><input value="D:\AI_Video_Studio_Output" /></div><div><label>Chế độ lưu</label><select><option>Local server</option><option>Cloud storage</option><option>Tải trực tiếp về trình duyệt</option></select></div><div><label>Job song song</label><input type="number" value="2" min="1" max="10" /></div></div></div>
-            <div class="panel"><div class="panel-head"><h3>Kiểm tra kết nối</h3></div><div class="panel-body field-stack"><button class="btn">Test AI API</button><button class="btn">Test TTS</button><button class="btn">Test FFmpeg</button><button class="btn">Test quyền ghi thư mục</button><div class="empty" style="text-align:left;">AI API: OK<br/>TTS: OK<br/>FFmpeg: chưa kiểm tra<br/>Storage: có quyền ghi</div></div></div>
+            <div class="panel"><div class="panel-head"><h3>AI viết kịch bản</h3><span class="pill" id="statusAiPill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny">Provider: Google Gemini (env GEMINI_API_KEY)</p><p class="tiny" id="statusAiModel">Model: -</p><p class="tiny">Đổi provider/API key thật ở file .env.local trên server, không lưu qua web vì lý do bảo mật.</p></div></div>
+            <div class="panel"><div class="panel-head"><h3>Text-to-Speech</h3><span class="pill" id="statusTtsPill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny">Provider: Microsoft Edge TTS</p><p class="tiny" id="statusTtsVoices">Giọng sẵn sàng: -</p><p class="tiny" id="statusTtsMode">Mode: -</p></div></div>
+            <div class="panel"><div class="panel-head"><h3>Render và lưu trữ</h3><span class="pill" id="statusStoragePill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny" id="statusFfmpegPath">FFmpeg: -</p><p class="tiny" id="statusR2">Cloud storage (R2): -</p><p class="tiny" id="statusDb">Postgres mirror: -</p></div></div>
+            <div class="panel"><div class="panel-head"><h3>Kiểm tra kết nối thật</h3></div><div class="panel-body field-stack"><button class="btn" id="testAiButton">Test AI API</button><button class="btn" id="testTtsButton">Test TTS</button><button class="btn" id="testFfmpegButton">Test FFmpeg</button><button class="btn" id="testStorageButton">Test quyền ghi thư mục</button><div class="empty" id="connectionTestResults" style="text-align:left;">Bấm 1 nút để chạy kiểm tra thật (gọi API/tạo file thử) và xem kết quả.</div></div></div>
           </div>
         </section>
 
@@ -1504,6 +1504,7 @@
         if (page === "jobs" || page === "outputs") loadJobs().catch(showError);
         if (page === "history") loadHistory().catch(showError);
         if (page === "account") renderAccountInfo();
+        if (page === "ai-settings") loadSettingsStatus().catch(showError);
       }
 
       async function api(url, options) {
@@ -2642,6 +2643,46 @@
         body.innerHTML = items.map((item, index) => `
           <div class="history-row"><div class="history-dot">${index + 1}</div><div><strong>${typeLabel[item.type] || item.type}: ${item.label}</strong><p class="tiny">${formatDateTime(item.at)} · ${item.detail || ""}</p></div></div>`).join("");
       }
+
+      async function loadSettingsStatus() {
+        const data = await api("/api/settings/status");
+        state.settingsStatus = data;
+        if ($("#statusAiPill")) {
+          $("#statusAiPill").textContent = data.geminiConfigured ? "Đã cấu hình" : "Chưa cấu hình";
+          $("#statusAiPill").className = `pill ${data.geminiConfigured ? "ok" : "warn"}`;
+        }
+        if ($("#statusAiModel")) $("#statusAiModel").textContent = `Model: ${data.geminiModel}`;
+        if ($("#statusTtsPill")) {
+          $("#statusTtsPill").textContent = data.readyVoices.length ? "Sẵn sàng" : "Chưa có giọng";
+          $("#statusTtsPill").className = `pill ${data.readyVoices.length ? "ok" : "warn"}`;
+        }
+        if ($("#statusTtsVoices")) $("#statusTtsVoices").textContent = `Giọng sẵn sàng: ${data.readyVoices.join(", ") || "không có"}`;
+        if ($("#statusTtsMode")) $("#statusTtsMode").textContent = `Mode: ${data.edgeTtsMode}${data.edgeTtsMode === "fallback-first" ? " (dùng gTTS chung, không phân biệt giọng)" : " (dùng đúng giọng đã chọn)"}`;
+        if ($("#statusStoragePill")) {
+          $("#statusStoragePill").textContent = "Local storage";
+          $("#statusStoragePill").className = "pill ok";
+        }
+        if ($("#statusFfmpegPath")) $("#statusFfmpegPath").textContent = `FFmpeg: ${data.ffmpegBin}`;
+        if ($("#statusR2")) $("#statusR2").textContent = `Cloud storage (R2): ${data.r2Configured ? "Đã bật" : "Chưa cấu hình, đang dùng disk local"}`;
+        if ($("#statusDb")) $("#statusDb").textContent = `Postgres mirror: ${data.databaseConfigured ? "Đã bật" : "Chưa cấu hình, chỉ dùng SQLite local"}`;
+      }
+
+      async function runConnectionTest(target, label) {
+        const box = $("#connectionTestResults");
+        if (!box) return;
+        box.innerHTML = `Đang chạy test ${label} thật...`;
+        try {
+          const data = await api(`/api/settings/test/${target}`, { method: "POST" });
+          box.innerHTML = `<strong>${label}: ${data.ok ? "OK" : "Lỗi"}</strong><br/>${data.message}`;
+        } catch (error) {
+          box.innerHTML = `<strong>${label}: Lỗi</strong><br/>${error?.error || error?.message || "Không rõ lỗi"}`;
+        }
+      }
+      $("#testAiButton")?.addEventListener("click", () => runConnectionTest("ai", "AI API (Gemini)"));
+      $("#testTtsButton")?.addEventListener("click", () => runConnectionTest("tts", "TTS (Edge TTS)"));
+      $("#testFfmpegButton")?.addEventListener("click", () => runConnectionTest("ffmpeg", "FFmpeg"));
+      $("#testStorageButton")?.addEventListener("click", () => runConnectionTest("storage", "Quyền ghi thư mục"));
+      $("#refreshSettingsStatusButton")?.addEventListener("click", () => loadSettingsStatus().catch(showError));
 
       function renderAccountInfo() {
         if ($("#accountEmail")) $("#accountEmail").value = state.user?.email || "";
