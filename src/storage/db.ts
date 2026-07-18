@@ -328,6 +328,31 @@ async function initPostgresMirror() {
       updated_at TEXT NOT NULL
     );
 
+  `);
+
+  await pgPool.query(`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device';
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_id TEXT NOT NULL DEFAULT 'vi-VN-HoaiMyNeural';
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_name TEXT NOT NULL DEFAULT 'Hoai My';
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_speed DOUBLE PRECISION NOT NULL DEFAULT 1;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS output_path TEXT;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS error_message TEXT;
+
+    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'dark';
+    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1;
+    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server';
+    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS save_root TEXT;
+
+    ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS script_path TEXT;
+    ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS video_path TEXT;
+    ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT;
+
+    ALTER TABLE assets ADD COLUMN IF NOT EXISTS duration DOUBLE PRECISION;
+
+    ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_asset_id TEXT;
+    ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION;
+    ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION;
+
     CREATE INDEX IF NOT EXISTS idx_projects_owner_email ON projects(owner_email);
     CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id);
     CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id);
