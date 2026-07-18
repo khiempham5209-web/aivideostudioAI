@@ -1800,18 +1800,93 @@
         toast("Chọn file MP3/voice từ máy. Upload xong file sẽ hiện ở Voice/Audio Track.");
       }
 
+      function activeClipsAtTime(trackType, time) {
+        const track = (state.timelineTracks || []).find((t) => t.track_type === trackType);
+        if (!track || track.muted) return [];
+        return (state.timelineClips || []).filter((c) => c.track_id === track.id && time >= c.start_time && time < c.start_time + c.duration);
+      }
+
       function renderEditorPreview() {
         const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
         if (!frame) return;
-        const video = projectVideoAssets()[0];
-        if ($("#editorPreviewStatus")) $("#editorPreviewStatus").textContent = video ? video.file_name : "Chưa có video";
-        if (video?.file_path) {
-          frame.innerHTML = `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${fileUrl(video.file_path)}" /></video>`;
-          attachMediaErrorHandlers(frame);
+        if (!(state.timelineTracks || []).length) {
+          const video = projectVideoAssets()[0];
+          if ($("#editorPreviewStatus")) $("#editorPreviewStatus").textContent = video ? video.file_name : "Chưa có video";
+          if (video?.file_path) {
+            frame.innerHTML = `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${fileUrl(video.file_path)}" /></video>`;
+            attachMediaErrorHandlers(frame);
+            return;
+          }
+          frame.innerHTML = `<div style="position:relative;z-index:1;text-align:center;display:grid;gap:10px;place-items:center;"><button class="btn primary" id="editorInlineAddVideoButton" type="button">+ Add video MP4</button><p class="tiny">Chưa có MP4 trong project. Upload từ máy hoặc mở Thư viện Media.</p></div>`;
+          $("#editorInlineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
           return;
         }
-        frame.innerHTML = `<div style="position:relative;z-index:1;text-align:center;display:grid;gap:10px;place-items:center;"><button class="btn primary" id="editorInlineAddVideoButton" type="button">+ Add video MP4</button><p class="tiny">Chưa có MP4 trong project. Upload từ máy hoặc mở Thư viện Media.</p></div>`;
+        renderProgramPreviewAtPlayhead();
+      }
+
+      function renderProgramPreviewAtPlayhead() {
+        const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
+        if (!frame) return;
+        const t = state.timelinePlayhead || 0;
+        const videoClip = activeClipsAtTime("video", t)[0];
+        const overlayClips = activeClipsAtTime("overlay", t);
+        const textClips = activeClipsAtTime("text", t);
+        const subtitleClip = activeClipsAtTime("subtitle", t)[0];
+        let mediaHtml = `<div style="position:relative;z-index:1;text-align:center;display:grid;gap:10px;place-items:center;"><button class="btn primary" id="editorInlineAddVideoButton" type="button">+ Add video MP4</button><p class="tiny">Không có clip video tại thời điểm này (${formatTimecode(t)}).</p></div>`;
+        if (videoClip?.source_asset_id) {
+          const asset = state.assets.find((a) => a.id === videoClip.source_asset_id);
+          if (asset) {
+            const seekTime = Math.max(0, t - videoClip.start_time + videoClip.trim_in);
+            const transform = `translate(${Number(videoClip.pos_x || 0)}px, ${Number(videoClip.pos_y || 0)}px) scale(${Number(videoClip.scale || 100) / 100}) rotate(${Number(videoClip.rotation || 0)}deg)`;
+            mediaHtml = `<video id="programPreviewVideo" playsinline muted style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;opacity:${Number(videoClip.opacity || 100) / 100};transform:${transform};" data-seek="${seekTime}"><source src="${fileUrl(asset.file_path)}" /></video>`;
+          }
+        }
+        const overlayHtml = overlayClips.map((c) => {
+          const asset = c.source_asset_id ? state.assets.find((a) => a.id === c.source_asset_id) : null;
+          if (!asset) return "";
+          return `<img src="${fileUrl(asset.file_path)}" style="position:absolute;z-index:2;inset:0;width:100%;height:100%;object-fit:contain;opacity:${Number(c.opacity || 100) / 100};pointer-events:none;" />`;
+        }).join("");
+        const textHtml = textClips.map((c) => `<div style="position:absolute;z-index:3;top:${50 + Number(c.pos_y || 0)}%;left:${50 + Number(c.pos_x || 0)}%;transform:translate(-50%,-50%) rotate(${Number(c.rotation || 0)}deg);color:#fff;font-weight:700;font-size:18px;text-shadow:0 2px 8px rgba(0,0,0,.6);opacity:${Number(c.opacity || 100) / 100};">${c.text_content || c.label}</div>`).join("");
+        const subtitleHtml = subtitleClip ? `<div style="position:absolute;z-index:3;bottom:16px;left:50%;transform:translateX(-50%);max-width:88%;background:rgba(0,0,0,.55);color:#fff;padding:6px 14px;border-radius:8px;text-align:center;font-size:14px;">${subtitleClip.text_content || subtitleClip.label}</div>` : "";
+        frame.innerHTML = mediaHtml + overlayHtml + textHtml + subtitleHtml;
         $("#editorInlineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
+        const videoEl = $("#programPreviewVideo");
+        if (videoEl) {
+          videoEl.addEventListener("loadedmetadata", () => { videoEl.currentTime = Number(videoEl.dataset.seek || 0); }, { once: true });
+          attachMediaErrorHandlers(frame);
+        }
+        if ($("#editorPreviewStatus")) $("#editorPreviewStatus").textContent = videoClip ? videoClip.label : "Chưa có video";
+      }
+
+      function syncPlayheadUi() {
+        const pxPerSec = timelinePxPerSecond();
+        const ph = $("#timelinePlayheadV3");
+        if (ph) ph.style.left = `${180 + (state.timelinePlayhead || 0) * pxPerSec}px`;
+        if ($("#timelinePlayheadLabel")) $("#timelinePlayheadLabel").textContent = `${formatTimecode(state.timelinePlayhead || 0)} / ${formatTimecode(timelineDuration())}`;
+      }
+
+      let previewPlayRaf = 0;
+      function stopPreviewPlayback() {
+        if (previewPlayRaf) cancelAnimationFrame(previewPlayRaf);
+        previewPlayRaf = 0;
+        if ($("#previewPlayButton")) $("#previewPlayButton").textContent = "▶";
+      }
+      function startPreviewPlayback() {
+        if (!(state.timelineTracks || []).length) return toast("Chưa có timeline để phát.");
+        const duration = timelineDuration();
+        if ($("#previewPlayButton")) $("#previewPlayButton").textContent = "⏸";
+        let last = performance.now();
+        function tick(now) {
+          const dt = (now - last) / 1000;
+          last = now;
+          state.timelinePlayhead = Math.min(duration, (state.timelinePlayhead || 0) + dt);
+          if ($("#timelinePlayheadSlider")) $("#timelinePlayheadSlider").value = String(state.timelinePlayhead);
+          syncPlayheadUi();
+          renderProgramPreviewAtPlayhead();
+          if (state.timelinePlayhead >= duration) { stopPreviewPlayback(); return; }
+          previewPlayRaf = requestAnimationFrame(tick);
+        }
+        previewPlayRaf = requestAnimationFrame(tick);
       }
 
       function timelinePxPerSecond() {
@@ -2176,6 +2251,7 @@
           ${tracks.map(trackRow).join("")}
         `;
         if ($("#timelinePlayheadSlider")) $("#timelinePlayheadSlider").max = String(Math.ceil(duration));
+        syncPlayheadUi();
         root.querySelectorAll(".clip-v3").forEach((el) => {
           el.addEventListener("mousedown", (event) => {
             if (event.target.classList.contains("clip-resize-handle")) return;
@@ -3068,11 +3144,14 @@
         $(`#${inputId}`)?.addEventListener("input", (event) => { const el = $(`#${labelId}`); if (el) el.textContent = event.target.value; });
       });
       $("#timelinePlayheadSlider")?.addEventListener("input", (event) => {
+        stopPreviewPlayback();
         state.timelinePlayhead = Number(event.target.value);
-        const pxPerSec = timelinePxPerSecond();
-        const ph = $("#timelinePlayheadV3");
-        if (ph) ph.style.left = `${180 + state.timelinePlayhead * pxPerSec}px`;
-        if ($("#timelinePlayheadLabel")) $("#timelinePlayheadLabel").textContent = `${formatTimecode(state.timelinePlayhead)} / ${formatTimecode(timelineDuration())}`;
+        syncPlayheadUi();
+        renderProgramPreviewAtPlayhead();
+      });
+      $("#previewPlayButton")?.addEventListener("click", () => {
+        if (previewPlayRaf) stopPreviewPlayback();
+        else startPreviewPlayback();
       });
       $$("#templates .btn").forEach((button) => button.addEventListener("click", () => { if (button.textContent.includes("Dùng mẫu")) { toast("Đã áp dụng template vào dự án đang chọn."); switchPage("create"); } }));
 
