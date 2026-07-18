@@ -108,6 +108,57 @@ export interface SceneRecord {
   updated_at: string;
 }
 
+export type TimelineTrackType = "video" | "overlay" | "text" | "subtitle" | "voice" | "music" | "sfx" | "transition" | "effect" | "marker";
+
+export interface TimelineTrackRecord {
+  id: string;
+  project_id: string;
+  track_type: TimelineTrackType;
+  label: string;
+  track_order: number;
+  muted: number;
+  locked: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimelineClipRecord {
+  id: string;
+  track_id: string;
+  project_id: string;
+  scene_id: string | null;
+  source_asset_id: string | null;
+  label: string;
+  text_content: string | null;
+  start_time: number;
+  duration: number;
+  trim_in: number;
+  trim_out: number;
+  pos_x: number;
+  pos_y: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+  volume: number;
+  speed: number;
+  animation: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const DEFAULT_TIMELINE_TRACKS: Array<{ type: TimelineTrackType; label: string }> = [
+  { type: "video", label: "Video 1" },
+  { type: "overlay", label: "Video 2 / Overlay" },
+  { type: "text", label: "Text" },
+  { type: "subtitle", label: "Subtitle" },
+  { type: "voice", label: "Voice" },
+  { type: "music", label: "Music" },
+  { type: "sfx", label: "SFX" },
+  { type: "transition", label: "Transition" },
+  { type: "effect", label: "Color / Effect" },
+  { type: "marker", label: "AI Marker" },
+];
+
 const DB_PATH = resolve("data", "app.db");
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
@@ -208,6 +259,45 @@ db.exec(`
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
   );
+
+  CREATE TABLE IF NOT EXISTS timeline_tracks (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    track_type TEXT NOT NULL,
+    label TEXT NOT NULL,
+    track_order INTEGER NOT NULL,
+    muted INTEGER NOT NULL DEFAULT 0,
+    locked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS timeline_clips (
+    id TEXT PRIMARY KEY,
+    track_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    scene_id TEXT,
+    source_asset_id TEXT,
+    label TEXT NOT NULL,
+    text_content TEXT,
+    start_time REAL NOT NULL,
+    duration REAL NOT NULL,
+    trim_in REAL NOT NULL DEFAULT 0,
+    trim_out REAL NOT NULL DEFAULT 0,
+    pos_x REAL NOT NULL DEFAULT 0,
+    pos_y REAL NOT NULL DEFAULT 0,
+    scale REAL NOT NULL DEFAULT 100,
+    rotation REAL NOT NULL DEFAULT 0,
+    opacity REAL NOT NULL DEFAULT 100,
+    volume REAL NOT NULL DEFAULT 100,
+    speed REAL NOT NULL DEFAULT 1,
+    animation TEXT NOT NULL DEFAULT 'none',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(track_id) REFERENCES timeline_tracks(id),
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+  );
 `);
 
 for (const statement of [
@@ -223,6 +313,12 @@ for (const statement of [
     // Column already exists on upgraded databases.
   }
 }
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_timeline_tracks_project_id_order ON timeline_tracks(project_id, track_order);
+  CREATE INDEX IF NOT EXISTS idx_timeline_clips_track_id ON timeline_clips(track_id);
+  CREATE INDEX IF NOT EXISTS idx_timeline_clips_project_id ON timeline_clips(project_id);
+`);
 
 type DbRow = Record<string, string | number | null>;
 
@@ -328,6 +424,42 @@ async function initPostgresMirror() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS timeline_tracks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      track_type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      track_order INTEGER NOT NULL,
+      muted INTEGER NOT NULL DEFAULT 0,
+      locked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS timeline_clips (
+      id TEXT PRIMARY KEY,
+      track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      scene_id TEXT,
+      source_asset_id TEXT,
+      label TEXT NOT NULL,
+      text_content TEXT,
+      start_time DOUBLE PRECISION NOT NULL,
+      duration DOUBLE PRECISION NOT NULL,
+      trim_in DOUBLE PRECISION NOT NULL DEFAULT 0,
+      trim_out DOUBLE PRECISION NOT NULL DEFAULT 0,
+      pos_x DOUBLE PRECISION NOT NULL DEFAULT 0,
+      pos_y DOUBLE PRECISION NOT NULL DEFAULT 0,
+      scale DOUBLE PRECISION NOT NULL DEFAULT 100,
+      rotation DOUBLE PRECISION NOT NULL DEFAULT 0,
+      opacity DOUBLE PRECISION NOT NULL DEFAULT 100,
+      volume DOUBLE PRECISION NOT NULL DEFAULT 100,
+      speed DOUBLE PRECISION NOT NULL DEFAULT 1,
+      animation TEXT NOT NULL DEFAULT 'none',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
   `);
 
   await pgPool.query(`
@@ -357,6 +489,9 @@ async function initPostgresMirror() {
     CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id);
     CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id);
     CREATE INDEX IF NOT EXISTS idx_scenes_project_id_order ON scenes(project_id, scene_order);
+    CREATE INDEX IF NOT EXISTS idx_timeline_tracks_project_id_order ON timeline_tracks(project_id, track_order);
+    CREATE INDEX IF NOT EXISTS idx_timeline_clips_track_id ON timeline_clips(track_id);
+    CREATE INDEX IF NOT EXISTS idx_timeline_clips_project_id ON timeline_clips(project_id);
   `);
 }
 
@@ -384,12 +519,14 @@ function mirrorUpsert(table: string, row: DbRow, conflictKey: string) {
 async function loadPostgresIntoSqlite() {
   if (!pgPool) return;
   await initPostgresMirror();
-  const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "sessions"] as const;
+  const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "timeline_tracks", "timeline_clips", "sessions"] as const;
   const rows = Object.fromEntries(await Promise.all(tables.map(async (table) => [table, (await pgPool.query(`SELECT * FROM ${table}`)).rows]))) as Record<
     (typeof tables)[number],
     DbRow[]
   >;
-  db.exec("DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM projects; DELETE FROM users;");
+  db.exec(
+    "DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM timeline_clips; DELETE FROM timeline_tracks; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM projects; DELETE FROM users;",
+  );
   const insertRows = (table: string, items: DbRow[]) => {
     for (const row of items) {
       const cols = Object.keys(row);
@@ -403,6 +540,8 @@ async function loadPostgresIntoSqlite() {
   insertRows("render_jobs", rows.render_jobs);
   insertRows("assets", rows.assets);
   insertRows("scenes", rows.scenes);
+  insertRows("timeline_tracks", rows.timeline_tracks);
+  insertRows("timeline_clips", rows.timeline_clips);
   insertRows("sessions", rows.sessions);
   console.log(`Postgres metadata mirror enabled (${rows.projects.length} projects loaded).`);
 }
@@ -579,6 +718,7 @@ export function deleteAsset(assetId: string): AssetRecord | undefined {
   db.prepare("UPDATE scenes SET source_asset_id = NULL WHERE source_asset_id = ?").run(assetId);
   void pgExec("DELETE FROM assets WHERE id = $1", [assetId]);
   void pgExec("UPDATE scenes SET source_asset_id = NULL WHERE source_asset_id = $1", [assetId]);
+  deleteClipsForAsset(assetId);
   return asset;
 }
 
@@ -728,6 +868,211 @@ export function moveScene(sceneId: string, direction: "up" | "down"): SceneRecor
   if (currentUpdated) mirrorUpsert("scenes", currentUpdated as unknown as DbRow, "id");
   if (targetUpdated) mirrorUpsert("scenes", targetUpdated as unknown as DbRow, "id");
   return currentUpdated;
+}
+
+function insertTrack(projectId: string, order: number, type: TimelineTrackType, label: string): TimelineTrackRecord {
+  const created = nowIso();
+  const row: TimelineTrackRecord = {
+    id: id("track"),
+    project_id: projectId,
+    track_type: type,
+    label,
+    track_order: order,
+    muted: 0,
+    locked: 0,
+    created_at: created,
+    updated_at: created,
+  };
+  db.prepare(`
+    INSERT INTO timeline_tracks
+    (id, project_id, track_type, label, track_order, muted, locked, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(row.id, row.project_id, row.track_type, row.label, row.track_order, row.muted, row.locked, row.created_at, row.updated_at);
+  mirrorUpsert("timeline_tracks", row as unknown as DbRow, "id");
+  return row;
+}
+
+export function ensureDefaultTracks(projectId: string): TimelineTrackRecord[] {
+  const existing = db.prepare("SELECT * FROM timeline_tracks WHERE project_id = ? ORDER BY track_order ASC").all(projectId) as TimelineTrackRecord[];
+  if (existing.length > 0) return existing;
+  return DEFAULT_TIMELINE_TRACKS.map((track, index) => insertTrack(projectId, index, track.type, track.label));
+}
+
+export function listTracks(projectId: string): TimelineTrackRecord[] {
+  return ensureDefaultTracks(projectId);
+}
+
+export function getTrack(trackId: string): TimelineTrackRecord | undefined {
+  return db.prepare("SELECT * FROM timeline_tracks WHERE id = ?").get(trackId) as TimelineTrackRecord | undefined;
+}
+
+export function addTrack(projectId: string, type: TimelineTrackType, label: string): TimelineTrackRecord {
+  const orderRow = db.prepare("SELECT COALESCE(MAX(track_order), -1) + 1 AS next_order FROM timeline_tracks WHERE project_id = ?").get(projectId) as { next_order: number };
+  return insertTrack(projectId, orderRow.next_order, type, label);
+}
+
+export function updateTrack(trackId: string, data: Partial<Pick<TimelineTrackRecord, "label" | "muted" | "locked">>): TimelineTrackRecord | undefined {
+  const current = getTrack(trackId);
+  if (!current) return undefined;
+  db.prepare(`
+    UPDATE timeline_tracks
+    SET label = ?, muted = ?, locked = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    data.label ?? current.label,
+    data.muted ?? current.muted,
+    data.locked ?? current.locked,
+    nowIso(),
+    trackId,
+  );
+  const updated = getTrack(trackId);
+  if (updated) mirrorUpsert("timeline_tracks", updated as unknown as DbRow, "id");
+  return updated;
+}
+
+export function deleteTrack(trackId: string): TimelineTrackRecord | undefined {
+  const current = getTrack(trackId);
+  if (!current) return undefined;
+  db.prepare("DELETE FROM timeline_clips WHERE track_id = ?").run(trackId);
+  db.prepare("DELETE FROM timeline_tracks WHERE id = ?").run(trackId);
+  void pgExec("DELETE FROM timeline_clips WHERE track_id = $1", [trackId]);
+  void pgExec("DELETE FROM timeline_tracks WHERE id = $1", [trackId]);
+  return current;
+}
+
+export function listClips(projectId: string): TimelineClipRecord[] {
+  return db.prepare("SELECT * FROM timeline_clips WHERE project_id = ? ORDER BY start_time ASC").all(projectId) as TimelineClipRecord[];
+}
+
+export function getClip(clipId: string): TimelineClipRecord | undefined {
+  return db.prepare("SELECT * FROM timeline_clips WHERE id = ?").get(clipId) as TimelineClipRecord | undefined;
+}
+
+export function createClip(data: {
+  projectId: string;
+  trackId: string;
+  sceneId?: string | null;
+  sourceAssetId?: string | null;
+  label: string;
+  textContent?: string | null;
+  startTime: number;
+  duration: number;
+  trimIn?: number;
+  trimOut?: number;
+}): TimelineClipRecord {
+  const created = nowIso();
+  const row: TimelineClipRecord = {
+    id: id("clip"),
+    track_id: data.trackId,
+    project_id: data.projectId,
+    scene_id: data.sceneId ?? null,
+    source_asset_id: data.sourceAssetId ?? null,
+    label: data.label,
+    text_content: data.textContent ?? null,
+    start_time: data.startTime,
+    duration: data.duration,
+    trim_in: data.trimIn ?? 0,
+    trim_out: data.trimOut ?? 0,
+    pos_x: 0,
+    pos_y: 0,
+    scale: 100,
+    rotation: 0,
+    opacity: 100,
+    volume: 100,
+    speed: 1,
+    animation: "none",
+    created_at: created,
+    updated_at: created,
+  };
+  db.prepare(`
+    INSERT INTO timeline_clips
+    (id, track_id, project_id, scene_id, source_asset_id, label, text_content, start_time, duration, trim_in, trim_out,
+     pos_x, pos_y, scale, rotation, opacity, volume, speed, animation, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.id, row.track_id, row.project_id, row.scene_id, row.source_asset_id, row.label, row.text_content,
+    row.start_time, row.duration, row.trim_in, row.trim_out,
+    row.pos_x, row.pos_y, row.scale, row.rotation, row.opacity, row.volume, row.speed, row.animation,
+    row.created_at, row.updated_at,
+  );
+  mirrorUpsert("timeline_clips", row as unknown as DbRow, "id");
+  return row;
+}
+
+export function updateClip(
+  clipId: string,
+  data: Partial<
+    Pick<
+      TimelineClipRecord,
+      | "track_id"
+      | "label"
+      | "text_content"
+      | "start_time"
+      | "duration"
+      | "trim_in"
+      | "trim_out"
+      | "pos_x"
+      | "pos_y"
+      | "scale"
+      | "rotation"
+      | "opacity"
+      | "volume"
+      | "speed"
+      | "animation"
+      | "source_asset_id"
+    >
+  >,
+): TimelineClipRecord | undefined {
+  const current = getClip(clipId);
+  if (!current) return undefined;
+  const definedData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+  const next: TimelineClipRecord = { ...current, ...definedData, updated_at: nowIso() };
+  db.prepare(`
+    UPDATE timeline_clips
+    SET track_id = ?, label = ?, text_content = ?, source_asset_id = ?, start_time = ?, duration = ?, trim_in = ?, trim_out = ?,
+        pos_x = ?, pos_y = ?, scale = ?, rotation = ?, opacity = ?, volume = ?, speed = ?, animation = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    next.track_id, next.label, next.text_content, next.source_asset_id, next.start_time, next.duration, next.trim_in, next.trim_out,
+    next.pos_x, next.pos_y, next.scale, next.rotation, next.opacity, next.volume, next.speed, next.animation, next.updated_at,
+    clipId,
+  );
+  mirrorUpsert("timeline_clips", next as unknown as DbRow, "id");
+  return next;
+}
+
+export function splitClip(clipId: string, atTime: number): { left: TimelineClipRecord; right: TimelineClipRecord } | undefined {
+  const current = getClip(clipId);
+  if (!current) return undefined;
+  const offset = atTime - current.start_time;
+  if (offset <= 0 || offset >= current.duration) return undefined;
+  const left = updateClip(clipId, { duration: offset, trim_out: current.trim_out + (current.duration - offset) })!;
+  const right = createClip({
+    projectId: current.project_id,
+    trackId: current.track_id,
+    sceneId: current.scene_id,
+    sourceAssetId: current.source_asset_id,
+    label: current.label,
+    textContent: current.text_content,
+    startTime: atTime,
+    duration: current.duration - offset,
+    trimIn: current.trim_in + offset,
+    trimOut: current.trim_out,
+  });
+  return { left, right };
+}
+
+export function deleteClip(clipId: string): TimelineClipRecord | undefined {
+  const current = getClip(clipId);
+  if (!current) return undefined;
+  db.prepare("DELETE FROM timeline_clips WHERE id = ?").run(clipId);
+  void pgExec("DELETE FROM timeline_clips WHERE id = $1", [clipId]);
+  return current;
+}
+
+export function deleteClipsForAsset(assetId: string) {
+  db.prepare("DELETE FROM timeline_clips WHERE source_asset_id = ?").run(assetId);
+  void pgExec("DELETE FROM timeline_clips WHERE source_asset_id = $1", [assetId]);
 }
 
 export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "output_path" | "error_message">>) {

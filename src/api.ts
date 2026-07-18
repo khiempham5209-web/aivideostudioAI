@@ -15,15 +15,21 @@ import {
   createProject,
   createSession,
   addProjectScene,
+  addTrack,
   createAsset,
+  createClip,
   createRenderJob,
+  deleteClip,
   deleteSession,
   deleteAsset,
   deleteScene,
+  deleteTrack,
   getAsset,
   getUserSettings,
   getSession,
+  getClip,
   getScene,
+  getTrack,
   getLatestJobForProject,
   getProject,
   getStats,
@@ -31,16 +37,22 @@ import {
   getRenderJob,
   isUserFile,
   listUserStoragePaths,
+  listClips,
   listProjects,
   listAssets,
   listScenes,
+  listTracks,
   moveScene,
   replaceProjectScenes,
+  splitClip,
+  updateClip,
   updateScene,
   updateProject,
   updateRenderJob,
+  updateTrack,
   updateUserSettings,
   upsertUser,
+  type TimelineTrackType,
 } from "./storage/db.js";
 
 dotenv.config({ path: ".env.local" });
@@ -1577,6 +1589,215 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       }
       const deleted = deleteScene(sceneMatch[1]);
       sendJson(res, 200, { ok: true, scene: deleted });
+      return;
+    }
+
+    const timelineMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/timeline$/);
+    if (req.method === "GET" && timelineMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, timelineMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      sendJson(res, 200, { tracks: listTracks(project.id), clips: listClips(project.id) });
+      return;
+    }
+
+    const timelineTracksMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/timeline\/tracks$/);
+    if (req.method === "POST" && timelineTracksMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, timelineTracksMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const type = (body as { type?: string }).type;
+      const label = (body as { label?: string }).label?.trim();
+      const validTypes: TimelineTrackType[] = ["video", "overlay", "text", "subtitle", "voice", "music", "sfx", "transition", "effect", "marker"];
+      if (!type || !validTypes.includes(type as TimelineTrackType) || !label) {
+        sendJson(res, 400, { error: "Missing or invalid type/label" });
+        return;
+      }
+      const track = addTrack(project.id, type as TimelineTrackType, label);
+      sendJson(res, 201, { ok: true, track });
+      return;
+    }
+
+    const timelineTrackMatch = url.pathname.match(/^\/api\/timeline-tracks\/([^/]+)$/);
+    if (req.method === "PUT" && timelineTrackMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const track = getTrack(timelineTrackMatch[1]);
+      if (!track) {
+        sendJson(res, 404, { error: "Track not found" });
+        return;
+      }
+      const project = getUserProject(user.email, track.project_id);
+      if (!project) {
+        sendJson(res, 403, { error: "Track does not belong to the current user" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const updated = updateTrack(track.id, {
+        label: typeof (body as { label?: unknown }).label === "string" ? (body as { label: string }).label : undefined,
+        muted: typeof (body as { muted?: unknown }).muted === "boolean" ? ((body as { muted: boolean }).muted ? 1 : 0) : undefined,
+        locked: typeof (body as { locked?: unknown }).locked === "boolean" ? ((body as { locked: boolean }).locked ? 1 : 0) : undefined,
+      });
+      sendJson(res, 200, { ok: true, track: updated });
+      return;
+    }
+
+    if (req.method === "DELETE" && timelineTrackMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const track = getTrack(timelineTrackMatch[1]);
+      if (!track) {
+        sendJson(res, 404, { error: "Track not found" });
+        return;
+      }
+      const project = getUserProject(user.email, track.project_id);
+      if (!project) {
+        sendJson(res, 403, { error: "Track does not belong to the current user" });
+        return;
+      }
+      const deleted = deleteTrack(track.id);
+      sendJson(res, 200, { ok: true, track: deleted });
+      return;
+    }
+
+    const timelineClipsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/timeline\/clips$/);
+    if (req.method === "POST" && timelineClipsMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, timelineClipsMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const body = await readJsonBody(req) as Record<string, unknown>;
+      const trackId = typeof body.trackId === "string" ? body.trackId : undefined;
+      const label = typeof body.label === "string" ? body.label : undefined;
+      const startTime = typeof body.startTime === "number" ? body.startTime : undefined;
+      const duration = typeof body.duration === "number" ? body.duration : undefined;
+      if (!trackId || !label || startTime === undefined || duration === undefined) {
+        sendJson(res, 400, { error: "Missing trackId/label/startTime/duration" });
+        return;
+      }
+      const track = getTrack(trackId);
+      if (!track || track.project_id !== project.id) {
+        sendJson(res, 404, { error: "Track not found" });
+        return;
+      }
+      const clip = createClip({
+        projectId: project.id,
+        trackId,
+        sceneId: typeof body.sceneId === "string" ? body.sceneId : undefined,
+        sourceAssetId: typeof body.sourceAssetId === "string" ? body.sourceAssetId : undefined,
+        label,
+        textContent: typeof body.textContent === "string" ? body.textContent : undefined,
+        startTime,
+        duration,
+        trimIn: typeof body.trimIn === "number" ? body.trimIn : undefined,
+        trimOut: typeof body.trimOut === "number" ? body.trimOut : undefined,
+      });
+      sendJson(res, 201, { ok: true, clip });
+      return;
+    }
+
+    const timelineClipMatch = url.pathname.match(/^\/api\/timeline-clips\/([^/]+)$/);
+    if (req.method === "PUT" && timelineClipMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const clip = getClip(timelineClipMatch[1]);
+      if (!clip) {
+        sendJson(res, 404, { error: "Clip not found" });
+        return;
+      }
+      const project = getUserProject(user.email, clip.project_id);
+      if (!project) {
+        sendJson(res, 403, { error: "Clip does not belong to the current user" });
+        return;
+      }
+      const body = await readJsonBody(req) as Record<string, unknown>;
+      if (typeof body.trackId === "string") {
+        const targetTrack = getTrack(body.trackId);
+        if (!targetTrack || targetTrack.project_id !== project.id) {
+          sendJson(res, 400, { error: "Invalid trackId" });
+          return;
+        }
+      }
+      const numberField = (key: string) => (typeof body[key] === "number" ? (body[key] as number) : undefined);
+      const stringField = (key: string) => (typeof body[key] === "string" ? (body[key] as string) : undefined);
+      const updated = updateClip(clip.id, {
+        track_id: stringField("trackId"),
+        label: stringField("label"),
+        text_content: stringField("textContent"),
+        source_asset_id: stringField("sourceAssetId"),
+        start_time: numberField("startTime"),
+        duration: numberField("duration"),
+        trim_in: numberField("trimIn"),
+        trim_out: numberField("trimOut"),
+        pos_x: numberField("posX"),
+        pos_y: numberField("posY"),
+        scale: numberField("scale"),
+        rotation: numberField("rotation"),
+        opacity: numberField("opacity"),
+        volume: numberField("volume"),
+        speed: numberField("speed"),
+        animation: stringField("animation"),
+      });
+      sendJson(res, 200, { ok: true, clip: updated });
+      return;
+    }
+
+    if (req.method === "DELETE" && timelineClipMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const clip = getClip(timelineClipMatch[1]);
+      if (!clip) {
+        sendJson(res, 404, { error: "Clip not found" });
+        return;
+      }
+      const project = getUserProject(user.email, clip.project_id);
+      if (!project) {
+        sendJson(res, 403, { error: "Clip does not belong to the current user" });
+        return;
+      }
+      const deleted = deleteClip(clip.id);
+      sendJson(res, 200, { ok: true, clip: deleted });
+      return;
+    }
+
+    const timelineClipSplitMatch = url.pathname.match(/^\/api\/timeline-clips\/([^/]+)\/split$/);
+    if (req.method === "POST" && timelineClipSplitMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const clip = getClip(timelineClipSplitMatch[1]);
+      if (!clip) {
+        sendJson(res, 404, { error: "Clip not found" });
+        return;
+      }
+      const project = getUserProject(user.email, clip.project_id);
+      if (!project) {
+        sendJson(res, 403, { error: "Clip does not belong to the current user" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const atTime = (body as { atTime?: unknown }).atTime;
+      if (typeof atTime !== "number") {
+        sendJson(res, 400, { error: "Missing atTime" });
+        return;
+      }
+      const result = splitClip(clip.id, atTime);
+      if (!result) {
+        sendJson(res, 400, { error: "Split point must be inside the clip" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, left: result.left, right: result.right });
       return;
     }
 
