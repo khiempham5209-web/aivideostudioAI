@@ -1279,21 +1279,16 @@
         </section>
 
         <section class="page" id="jobs">
-          <div class="page-head"><div><h2>Hàng đợi render</h2><p class="muted">Theo dõi toàn bộ job: voice, subtitle, ghép media, render và lỗi xử lý.</p></div><button class="btn">Làm mới</button></div>
-          <div class="panel"><div class="panel-head"><h3>Render jobs</h3><span class="pill warn">2 đang chạy</span></div><div class="panel-body">
-            <div class="job-row"><div><strong>Review Kung Fu Panda</strong><p class="tiny">Đang tạo subtitle và ghép scene</p></div><div class="bar"><span style="width:68%;"></span></div><span class="pill warn">68%</span><button class="btn">Hủy</button></div>
-            <div class="job-row"><div><strong>Top 5 công nghệ</strong><p class="tiny">Đang chờ GPU render</p></div><div class="bar"><span style="width:18%;"></span></div><span class="pill">Queued</span><button class="btn">Ưu tiên</button></div>
-            <div class="job-row"><div><strong>Video bán hàng Elmich</strong><p class="tiny">Hoàn thành lúc 09:32</p></div><div class="bar"><span style="width:100%;"></span></div><span class="pill ok">Done</span><button class="btn">Mở</button></div>
-            <div class="job-row"><div><strong>Tin tức AI hôm nay</strong><p class="tiny">FFmpeg lỗi codec đầu vào</p></div><div class="bar"><span style="width:41%;"></span></div><span class="pill" style="color:#fecdd3;">Failed</span><button class="btn">Chạy lại</button></div>
+          <div class="page-head"><div><h2>Hàng đợi render</h2><p class="muted">Theo dõi toàn bộ job: voice, subtitle, ghép media, render và lỗi xử lý.</p></div><button class="btn" id="refreshJobsButton">Làm mới</button></div>
+          <div class="panel"><div class="panel-head"><h3>Render jobs</h3><span class="pill warn" id="jobsRunningPill">0 đang chạy</span></div><div class="panel-body" id="jobsListBody">
+            <div class="empty">Chưa có job nào.</div>
           </div></div>
         </section>
 
         <section class="page" id="outputs">
-          <div class="page-head"><div><h2>Video đã xuất</h2><p class="muted">Kho kết quả: xem, tải xuống, xuất lại, sao chép dự án hoặc xóa.</p></div><div class="top-actions"><input class="search" placeholder="Tìm video đã xuất..." /><button class="btn">Bộ lọc</button></div></div>
-          <div class="grid output-grid">
-            <div class="panel"><div class="project-thumb" style="--art:linear-gradient(135deg,#7c2d12,#1e1b4b);"><footer><strong>Review Kung Fu Panda</strong><p class="tiny">1080p · 86 MB · hôm nay</p></footer></div><div class="panel-body top-actions"><button class="btn primary">Xem</button><button class="btn">Tải</button><button class="btn">•••</button></div></div>
-            <div class="panel"><div class="project-thumb" style="--art:linear-gradient(135deg,#065f46,#111827);"><footer><strong>Video bán hàng Elmich</strong><p class="tiny">1080p · 54 MB · hôm qua</p></footer></div><div class="panel-body top-actions"><button class="btn primary">Xem</button><button class="btn">Tải</button><button class="btn">•••</button></div></div>
-            <div class="panel"><div class="project-thumb" style="--art:linear-gradient(135deg,#1d4ed8,#581c87);"><footer><strong>Top 5 công nghệ</strong><p class="tiny">720p · 32 MB · 16/07</p></footer></div><div class="panel-body top-actions"><button class="btn primary">Xem</button><button class="btn">Tải</button><button class="btn">•••</button></div></div>
+          <div class="page-head"><div><h2>Video đã xuất</h2><p class="muted">Kho kết quả: xem, tải xuống, xuất lại, sao chép dự án hoặc xóa.</p></div><div class="top-actions"><button class="btn" id="refreshOutputsButton">Làm mới</button></div></div>
+          <div class="grid output-grid" id="outputsGrid">
+            <div class="empty">Chưa có video nào xuất xong.</div>
           </div>
         </section>
 
@@ -1311,9 +1306,9 @@
 
         <section class="page" id="animations"><div class="page-head"><div><h2>Animation Library</h2><p class="muted">Animation cho text, ảnh, logo và video.</p></div><button class="btn primary" data-page="timeline">Áp dụng trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Text animation</h3></div><div class="panel-body field-stack"><button class="btn">Typewriter</button><button class="btn">Pop up</button><button class="btn">Slide up</button><button class="btn">Bounce</button><button class="btn">Karaoke highlight</button></div></div><div class="panel"><div class="panel-head"><h3>Image / Logo animation</h3></div><div class="panel-body field-stack"><button class="btn">Fade in</button><button class="btn">Zoom in</button><button class="btn">Pan left</button><button class="btn">Float</button><button class="btn">Pulse</button></div></div><div class="panel"><div class="panel-head"><h3>Video animation</h3></div><div class="panel-body field-stack"><button class="btn">Camera zoom</button><button class="btn">Shake</button><button class="btn">Speed ramp</button><button class="btn">Parallax</button><button class="btn">Ken Burns</button></div></div><div class="panel"><div class="panel-head"><h3>Cấu hình</h3></div><div class="panel-body field-stack"><div><label>Duration</label><input type="range" min="100" max="3000" value="600"></div><div><label>Easing</label><select><option>Ease out</option><option>Ease in</option><option>Linear</option><option>Bounce</option></select></div><button class="btn primary">Preview animation</button></div></div></div></section>
 
-        <section class="page" id="history"><div class="page-head"><div><h2>Lịch sử chỉnh sửa</h2><p class="muted">Theo dõi thao tác, hoàn tác và khôi phục phiên bản dự án.</p></div><div class="top-actions"><button class="btn">↶ Undo</button><button class="btn">↷ Redo</button><button class="btn primary">Tạo snapshot</button></div></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Hoạt động gần đây</h3></div><div class="panel-body"><div class="history-row"><div class="history-dot">1</div><div><strong>Thêm transition Fade Zoom</strong><p class="tiny">09:42 · Timeline</p></div><button class="btn">Khôi phục</button></div><div class="history-row"><div class="history-dot">2</div><div><strong>Chỉnh subtitle Scene 03</strong><p class="tiny">09:39 · Text</p></div><button class="btn">Khôi phục</button></div><div class="history-row"><div class="history-dot">3</div><div><strong>AI Auto Edit hoàn tất</strong><p class="tiny">09:35 · AI</p></div><button class="btn">Khôi phục</button></div><div class="history-row"><div class="history-dot">4</div><div><strong>Thêm nhạc Cinematic Rise</strong><p class="tiny">09:30 · Audio</p></div><button class="btn">Khôi phục</button></div></div></div><div class="panel"><div class="panel-head"><h3>Phiên bản đã lưu</h3></div><div class="panel-body field-stack"><div class="asset-row"><strong>V3 — Editor hoàn chỉnh</strong><p class="tiny">Hôm nay, 09:42 · hiện tại</p></div><div class="asset-row"><strong>V2 — Có voice và subtitle</strong><p class="tiny">Hôm nay, 09:10</p></div><div class="asset-row"><strong>V1 — Kịch bản ban đầu</strong><p class="tiny">Hôm qua, 22:18</p></div><button class="btn primary">Khôi phục phiên bản đã chọn</button></div></div></div></section>
+        <section class="page" id="history"><div class="page-head"><div><h2>Lịch sử dự án</h2><p class="muted">Theo dõi scene, media và job thay đổi trong dự án đang chọn.</p></div><button class="btn" id="refreshHistoryButton">Làm mới</button></div><div class="panel"><div class="panel-head"><h3>Hoạt động — <span id="historyProjectName">chưa chọn dự án</span></h3></div><div class="panel-body" id="historyListBody"><div class="empty">Hãy chọn 1 dự án để xem lịch sử.</div></div></div></section>
 
-        <section class="page" id="account"><div class="page-head"><div><h2>Tài khoản và gói</h2><p class="muted">Thông tin đăng nhập, credits, dung lượng và giới hạn xử lý.</p></div><button class="btn primary">Nâng cấp gói</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Hồ sơ</h3><span class="pill ok">Đã xác minh</span></div><div class="panel-body field-stack"><div><label>Email</label><input value="khiempham5209@gmail.com" disabled></div><div><label>Tên hiển thị</label><input value="Khiem Pham"></div><div><label>Ngôn ngữ</label><select><option>Tiếng Việt</option><option>English</option></select></div><button class="btn">Lưu hồ sơ</button></div></div><div class="panel"><div class="panel-head"><h3>Gói hiện tại</h3><span class="pill">Personal</span></div><div class="panel-body field-stack"><div class="card"><span class="muted">Credits AI</span><strong>1,240</strong><span class="trend">Làm mới theo chu kỳ</span></div><div><label>Dung lượng</label><div class="bar"><span style="width:36%;"></span></div><p class="tiny" style="margin-top:7px;">18 GB / 50 GB</p></div><div><label>Render song song</label><input value="2 jobs" disabled></div><button class="btn primary">Quản lý gói</button></div></div></div></section>
+        <section class="page" id="account"><div class="page-head"><div><h2>Tài khoản và gói</h2><p class="muted">Thông tin đăng nhập, credits, dung lượng và giới hạn xử lý.</p></div></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Hồ sơ</h3><span class="pill ok">Đã xác minh</span></div><div class="panel-body field-stack"><div><label>Email</label><input id="accountEmail" value="" disabled></div><div><label>Tên hiển thị</label><input id="accountName" value="" disabled></div><div><label>Ngôn ngữ</label><input id="accountLanguage" value="" disabled></div></div></div><div class="panel"><div class="panel-head"><h3>Dung lượng & thống kê</h3><span class="pill">Real-time</span></div><div class="panel-body field-stack"><div class="card"><span class="muted">Credits AI</span><strong id="accountCredits">0</strong><span class="trend">Chưa nối hệ thống billing</span></div><div><label>Dung lượng đã dùng</label><div class="bar"><span id="accountStorageBar" style="width:0%;"></span></div><p class="tiny" id="accountStorageText" style="margin-top:7px;">0 B / 0 GB</p></div><div class="grid" style="grid-template-columns:1fr 1fr;margin-top:10px;"><div><label>Tổng video</label><strong id="accountTotalVideos">0</strong></div><div><label>Video hoàn thành</label><strong id="accountCompletedVideos">0</strong></div></div></div></div></div></section>
 
         <section class="page" id="export">
           <div class="page-head">
@@ -1363,7 +1358,7 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "" };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [] };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -1506,6 +1501,9 @@
         stopAllMedia();
         $$(".page").forEach((el) => el.classList.toggle("active", el.id === page));
         $$("[data-page]").forEach((el) => el.classList.toggle("active", el.dataset.page === page));
+        if (page === "jobs" || page === "outputs") loadJobs().catch(showError);
+        if (page === "history") loadHistory().catch(showError);
+        if (page === "account") renderAccountInfo();
       }
 
       async function api(url, options) {
@@ -2555,6 +2553,110 @@
         renderEditorWorkspace();
       }
 
+      function formatDateTime(iso) {
+        if (!iso) return "";
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+      }
+
+      async function loadJobs() {
+        const data = await api("/api/render-jobs");
+        state.jobs = data.jobs || [];
+        renderJobs();
+        renderOutputs();
+      }
+
+      function renderJobs() {
+        const body = $("#jobsListBody");
+        if (!body) return;
+        const running = state.jobs.filter((j) => j.status === "queued" || j.status === "running");
+        if ($("#jobsRunningPill")) $("#jobsRunningPill").textContent = `${running.length} đang chạy`;
+        if (!state.jobs.length) {
+          body.innerHTML = '<div class="empty">Chưa có job nào. Bấm Render ở màn Edit V3 hoặc Xuất video để tạo job đầu tiên.</div>';
+          return;
+        }
+        const statusPill = (job) => {
+          if (job.status === "completed") return '<span class="pill ok">Done</span>';
+          if (job.status === "failed") return '<span class="pill" style="color:#fecdd3;">Failed</span>';
+          if (job.status === "cancelled") return '<span class="pill">Cancelled</span>';
+          if (job.status === "running") return `<span class="pill warn">${job.progress || 0}%</span>`;
+          return '<span class="pill">Queued</span>';
+        };
+        body.innerHTML = state.jobs.map((job) => `
+          <div class="job-row" data-job-id="${job.id}">
+            <div><strong>${job.project_title || "Untitled video"}</strong><p class="tiny">${job.current_step || ""} · ${formatDateTime(job.updated_at)}</p></div>
+            <div class="bar"><span style="width:${Math.min(100, job.progress || 0)}%;"></span></div>
+            ${statusPill(job)}
+            ${job.status === "queued" || job.status === "running" ? `<button class="btn cancel-job-btn" data-job-id="${job.id}">Hủy</button>` : `<button class="btn open-job-btn" data-project-id="${job.project_id}">Mở</button>`}
+          </div>`).join("");
+        body.querySelectorAll(".cancel-job-btn").forEach((btn) => btn.addEventListener("click", async () => {
+          try {
+            await api(`/api/render-jobs/${btn.dataset.jobId}/cancel`, { method: "POST" });
+            toast("Đã hủy job.");
+            await loadJobs();
+          } catch (error) { showError(error); }
+        }));
+        body.querySelectorAll(".open-job-btn").forEach((btn) => btn.addEventListener("click", () => {
+          const project = state.projects.find((p) => p.id === btn.dataset.projectId);
+          if (project) selectProject(project);
+          switchPage("export");
+        }));
+      }
+
+      function renderOutputs() {
+        const grid = $("#outputsGrid");
+        if (!grid) return;
+        const completed = state.jobs.filter((j) => j.status === "completed" && j.video_path);
+        if (!completed.length) {
+          grid.innerHTML = '<div class="empty">Chưa có video nào xuất xong.</div>';
+          return;
+        }
+        grid.innerHTML = completed.map((job, index) => `
+          <div class="panel"><div class="project-thumb" style="--art:${art[index % art.length]};"><footer><strong>${job.project_title || "Untitled video"}</strong><p class="tiny">${formatDateTime(job.finished_at || job.updated_at)}</p></footer></div>
+          <div class="panel-body top-actions">
+            <a class="btn primary" href="${fileUrl(job.video_path)}" target="_blank">Xem</a>
+            <a class="btn" href="${fileUrl(job.video_path)}" download>Tải</a>
+          </div></div>`).join("");
+      }
+
+      async function loadHistory() {
+        if (!state.activeProjectId) {
+          $("#historyListBody").innerHTML = '<div class="empty">Hãy chọn 1 dự án để xem lịch sử.</div>';
+          $("#historyProjectName").textContent = "chưa chọn dự án";
+          return;
+        }
+        $("#historyProjectName").textContent = activeProject()?.title || "dự án đang chọn";
+        const data = await api(`/api/projects/${state.activeProjectId}/history`);
+        renderHistory(data.history || []);
+      }
+
+      function renderHistory(items) {
+        const body = $("#historyListBody");
+        if (!body) return;
+        if (!items.length) {
+          body.innerHTML = '<div class="empty">Chưa có hoạt động nào.</div>';
+          return;
+        }
+        const typeLabel = { project: "Dự án", scene: "Kịch bản", asset: "Media", job: "Render" };
+        body.innerHTML = items.map((item, index) => `
+          <div class="history-row"><div class="history-dot">${index + 1}</div><div><strong>${typeLabel[item.type] || item.type}: ${item.label}</strong><p class="tiny">${formatDateTime(item.at)} · ${item.detail || ""}</p></div></div>`).join("");
+      }
+
+      function renderAccountInfo() {
+        if ($("#accountEmail")) $("#accountEmail").value = state.user?.email || "";
+        if ($("#accountName")) $("#accountName").value = state.user?.name || "";
+        if ($("#accountLanguage")) $("#accountLanguage").value = state.settings?.default_language || "Tiếng Việt";
+        if ($("#accountCredits")) $("#accountCredits").textContent = String(state.stats?.credits ?? 0);
+        if (state.stats?.storage) {
+          const storage = state.stats.storage;
+          if ($("#accountStorageBar")) $("#accountStorageBar").style.width = `${Math.min(100, storage.percent)}%`;
+          if ($("#accountStorageText")) $("#accountStorageText").textContent = `${storage.usedHuman} / ${storage.quotaHuman}`;
+        }
+        if ($("#accountTotalVideos")) $("#accountTotalVideos").textContent = String(state.stats?.totalVideos ?? 0);
+        if ($("#accountCompletedVideos")) $("#accountCompletedVideos").textContent = String(state.stats?.completedVideos ?? 0);
+      }
+
       async function pollJob(jobId) {
         const data = await api(`/api/render-jobs/${jobId}`);
         setJob(data.project, data.job);
@@ -3136,6 +3238,9 @@
         location.reload();
       });
 
+      $("#refreshJobsButton")?.addEventListener("click", () => loadJobs().catch(showError));
+      $("#refreshOutputsButton")?.addEventListener("click", () => loadJobs().catch(showError));
+      $("#refreshHistoryButton")?.addEventListener("click", () => loadHistory().catch(showError));
       $("#aiAutoEditButton")?.addEventListener("click", runAiAutoEdit);
       $("#renderTimelineButton")?.addEventListener("click", async () => {
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");

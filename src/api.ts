@@ -43,6 +43,7 @@ import {
   listClips,
   listProjects,
   listAssets,
+  listRenderJobsForOwner,
   listScenes,
   listTracks,
   moveScene,
@@ -1989,6 +1990,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         }
       }
       sendJson(res, 200, { ok: true, asset: deleted });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/render-jobs") {
+      const user = requireUser(req, res);
+      if (!user) return;
+      sendJson(res, 200, { jobs: listRenderJobsForOwner(user.email) });
       return;
     }
 

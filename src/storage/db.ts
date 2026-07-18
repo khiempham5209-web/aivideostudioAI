@@ -664,6 +664,17 @@ export function getRenderJob(jobId: string): RenderJobRecord | undefined {
   return db.prepare("SELECT * FROM render_jobs WHERE id = ?").get(jobId) as RenderJobRecord | undefined;
 }
 
+export function listRenderJobsForOwner(ownerEmail: string, limit = 50): Array<RenderJobRecord & { project_title: string; project_topic: string }> {
+  return db.prepare(`
+    SELECT render_jobs.*, projects.title AS project_title, projects.topic AS project_topic
+    FROM render_jobs
+    JOIN projects ON projects.id = render_jobs.project_id
+    WHERE projects.owner_email = ?
+    ORDER BY render_jobs.created_at DESC
+    LIMIT ?
+  `).all(ownerEmail, limit) as Array<RenderJobRecord & { project_title: string; project_topic: string }>;
+}
+
 export function createAsset(data: {
   projectId: string;
   type: AssetRecord["type"];
