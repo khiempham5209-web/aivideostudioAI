@@ -64,6 +64,15 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS ?? "")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 
+const TEMPLATE_PRESETS = [
+  { id: "review-film", name: "Review phim", style: "Review phim", description: "Hook, tom tat, diem hay, diem yeu va ket luan co dang xem khong." },
+  { id: "sales-short", name: "Ban hang ngan", style: "Quang cao san pham", description: "Neu van de, loi ich, bang chung va CTA." },
+  { id: "news-fast", name: "Tin tuc nhanh", style: "Tin tuc", description: "Headline, boi canh, du kien chinh va ket luan." },
+  { id: "top-list", name: "Top list", style: "Top 5", description: "Countdown, ly do tung muc va ket luan nhanh." },
+  { id: "knowledge", name: "Kien thuc", style: "Giai thich", description: "Mo van de, vi du, phan tich va tong ket." },
+  { id: "story-drama", name: "Drama ke chuyen", style: "Ke chuyen kich tinh", description: "Hook to mo, cao trao, twist va thong diep." },
+];
+
 interface CreateVideoBody {
   prompt?: string;
   projectName?: string;
@@ -1190,6 +1199,23 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/system/status") {
+      const user = requireUser(req, res);
+      if (!user) return;
+      sendJson(res, 200, {
+        ok: true,
+        appEnv: APP_ENV,
+        googleConfigured: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
+        privateAccessEnabled: ALLOWED_EMAILS.length > 0,
+        geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+        r2Configured: isR2Configured(),
+        databaseConfigured: Boolean(process.env.DATABASE_URL),
+        ffmpegBin: FFMPEG_BIN,
+        ttsProvider: process.env.TTS_PROVIDER || "edge",
+      });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/auth/google/start") {
       await handleGoogleStart(req, res);
       return;
@@ -1220,6 +1246,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         defaultSpeed: 1,
         readyProviders: ["edge"],
       });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/templates") {
+      const user = requireUser(req, res);
+      if (!user) return;
+      sendJson(res, 200, { templates: TEMPLATE_PRESETS });
       return;
     }
 
@@ -1363,6 +1396,50 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const generateScriptMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/generate-script$/);
     if (req.method === "POST" && generateScriptMatch) {
       await handleGenerateProjectScript(req, res, generateScriptMatch[1]);
+      return;
+    }
+
+    const applyTemplateMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/apply-template$/);
+    if (req.method === "POST" && applyTemplateMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, applyTemplateMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const templateId = String((body as { templateId?: unknown }).templateId || "");
+      const template = TEMPLATE_PRESETS.find((item) => item.id === templateId);
+      if (!template) {
+        sendJson(res, 404, { error: "Template not found" });
+        return;
+      }
+      const nextTopic = project.topic.includes(template.name)
+        ? project.topic
+        : `${project.topic}\n\nTemplate: ${template.name}. ${template.description}`;
+      updateProject(project.id, { topic: nextTopic });
+      sendJson(res, 200, { ok: true, template, project: getProject(project.id) });
+      return;
+    }
+
+    const projectHistoryMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/history$/);
+    if (req.method === "GET" && projectHistoryMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, projectHistoryMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const latestJob = getLatestJobForProject(project.id);
+      const items = [
+        { type: "project", label: "Tao/cap nhat project", at: project.updated_at, detail: project.status },
+        ...listScenes(project.id).map((scene) => ({ type: "scene", label: `Scene ${scene.scene_order + 1}`, at: scene.updated_at, detail: scene.voice_text.slice(0, 120) })),
+        ...listAssets(project.id).map((asset) => ({ type: "asset", label: asset.file_name, at: asset.created_at, detail: `${asset.type} - ${asset.file_size} bytes` })),
+        ...(latestJob ? [{ type: "job", label: "Render/voice job gan nhat", at: latestJob.updated_at, detail: `${latestJob.status} ${latestJob.progress}%` }] : []),
+      ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      sendJson(res, 200, { history: items });
       return;
     }
 
