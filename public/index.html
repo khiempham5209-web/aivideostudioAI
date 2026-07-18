@@ -1215,6 +1215,7 @@
                 <div><label for="pitch">Pitch</label><input id="pitch" type="range" min="-12" max="12" step="1" value="0" /></div>
                 <div><label for="volume">Âm lượng</label><input id="volume" type="range" min="0" max="150" step="5" value="100" /></div>
                 <button class="btn" id="previewVoiceButton">Preview giọng đọc</button>
+                <audio id="voicePreviewPlayer" style="display:none;width:100%;margin-top:8px;" controls></audio>
               </div>
             </div>
           </div>
@@ -1267,12 +1268,12 @@
         <section class="page" id="templates">
           <div class="page-head"><div><h2>Mẫu video</h2><p class="muted">Chọn template để tự điền tỷ lệ, font, subtitle, transition, nhạc và cấu trúc kịch bản.</p></div><div class="top-actions"><button class="btn">9:16</button><button class="btn">16:9</button><button class="btn">1:1</button></div></div>
           <div class="grid screen-cards">
-            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#7c2d12,#1e1b4b);"><h3>Review phim</h3></div><div class="panel-body"><p class="tiny">Hook mạnh · 6 scene · subtitle nổi bật</p><button class="btn primary" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
-            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#065f46,#1e293b);"><h3>Video bán hàng</h3></div><div class="panel-body"><p class="tiny">Nêu vấn đề · lợi ích · CTA</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
-            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#1d4ed8,#111827);"><h3>Tin tức nhanh</h3></div><div class="panel-body"><p class="tiny">Headline · dữ kiện · kết luận</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
-            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#581c87,#0f172a);"><h3>Top 5</h3></div><div class="panel-body"><p class="tiny">Countdown · hiệu ứng số · nhạc nhanh</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
-            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#164e63,#713f12);"><h3>Kiến thức</h3></div><div class="panel-body"><p class="tiny">Giải thích · ví dụ · tổng kết</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
-            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#be123c,#312e81);"><h3>Drama kể chuyện</h3></div><div class="panel-body"><p class="tiny">Hook tò mò · cao trào · twist</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#7c2d12,#1e1b4b);"><h3>Review phim</h3></div><div class="panel-body"><p class="tiny">Hook mạnh · 6 scene · subtitle nổi bật</p><button class="btn primary apply-template-btn" data-template-id="review-film" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#065f46,#1e293b);"><h3>Video bán hàng</h3></div><div class="panel-body"><p class="tiny">Nêu vấn đề · lợi ích · CTA</p><button class="btn apply-template-btn" data-template-id="sales-short" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#1d4ed8,#111827);"><h3>Tin tức nhanh</h3></div><div class="panel-body"><p class="tiny">Headline · dữ kiện · kết luận</p><button class="btn apply-template-btn" data-template-id="news-fast" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#581c87,#0f172a);"><h3>Top 5</h3></div><div class="panel-body"><p class="tiny">Countdown · hiệu ứng số · nhạc nhanh</p><button class="btn apply-template-btn" data-template-id="top-list" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#164e63,#713f12);"><h3>Kiến thức</h3></div><div class="panel-body"><p class="tiny">Giải thích · ví dụ · tổng kết</p><button class="btn apply-template-btn" data-template-id="knowledge" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#be123c,#312e81);"><h3>Drama kể chuyện</h3></div><div class="panel-body"><p class="tiny">Hook tò mò · cao trào · twist</p><button class="btn apply-template-btn" data-template-id="story-drama" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
           </div>
           <div class="panel" style="margin-top:14px;"><div class="panel-head"><div><h3>Nguồn mẫu video</h3><p class="tiny">Mẫu không phải video tải ngẫu nhiên trên mạng; mỗi mẫu là cấu hình JSON có bản quyền rõ ràng.</p></div><span class="pill ok">4 nguồn</span></div><div class="panel-body"><div class="source-grid"><div class="source-card"><span class="pill">Built-in</span><strong>Mẫu hệ thống</strong><p class="tiny">Đội phát triển tự tạo JSON gồm scene, font, subtitle, transition, nhạc và tỷ lệ.</p></div><div class="source-card"><span class="pill">Community</span><strong>Mẫu cộng đồng</strong><p class="tiny">Người dùng chia sẻ mẫu của họ; cần cơ chế duyệt và báo cáo bản quyền.</p></div><div class="source-card"><span class="pill">AI</span><strong>AI tạo mẫu</strong><p class="tiny">Nhập chủ đề, AI sinh cấu trúc dựng mới dựa trên bộ thành phần có sẵn.</p></div><div class="source-card"><span class="pill">Licensed</span><strong>Kho tài nguyên cấp phép</strong><p class="tiny">Kết nối API stock media hoặc kho nội bộ; chỉ dùng tài nguyên cho phép tải và tái sử dụng.</p></div></div></div></div>
         </section>
@@ -1362,7 +1363,7 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0 };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "" };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -2816,20 +2817,39 @@
           }).catch(showError);
         }
       });
-      $("#previewVoiceButton").addEventListener("click", () => {
-        const text = $("#prompt").value.slice(0, 180) || "Xin chào, đây là giọng đọc thử trong AI Video Studio.";
-        if (!("speechSynthesis" in window)) {
-          toast("Trình duyệt không hỗ trợ preview giọng đọc.");
-          return;
+      $("#previewVoiceButton").addEventListener("click", async () => {
+        const voiceId = $("#voiceName").value;
+        if (!voiceId) return toast("Hãy chọn 1 giọng trước.");
+        const text = $("#prompt").value.slice(0, 220) || "Xin chào, đây là giọng đọc thử trong AI Video Studio.";
+        const speed = Number($("#speed").value || 1);
+        const player = $("#voicePreviewPlayer");
+        $("#previewVoiceButton").disabled = true;
+        $("#previewVoiceButton").textContent = "Đang tạo giọng đọc...";
+        try {
+          const resp = await fetch("/api/voices/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ voiceId, text, speed }),
+          });
+          if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+            throw errData;
+          }
+          const blob = await resp.blob();
+          if (state.voicePreviewUrl) URL.revokeObjectURL(state.voicePreviewUrl);
+          state.voicePreviewUrl = URL.createObjectURL(blob);
+          player.src = state.voicePreviewUrl;
+          player.volume = Math.min(1, Number($("#volume").value || 100) / 100);
+          player.style.display = "block";
+          await player.play();
+          const voiceOption = state.voices.find((v) => v.id === voiceId);
+          toast(`Đã tạo giọng đọc thật (${voiceOption?.label || voiceId}) và đang phát.`);
+        } catch (error) {
+          showError(error);
+        } finally {
+          $("#previewVoiceButton").disabled = false;
+          $("#previewVoiceButton").textContent = "Preview giọng đọc";
         }
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "vi-VN";
-        utterance.rate = Number($("#speed").value || 1);
-        utterance.pitch = 1 + Number($("#pitch").value || 0) / 12;
-        utterance.volume = Math.min(1, Number($("#volume").value || 100) / 100);
-        window.speechSynthesis.speak(utterance);
-        toast("Đang preview giọng đọc bằng trình duyệt.");
       });
       $$(".timeline-tool").forEach((button) => button.addEventListener("click", () => {
         if (button.dataset.tool === "Delete") {
@@ -3171,7 +3191,24 @@
         if (previewPlayRaf) stopPreviewPlayback();
         else startPreviewPlayback();
       });
-      $$("#templates .btn").forEach((button) => button.addEventListener("click", () => { if (button.textContent.includes("Dùng mẫu")) { toast("Đã áp dụng template vào dự án đang chọn."); switchPage("create"); } }));
+      $$(".apply-template-btn").forEach((button) => button.addEventListener("click", async () => {
+        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo dự án trước khi dùng mẫu.");
+        button.disabled = true;
+        try {
+          const data = await api(`/api/projects/${state.activeProjectId}/apply-template`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ templateId: button.dataset.templateId }),
+          });
+          toast(`Đã áp dụng mẫu "${data.template.name}" vào dự án đang chọn.`);
+          await loadProjects();
+          switchPage("create");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+        }
+      }));
 
       (async function boot() {
         if (location.protocol === "file:") {

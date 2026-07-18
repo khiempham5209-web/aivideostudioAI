@@ -2,13 +2,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { createReadStream } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import dotenv from "dotenv";
 import { generateScriptFromPrompt } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
 import { findVoiceOption, VOICE_OPTIONS } from "./tts/voice-catalog.js";
+import { createTtsClient } from "./tts/tts-client.js";
+import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
@@ -1324,6 +1326,43 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         defaultSpeed: 1,
         readyProviders: ["edge"],
       });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/voices/preview") {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const body = await readJsonBody(req);
+      const voiceId = String((body as { voiceId?: unknown }).voiceId || "");
+      const voice = VOICE_OPTIONS.find((item) => item.id === voiceId);
+      if (!voice) {
+        sendJson(res, 404, { error: "Voice not found" });
+        return;
+      }
+      if (voice.status !== "ready") {
+        sendJson(res, 400, { error: `Giọng "${voice.label}" cần cấu hình server riêng (${voice.source}), chưa preview được.` });
+        return;
+      }
+      const rawText = typeof (body as { text?: unknown }).text === "string" ? (body as { text: string }).text : "";
+      const text = (rawText.trim() || "Xin chào, đây là giọng đọc thử trong AI Video Studio.").slice(0, 220);
+      const speed = Math.min(2, Math.max(0.5, Number((body as { speed?: unknown }).speed) || 1));
+      const previewDir = resolve("storage", "voice-previews");
+      await mkdir(previewDir, { recursive: true });
+      const previewPath = join(previewDir, `${voice.id}-${Date.now()}.mp3`);
+      try {
+        const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed });
+        await client.generate(text, previewPath);
+        const audioBuffer = await readFile(previewPath);
+        res.writeHead(200, {
+          "Content-Type": "audio/mpeg",
+          "Content-Length": String(audioBuffer.length),
+          "Cache-Control": "no-store",
+        });
+        res.end(audioBuffer);
+        void rm(previewPath, { force: true }).catch(() => undefined);
+      } catch (error) {
+        sendJson(res, 502, { error: `Tạo preview thất bại: ${error instanceof Error ? error.message : String(error)}` });
+      }
       return;
     }
 
