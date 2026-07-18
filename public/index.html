@@ -887,6 +887,88 @@
           grid-template-columns: 1fr;
         }
       }
+
+      /* ===== Editor V2 + additional screens ===== */
+      .editor-shell { display:grid; grid-template-columns:240px minmax(0,1fr) 300px; gap:12px; align-items:start; }
+      .editor-library,.editor-inspector,.editor-stage { min-height:560px; }
+      .editor-stage .panel-body { display:grid; gap:12px; }
+      .editor-preview-wrap { display:grid; place-items:center; min-height:420px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
+      .editor-preview-canvas { width:min(100%,760px); aspect-ratio:16/9; position:relative; display:grid; place-items:center; background:linear-gradient(135deg,#111827,#0f766e 48%,#581c87); }
+      .editor-controls { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
+      .editor-time { min-width:110px; text-align:center; color:var(--muted); font-variant-numeric:tabular-nums; }
+      .library-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .library-tabs button.active { border-color:rgba(168,85,247,.7); color:#fff; background:rgba(124,58,237,.22); }
+      .editor-assets { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+      .editor-asset { min-height:88px; padding:9px; border:1px solid var(--line); border-radius:8px; background:rgba(7,10,16,.44); display:grid; align-content:end; }
+      .editor-toolbar { display:flex; gap:8px; flex-wrap:wrap; padding:10px 12px; border-bottom:1px solid var(--line); }
+      .timeline-v2 { overflow:auto; border:1px solid var(--line); border-radius:10px; background:#05080e; margin-top:12px; }
+      .timeline-ruler { min-width:1080px; display:grid; grid-template-columns:130px repeat(12,1fr); gap:0; height:34px; align-items:center; border-bottom:1px solid var(--line); color:var(--muted); font-size:11px; }
+      .timeline-ruler span { border-left:1px solid rgba(148,163,184,.12); padding-left:5px; }
+      .timeline-v2 .tracks { min-width:1080px; }
+      .track-tools { display:flex; gap:5px; align-items:center; }
+      .track-tools button { min-height:26px; padding:0 7px; font-size:11px; }
+      .ai-edit-card { border:1px solid rgba(168,85,247,.5); background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(34,211,238,.07)); }
+      .screen-cards { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .template-card { overflow:hidden; }
+      .template-cover { min-height:150px; border-radius:8px; background:var(--art,linear-gradient(135deg,#1d4ed8,#7c3aed)); display:flex; align-items:end; padding:12px; }
+      .job-row { display:grid; grid-template-columns:minmax(0,1.3fr) 160px 130px 110px; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); }
+      .output-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .music-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      @media(max-width:1400px){.editor-shell{grid-template-columns:210px minmax(0,1fr)}.editor-inspector{grid-column:1/-1;min-height:auto}.screen-cards,.output-grid,.music-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:860px){.editor-shell{grid-template-columns:1fr}.editor-library,.editor-stage,.editor-inspector{min-height:auto}.screen-cards,.output-grid,.music-grid{grid-template-columns:1fr}.job-row{grid-template-columns:1fr}}
+
+      /* BUILD V3 — fixed shell, professional editor and extra workspaces */
+      html, body { width:100%; max-width:100%; overflow-x:hidden; }
+      .app { width:100%; max-width:100vw; overflow:hidden; }
+      .sidebar { overflow:hidden; min-height:100vh; }
+      .sidebar .nav { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding-right:5px; scrollbar-width:thin; }
+      .sidebar .storage { flex:0 0 auto; margin-top:0; }
+      .main { width:100%; max-width:100%; overflow-x:hidden; }
+      .page { width:100%; max-width:100%; overflow-x:hidden; }
+      .timeline-v3 { position:relative; width:100%; max-width:100%; overflow:auto; border:1px solid var(--line); border-radius:10px; background:#05080e; margin-top:12px; }
+      .timeline-inner { position:relative; min-width:1320px; }
+      .timeline-tools-v3 { position:sticky; left:0; z-index:8; display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; border-bottom:1px solid var(--line); background:#080d16; }
+      .timeline-tools-v3 .zoom-slider { width:150px; }
+      .time-ruler-v3 { display:grid; grid-template-columns:180px repeat(13, minmax(84px,1fr)); height:38px; align-items:center; border-bottom:1px solid var(--line); color:var(--muted); font-size:11px; background:#070b12; }
+      .time-ruler-v3 > * { height:100%; display:flex; align-items:center; padding-left:8px; border-left:1px solid rgba(148,163,184,.13); }
+      .timeline-track-v3 { display:grid; grid-template-columns:180px minmax(1100px,1fr); min-height:62px; border-bottom:1px solid rgba(148,163,184,.13); }
+      .track-label-v3 { position:sticky; left:0; z-index:6; display:flex; align-items:center; justify-content:space-between; gap:6px; padding:8px 10px; background:#090e17; border-right:1px solid var(--line); }
+      .track-label-v3 strong { font-size:12px; }
+      .track-actions-v3 { display:flex; gap:4px; }
+      .track-actions-v3 button { min-width:26px; height:26px; border:1px solid var(--line); border-radius:6px; background:#121a28; color:var(--muted); }
+      .track-lane-v3 { position:relative; min-height:62px; background-image:linear-gradient(90deg,rgba(148,163,184,.08) 1px,transparent 1px); background-size:92px 100%; }
+      .clip-v3 { position:absolute; top:9px; height:43px; display:flex; align-items:center; gap:8px; min-width:80px; padding:0 10px; border:1px solid rgba(255,255,255,.18); border-radius:7px; color:#fff; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; box-shadow:0 5px 16px rgba(0,0,0,.25); cursor:grab; }
+      .clip-v3.selected { outline:2px solid white; outline-offset:2px; }
+      .clip-v3.video { background:linear-gradient(135deg,#4338ca,#2563eb); }
+      .clip-v3.overlay { background:linear-gradient(135deg,#7c3aed,#db2777); }
+      .clip-v3.text { background:linear-gradient(135deg,#be123c,#ea580c); }
+      .clip-v3.subtitle { background:linear-gradient(135deg,#d97706,#f59e0b); }
+      .clip-v3.voice { background:linear-gradient(135deg,#047857,#16a34a); }
+      .clip-v3.music { background:linear-gradient(135deg,#0f766e,#0891b2); }
+      .clip-v3.sfx { background:linear-gradient(135deg,#0369a1,#2563eb); }
+      .clip-v3.transition { background:linear-gradient(135deg,#9333ea,#c026d3); }
+      .clip-v3.effect { background:linear-gradient(135deg,#be185d,#7c3aed); }
+      .clip-v3.marker { background:linear-gradient(135deg,#475569,#334155); border-style:dashed; }
+      .clip-thumb { width:34px; height:28px; flex:0 0 34px; border-radius:4px; background:linear-gradient(135deg,rgba(255,255,255,.45),rgba(0,0,0,.2)); }
+      .waveform { width:100%; height:24px; opacity:.75; background:repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 2px,transparent 2px 5px); mask-image:linear-gradient(0deg,transparent 10%,#000 10% 90%,transparent 90%); }
+      .playhead-v3 { position:absolute; z-index:12; top:48px; bottom:0; left:526px; width:2px; background:#fb7185; pointer-events:none; }
+      .playhead-v3:before { content:""; position:absolute; top:-7px; left:-6px; width:14px; height:14px; transform:rotate(45deg); background:#fb7185; border-radius:2px; }
+      .inspector-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .inspector-tabs button.active { border-color:rgba(168,85,247,.7); background:rgba(124,58,237,.2); color:#fff; }
+      .ai-check-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+      .ai-check { display:flex; align-items:center; gap:8px; min-height:36px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:rgba(7,10,16,.35); color:var(--muted); }
+      .source-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+      .source-card { min-height:150px; padding:15px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(180deg,rgba(21,28,41,.96),rgba(9,14,22,.96)); }
+      .source-card strong { display:block; margin:10px 0 6px; }
+      .asset-browser-grid { grid-template-columns:250px minmax(0,1fr) 310px; }
+      .asset-category button { width:100%; text-align:left; margin-bottom:6px; }
+      .asset-item-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+      .asset-item { min-height:112px; display:flex; align-items:flex-end; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--art,linear-gradient(135deg,#1e3a8a,#111827)); }
+      .history-row { display:grid; grid-template-columns:42px minmax(0,1fr) auto; gap:10px; align-items:center; padding:11px 0; border-bottom:1px solid var(--line); }
+      .history-dot { width:30px; height:30px; display:grid; place-items:center; border-radius:50%; background:rgba(124,58,237,.2); color:#d8b4fe; }
+      @media(max-width:1280px){.source-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.asset-browser-grid{grid-template-columns:1fr}.asset-item-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:860px){.source-grid,.asset-item-grid,.ai-check-grid{grid-template-columns:1fr}.sidebar{overflow-y:auto}.sidebar .nav{overflow:visible}.timeline-inner{min-width:1080px}}
+
     </style>
   </head>
   <body>
@@ -950,7 +1032,18 @@
           <button data-page="script">Kịch bản AI</button>
           <button data-page="voice">Giọng đọc AI</button>
           <button data-page="media">Thư viện Media</button>
-          <button data-page="timeline">Edit video</button>
+          <button data-page="assets">Kho tài nguyên</button>
+          <button data-page="project-explorer">Project Explorer</button>
+          <button data-page="timeline">Edit video V3</button>
+          <button data-page="transitions">Transition</button>
+          <button data-page="animations">Animation</button>
+          <button data-page="music">Nhạc nền</button>
+          <button data-page="templates">Mẫu video</button>
+          <button data-page="jobs">Hàng đợi render</button>
+          <button data-page="outputs">Video đã xuất</button>
+          <button data-page="ai-settings">Cài đặt AI/API</button>
+          <button data-page="history">Lịch sử chỉnh sửa</button>
+          <button data-page="account">Tài khoản & gói</button>
           <button data-page="export">Xuất video</button>
           <button data-page="stats">Thống kê</button>
         </nav>
@@ -982,7 +1075,18 @@
           <button data-page="script">Kịch bản</button>
           <button data-page="voice">Voice</button>
           <button data-page="media">Media</button>
-          <button data-page="timeline">Edit</button>
+          <button data-page="assets">Assets</button>
+          <button data-page="project-explorer">Project</button>
+          <button data-page="timeline">Edit V3</button>
+          <button data-page="transitions">Transition</button>
+          <button data-page="animations">Animation</button>
+          <button data-page="music">Nhạc</button>
+          <button data-page="templates">Mẫu</button>
+          <button data-page="jobs">Jobs</button>
+          <button data-page="outputs">Đã xuất</button>
+          <button data-page="ai-settings">AI/API</button>
+          <button data-page="history">History</button>
+          <button data-page="account">Tài khoản</button>
           <button data-page="export">Xuất</button>
           <button data-page="stats">Thống kê</button>
         </nav>
@@ -1123,35 +1227,99 @@
           </div>
         </section>
 
+        <section class="page" id="assets"><div class="page-head"><div><h2>Kho tài nguyên</h2><p class="muted">Video, audio, image, logo, subtitle, sticker, transition, animation, LUT và effect dùng cho toàn bộ dự án.</p></div><div class="top-actions"><button class="btn">Đồng bộ kho</button><button class="btn primary">+ Upload tài nguyên</button></div></div><div class="grid asset-browser-grid"><div class="panel"><div class="panel-head"><h3>Danh mục</h3></div><div class="panel-body asset-category"><button class="btn primary">Tất cả</button><button class="btn">Video</button><button class="btn">Audio</button><button class="btn">Hình ảnh</button><button class="btn">Logo</button><button class="btn">Subtitle</button><button class="btn">Sticker</button><button class="btn">Transition</button><button class="btn">Animation</button><button class="btn">LUT / Effect</button></div></div><div class="panel"><div class="panel-head"><h3>Tài nguyên sẵn sàng</h3><input class="search" placeholder="Tìm asset..."></div><div class="panel-body"><div class="asset-item-grid"><div class="asset-item" style="--art:linear-gradient(135deg,#1d4ed8,#111827);"><strong>City drone.mp4</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#065f46,#111827);"><strong>Story voice.mp3</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#7c2d12,#111827);"><strong>Movie poster.png</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#581c87,#111827);"><strong>Logo white.png</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#713f12,#111827);"><strong>Whoosh.wav</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#164e63,#111827);"><strong>Cinematic LUT</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#be123c,#312e81);"><strong>Title preset</strong></div><div class="asset-item" style="--art:linear-gradient(135deg,#0f766e,#1e293b);"><strong>Fade zoom</strong></div></div></div></div><div class="panel"><div class="panel-head"><h3>Thông tin asset</h3></div><div class="panel-body field-stack"><div class="preview-frame" style="min-height:180px;--art:linear-gradient(135deg,#1d4ed8,#581c87);"></div><div><label>Tên</label><input value="City drone.mp4"></div><div><label>Tag</label><input value="city, drone, cinematic"></div><div><label>Nguồn / giấy phép</label><select><option>Upload cá nhân</option><option>Kho nội bộ</option><option>Stock có cấp phép</option></select></div><button class="btn primary">Thêm vào project</button></div></div></div></section>
+
+        <section class="page" id="project-explorer"><div class="page-head"><div><h2>Project Explorer</h2><p class="muted">Quản lý toàn bộ thành phần của dự án theo cây thư mục.</p></div><button class="btn primary" data-page="timeline">Mở trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Review Kung Fu Panda</h3><span class="pill ok">Auto saved</span></div><div class="panel-body field-stack"><button class="btn" style="text-align:left;">▾ Scenes <span class="tiny">(6)</span></button><button class="btn" style="text-align:left;padding-left:30px;">Scene 01 — Hook</button><button class="btn" style="text-align:left;padding-left:30px;">Scene 02 — Giới thiệu</button><button class="btn" style="text-align:left;padding-left:30px;">Scene 03 — Điểm mạnh</button><button class="btn" style="text-align:left;">▾ Voice <span class="tiny">(1)</span></button><button class="btn" style="text-align:left;padding-left:30px;">Narration-final.mp3</button><button class="btn" style="text-align:left;">▾ Subtitle <span class="tiny">(1)</span></button><button class="btn" style="text-align:left;">▾ Music <span class="tiny">(2)</span></button><button class="btn" style="text-align:left;">▾ Export <span class="tiny">(3)</span></button></div></div><div class="panel"><div class="panel-head"><h3>Scene 02 — Giới thiệu</h3><div class="top-actions"><button class="btn">Nhân bản</button><button class="btn">Xóa</button></div></div><div class="panel-body field-stack"><div><label>Lời đọc</label><textarea>Po không phải mẫu anh hùng hoàn hảo, nhưng chính sự vụng về và chân thành khiến hành trình của cậu trở nên đáng nhớ.</textarea></div><div><label>Media gắn với scene</label><div class="asset-row"><strong>scene-02.mp4</strong><p class="tiny">12.4 giây · 1080p</p></div></div><div><label>Thời lượng</label><input value="12.4s"></div><button class="btn primary">Lưu scene</button></div></div></div></section>
+
         <section class="page" id="timeline">
           <div class="page-head">
-            <div><h2>Edit video</h2><p class="muted">Xem video thật, thêm MP4/voice MP3, bật phụ đề, trim và chuẩn bị xuất.</p></div>
-            <div class="top-actions"><button class="btn timeline-tool" data-tool="Trim">Trim</button><button class="btn timeline-tool" data-tool="Split">Split</button><button class="btn timeline-tool" data-tool="Move">Move</button><button class="btn timeline-tool" data-tool="Delete">Xoa media</button></div>
+            <div><h2>Edit video V3</h2><p class="muted">Editor hoàn chỉnh: asset browser, preview, inspector động, waveform, playhead, nhiều track và AI tối ưu timeline.</p></div>
+            <div class="top-actions"><button class="btn" data-demo="undo">↶ Undo</button><button class="btn" data-demo="redo">↷ Redo</button><button class="btn primary" id="aiAutoEditButton">✨ AI Optimize Timeline</button></div>
           </div>
-          <div class="grid export-grid">
-            <div class="panel">
-              <div class="panel-head"><h3>Program Preview</h3><span class="pill" id="editorPreviewStatus">Chưa có video</span></div>
-              <div class="panel-body"><div class="preview-frame" id="editorPreviewFrame" style="--art:linear-gradient(135deg,#0f172a,#164e63 45%,#7f1d1d);"><button class="btn primary" id="editorAddVideoButton" type="button">+ Add video MP4</button></div></div>
-            </div>
-            <div class="panel">
-              <div class="panel-head"><h3>Inspector</h3></div>
-              <div class="panel-body field-stack">
-                <div><label>Position</label><input value="X 120   Y 180" /></div>
-                <div><label>Scale</label><input value="100%" /></div>
-                <div><label>Speed</label><div class="segmented"><button>0.5x</button><button class="active">1x</button><button>2x</button></div></div>
-                <div><label>Volume</label><input type="range" value="80" /></div>
-              </div>
+          <div class="panel ai-edit-card" style="margin-bottom:12px;">
+            <div class="panel-body">
+              <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;"><div><strong>AI Auto Edit</strong><p class="tiny" style="margin-top:5px;">Tự chia scene, khớp voice, xóa khoảng lặng, crop đúng tỷ lệ, sinh subtitle, thêm transition và ducking nhạc nền.</p></div><span class="pill ok">Project ready</span></div>
+              <div class="ai-check-grid"><label class="ai-check"><input type="checkbox" checked> Sync subtitle</label><label class="ai-check"><input type="checkbox" checked> Auto cut</label><label class="ai-check"><input type="checkbox" checked> Remove silence</label><label class="ai-check"><input type="checkbox" checked> Match voice</label><label class="ai-check"><input type="checkbox" checked> Auto transition</label><label class="ai-check"><input type="checkbox" checked> Music ducking</label></div>
             </div>
           </div>
-          <div class="timeline-shell" style="margin-top:14px;">
-            <div class="tracks">
-              <div class="track"><strong>Video Track</strong><div class="clip c1" style="--clip:#7c3aed;">Intro.mp4</div><div class="clip c2" style="--clip:#2563eb;">Scene 1</div><div class="clip c3" style="--clip:#0f766e;">Scene 2</div></div>
-              <div class="track"><strong>Audio Track</strong><div class="clip c4" style="--clip:#16a34a;">Voiceover.wav</div></div>
-              <div class="track"><strong>Subtitle Track</strong><div class="clip c5" style="--clip:#f59e0b;">Subtitle.srt</div></div>
-              <div class="track"><strong>Effect Track</strong><div class="clip c1" style="--clip:#db2777;">Color Grade</div><div class="clip c3" style="--clip:#9333ea;">Zoom Motion</div></div>
-            </div>
+          <div class="editor-shell">
+            <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Kéo thả tài nguyên vào timeline</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body"><div class="library-tabs"><button class="btn active">Media</button><button class="btn">Text</button><button class="btn">Audio</button><button class="btn">FX</button></div><div class="editor-assets"><div class="editor-asset" style="background:linear-gradient(135deg,#1e3a8a,#111827);"><strong>Scene 01</strong><span class="tiny">Video · 12.4s</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#065f46,#111827);"><strong>Voice chính</strong><span class="tiny">MP3 · 1:58</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#7c2d12,#111827);"><strong>Ảnh bìa</strong><span class="tiny">PNG · 1080×1920</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#581c87,#111827);"><strong>Logo</strong><span class="tiny">Overlay</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#713f12,#111827);"><strong>Tiêu đề</strong><span class="tiny">Text preset</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#164e63,#111827);"><strong>Fade Zoom</strong><span class="tiny">Transition</span></div></div><div class="top-actions" style="margin-top:12px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button><button class="btn">+ Text</button></div></div></section>
+            <section class="panel editor-stage"><div class="panel-head"><div><h3>Program Preview</h3><p class="tiny">Canvas 9:16 · 1080×1920</p></div><span class="pill" id="editorPreviewStatus">Scene 02</span></div><div class="panel-body"><div class="editor-preview-wrap"><div class="editor-preview-canvas preview-frame" id="editorPreviewFrame" style="--art:linear-gradient(135deg,#172554,#581c87 52%,#7c2d12);"><div style="z-index:2;text-align:center;padding:24px;"><span class="pill">REVIEW</span><h2 style="margin-top:12px;">Hành trình của Chiến binh Rồng</h2><p class="muted" style="margin-top:8px;">Subtitle preview đang bật</p></div></div></div><div class="editor-controls"><button class="btn">⏮</button><button class="btn primary" id="previewPlayButton">▶</button><button class="btn">⏭</button><input type="range" min="0" max="120" value="22" style="flex:1;min-width:120px;"><span class="editor-time">00:22 / 02:00</span><button class="btn">Fit</button><button class="btn">9:16</button><button class="btn">⛶</button></div></div></section>
+            <section class="panel editor-inspector"><div class="panel-head"><div><h3>Inspector</h3><p class="tiny">Đổi thuộc tính theo clip đang chọn</p></div><span class="pill ok">Video</span></div><div class="panel-body field-stack"><div class="inspector-tabs"><button class="btn active">Video</button><button class="btn">Audio</button><button class="btn">Text</button></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>X</label><input value="0"></div><div><label>Y</label><input value="0"></div></div><div><label>Scale</label><input type="range" min="10" max="200" value="100"></div><div><label>Rotation</label><input type="range" min="-180" max="180" value="0"></div><div><label>Opacity</label><input type="range" min="0" max="100" value="100"></div><div class="grid" style="grid-template-columns:1fr 1fr;"><button class="btn">Crop</button><button class="btn">Fit / Fill</button><button class="btn">Flip H</button><button class="btn">Flip V</button></div><div><label>Animation</label><select><option>Không</option><option>Fade in</option><option>Zoom in</option><option>Slide up</option></select></div><div><label>Mask / Border / Shadow</label><div class="segmented"><button>Mask</button><button>Border</button><button>Shadow</button></div></div><div><label>Speed</label><div class="segmented"><button>0.5x</button><button class="active">1x</button><button>2x</button></div></div><div><label>Volume</label><input type="range" min="0" max="150" value="100"></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>Trim start</label><input type="number" value="0" step="0.1"></div><div><label>Trim end</label><input type="number" value="12.4" step="0.1"></div></div><button class="btn primary">Áp dụng thay đổi</button></div></section>
+          </div>
+          <div class="timeline-v3"><div class="timeline-inner"><div class="timeline-tools-v3"><button class="btn">✂ Split</button><button class="btn">Trim</button><button class="btn">Delete</button><button class="btn">Ripple delete</button><button class="btn">Copy</button><button class="btn">Paste</button><button class="btn">Snap: ON</button><button class="btn">−</button><input class="zoom-slider" type="range" min="25" max="200" value="100"><button class="btn">+</button><span class="pill">00:22.4</span></div><div class="time-ruler-v3"><strong>Track / Time</strong><span>00:00</span><span>00:05</span><span>00:10</span><span>00:15</span><span>00:20</span><span>00:25</span><span>00:30</span><span>00:35</span><span>00:40</span><span>00:45</span><span>00:50</span><span>00:55</span><span>01:00</span></div><div class="playhead-v3"></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Video 1</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 video" style="left:10px;width:240px;"><span class="clip-thumb"></span>Intro.mp4</div><div class="clip-v3 video selected" style="left:260px;width:320px;"><span class="clip-thumb"></span>Scene 01</div><div class="clip-v3 video" style="left:590px;width:280px;"><span class="clip-thumb"></span>Scene 02</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Video 2 / Overlay</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 overlay" style="left:330px;width:190px;">Logo overlay</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Text</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 text" style="left:35px;width:220px;">Hook title</div><div class="clip-v3 text" style="left:610px;width:190px;">CTA cuối video</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Subtitle</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 subtitle" style="left:20px;width:180px;">Subtitle 01</div><div class="clip-v3 subtitle" style="left:205px;width:210px;">Subtitle 02</div><div class="clip-v3 subtitle" style="left:420px;width:245px;">Subtitle 03</div><div class="clip-v3 subtitle" style="left:670px;width:180px;">Subtitle 04</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Voice</strong><div class="track-actions-v3"><button>🔊</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 voice" style="left:18px;width:835px;"><div class="waveform"></div></div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Music</strong><div class="track-actions-v3"><button>🔊</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 music" style="left:40px;width:900px;"><div class="waveform"></div></div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>SFX</strong><div class="track-actions-v3"><button>🔊</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 sfx" style="left:245px;width:100px;">Whoosh</div><div class="clip-v3 sfx" style="left:575px;width:90px;">Pop</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Transition</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 transition" style="left:238px;width:44px;">FX</div><div class="clip-v3 transition" style="left:568px;width:44px;">FX</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>Color / Effect</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 effect" style="left:12px;width:920px;">Cinematic LUT · Zoom Motion · Glow</div></div></div>
+            <div class="timeline-track-v3"><div class="track-label-v3"><strong>AI Marker</strong><div class="track-actions-v3"><button>◉</button><button>🔒</button></div></div><div class="track-lane-v3"><div class="clip-v3 marker" style="left:175px;width:135px;">Hook peak</div><div class="clip-v3 marker" style="left:700px;width:150px;">CTA suggestion</div></div></div>
+          </div></div>
+        </section>
+
+        <section class="page" id="music">
+          <div class="page-head"><div><h2>Nhạc nền</h2><p class="muted">Chọn nhạc theo mood, nghe thử, loop, fade và tự động ducking khi có voice.</p></div><button class="btn primary">+ Upload MP3</button></div>
+          <div class="grid music-grid">
+            <div class="card"><span class="pill ok">Cinematic</span><strong style="font-size:18px;">Epic Journey</strong><p class="tiny">02:16 · 128 kbps</p><audio controls style="width:100%;margin-top:12px;"></audio><button class="btn primary" style="margin-top:10px;width:100%;">Gắn vào dự án</button></div>
+            <div class="card"><span class="pill">Happy</span><strong style="font-size:18px;">Bright Morning</strong><p class="tiny">01:42 · 128 kbps</p><audio controls style="width:100%;margin-top:12px;"></audio><button class="btn" style="margin-top:10px;width:100%;">Gắn vào dự án</button></div>
+            <div class="card"><span class="pill warn">Dramatic</span><strong style="font-size:18px;">Tension Rise</strong><p class="tiny">01:58 · 128 kbps</p><audio controls style="width:100%;margin-top:12px;"></audio><button class="btn" style="margin-top:10px;width:100%;">Gắn vào dự án</button></div>
+          </div>
+          <div class="panel" style="margin-top:14px;"><div class="panel-head"><h3>Cài đặt nhạc nền</h3></div><div class="panel-body grid" style="grid-template-columns:repeat(4,minmax(0,1fr));"><div><label>Âm lượng</label><input type="range" value="25" /></div><div><label>Fade in</label><input value="1.5 giây" /></div><div><label>Fade out</label><input value="2 giây" /></div><label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" checked /> Auto ducking</label></div></div>
+        </section>
+
+        <section class="page" id="templates">
+          <div class="page-head"><div><h2>Mẫu video</h2><p class="muted">Chọn template để tự điền tỷ lệ, font, subtitle, transition, nhạc và cấu trúc kịch bản.</p></div><div class="top-actions"><button class="btn">9:16</button><button class="btn">16:9</button><button class="btn">1:1</button></div></div>
+          <div class="grid screen-cards">
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#7c2d12,#1e1b4b);"><h3>Review phim</h3></div><div class="panel-body"><p class="tiny">Hook mạnh · 6 scene · subtitle nổi bật</p><button class="btn primary" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#065f46,#1e293b);"><h3>Video bán hàng</h3></div><div class="panel-body"><p class="tiny">Nêu vấn đề · lợi ích · CTA</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#1d4ed8,#111827);"><h3>Tin tức nhanh</h3></div><div class="panel-body"><p class="tiny">Headline · dữ kiện · kết luận</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#581c87,#0f172a);"><h3>Top 5</h3></div><div class="panel-body"><p class="tiny">Countdown · hiệu ứng số · nhạc nhanh</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#164e63,#713f12);"><h3>Kiến thức</h3></div><div class="panel-body"><p class="tiny">Giải thích · ví dụ · tổng kết</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+            <div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#be123c,#312e81);"><h3>Drama kể chuyện</h3></div><div class="panel-body"><p class="tiny">Hook tò mò · cao trào · twist</p><button class="btn" style="width:100%;margin-top:12px;">Dùng mẫu</button></div></div>
+          </div>
+          <div class="panel" style="margin-top:14px;"><div class="panel-head"><div><h3>Nguồn mẫu video</h3><p class="tiny">Mẫu không phải video tải ngẫu nhiên trên mạng; mỗi mẫu là cấu hình JSON có bản quyền rõ ràng.</p></div><span class="pill ok">4 nguồn</span></div><div class="panel-body"><div class="source-grid"><div class="source-card"><span class="pill">Built-in</span><strong>Mẫu hệ thống</strong><p class="tiny">Đội phát triển tự tạo JSON gồm scene, font, subtitle, transition, nhạc và tỷ lệ.</p></div><div class="source-card"><span class="pill">Community</span><strong>Mẫu cộng đồng</strong><p class="tiny">Người dùng chia sẻ mẫu của họ; cần cơ chế duyệt và báo cáo bản quyền.</p></div><div class="source-card"><span class="pill">AI</span><strong>AI tạo mẫu</strong><p class="tiny">Nhập chủ đề, AI sinh cấu trúc dựng mới dựa trên bộ thành phần có sẵn.</p></div><div class="source-card"><span class="pill">Licensed</span><strong>Kho tài nguyên cấp phép</strong><p class="tiny">Kết nối API stock media hoặc kho nội bộ; chỉ dùng tài nguyên cho phép tải và tái sử dụng.</p></div></div></div></div>
+        </section>
+
+        <section class="page" id="jobs">
+          <div class="page-head"><div><h2>Hàng đợi render</h2><p class="muted">Theo dõi toàn bộ job: voice, subtitle, ghép media, render và lỗi xử lý.</p></div><button class="btn">Làm mới</button></div>
+          <div class="panel"><div class="panel-head"><h3>Render jobs</h3><span class="pill warn">2 đang chạy</span></div><div class="panel-body">
+            <div class="job-row"><div><strong>Review Kung Fu Panda</strong><p class="tiny">Đang tạo subtitle và ghép scene</p></div><div class="bar"><span style="width:68%;"></span></div><span class="pill warn">68%</span><button class="btn">Hủy</button></div>
+            <div class="job-row"><div><strong>Top 5 công nghệ</strong><p class="tiny">Đang chờ GPU render</p></div><div class="bar"><span style="width:18%;"></span></div><span class="pill">Queued</span><button class="btn">Ưu tiên</button></div>
+            <div class="job-row"><div><strong>Video bán hàng Elmich</strong><p class="tiny">Hoàn thành lúc 09:32</p></div><div class="bar"><span style="width:100%;"></span></div><span class="pill ok">Done</span><button class="btn">Mở</button></div>
+            <div class="job-row"><div><strong>Tin tức AI hôm nay</strong><p class="tiny">FFmpeg lỗi codec đầu vào</p></div><div class="bar"><span style="width:41%;"></span></div><span class="pill" style="color:#fecdd3;">Failed</span><button class="btn">Chạy lại</button></div>
+          </div></div>
+        </section>
+
+        <section class="page" id="outputs">
+          <div class="page-head"><div><h2>Video đã xuất</h2><p class="muted">Kho kết quả: xem, tải xuống, xuất lại, sao chép dự án hoặc xóa.</p></div><div class="top-actions"><input class="search" placeholder="Tìm video đã xuất..." /><button class="btn">Bộ lọc</button></div></div>
+          <div class="grid output-grid">
+            <div class="panel"><div class="project-thumb" style="--art:linear-gradient(135deg,#7c2d12,#1e1b4b);"><footer><strong>Review Kung Fu Panda</strong><p class="tiny">1080p · 86 MB · hôm nay</p></footer></div><div class="panel-body top-actions"><button class="btn primary">Xem</button><button class="btn">Tải</button><button class="btn">•••</button></div></div>
+            <div class="panel"><div class="project-thumb" style="--art:linear-gradient(135deg,#065f46,#111827);"><footer><strong>Video bán hàng Elmich</strong><p class="tiny">1080p · 54 MB · hôm qua</p></footer></div><div class="panel-body top-actions"><button class="btn primary">Xem</button><button class="btn">Tải</button><button class="btn">•••</button></div></div>
+            <div class="panel"><div class="project-thumb" style="--art:linear-gradient(135deg,#1d4ed8,#581c87);"><footer><strong>Top 5 công nghệ</strong><p class="tiny">720p · 32 MB · 16/07</p></footer></div><div class="panel-body top-actions"><button class="btn primary">Xem</button><button class="btn">Tải</button><button class="btn">•••</button></div></div>
           </div>
         </section>
+
+        <section class="page" id="ai-settings">
+          <div class="page-head"><div><h2>Cài đặt AI và API</h2><p class="muted">Quản lý model viết kịch bản, TTS, FFmpeg, lưu trữ và giới hạn xử lý.</p></div><button class="btn primary">Lưu cấu hình</button></div>
+          <div class="grid dashboard-grid">
+            <div class="panel"><div class="panel-head"><h3>AI viết kịch bản</h3><span class="pill ok">Connected</span></div><div class="panel-body field-stack"><div><label>Nhà cung cấp</label><select><option>OpenAI</option><option>Google Gemini</option><option>Anthropic</option></select></div><div><label>Model</label><select><option>GPT-5</option><option>GPT-4.1</option></select></div><div><label>API key</label><input type="password" value="sk-••••••••••••" /></div><div><label>Creativity</label><input type="range" min="0" max="100" value="60" /></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Text-to-Speech</h3><span class="pill ok">Ready</span></div><div class="panel-body field-stack"><div><label>Nhà cung cấp</label><select><option>Edge TTS</option><option>OpenAI TTS</option><option>ElevenLabs</option></select></div><div><label>Giọng mặc định</label><select><option>Nam miền Bắc</option><option>Nữ miền Nam</option></select></div><div><label>Tốc độ mặc định</label><input type="range" min="50" max="150" value="100" /></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Render và lưu trữ</h3></div><div class="panel-body field-stack"><div><label>Đường dẫn FFmpeg</label><input value="ffmpeg" /></div><div><label>Thư mục output</label><input value="D:\AI_Video_Studio_Output" /></div><div><label>Chế độ lưu</label><select><option>Local server</option><option>Cloud storage</option><option>Tải trực tiếp về trình duyệt</option></select></div><div><label>Job song song</label><input type="number" value="2" min="1" max="10" /></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Kiểm tra kết nối</h3></div><div class="panel-body field-stack"><button class="btn">Test AI API</button><button class="btn">Test TTS</button><button class="btn">Test FFmpeg</button><button class="btn">Test quyền ghi thư mục</button><div class="empty" style="text-align:left;">AI API: OK<br/>TTS: OK<br/>FFmpeg: chưa kiểm tra<br/>Storage: có quyền ghi</div></div></div>
+          </div>
+        </section>
+
+        <section class="page" id="transitions"><div class="page-head"><div><h2>Transition Library</h2><p class="muted">Kéo hiệu ứng chuyển cảnh vào vị trí nối giữa hai clip.</p></div><button class="btn primary" data-page="timeline">Mở Timeline</button></div><div class="grid screen-cards"><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#1d4ed8,#581c87);"><h3>Fade</h3></div><div class="panel-body"><p class="tiny">Mềm, phù hợp hầu hết nội dung</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#f59e0b,#7c2d12);"><h3>Flash</h3></div><div class="panel-body"><p class="tiny">Nhanh, tạo điểm nhấn</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#0f766e,#1e3a8a);"><h3>Zoom</h3></div><div class="panel-body"><p class="tiny">Phóng vào cảnh tiếp theo</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#be123c,#312e81);"><h3>Slide</h3></div><div class="panel-body"><p class="tiny">Trượt ngang hoặc dọc</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#164e63,#713f12);"><h3>Blur</h3></div><div class="panel-body"><p class="tiny">Mờ chuyển động điện ảnh</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div><div class="panel template-card"><div class="template-cover" style="--art:linear-gradient(135deg,#7c3aed,#db2777);"><h3>Spin</h3></div><div class="panel-body"><p class="tiny">Xoay nhanh cho clip ngắn</p><button class="btn" style="width:100%;margin-top:10px;">Thêm vào timeline</button></div></div></div></section>
+
+        <section class="page" id="animations"><div class="page-head"><div><h2>Animation Library</h2><p class="muted">Animation cho text, ảnh, logo và video.</p></div><button class="btn primary" data-page="timeline">Áp dụng trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Text animation</h3></div><div class="panel-body field-stack"><button class="btn">Typewriter</button><button class="btn">Pop up</button><button class="btn">Slide up</button><button class="btn">Bounce</button><button class="btn">Karaoke highlight</button></div></div><div class="panel"><div class="panel-head"><h3>Image / Logo animation</h3></div><div class="panel-body field-stack"><button class="btn">Fade in</button><button class="btn">Zoom in</button><button class="btn">Pan left</button><button class="btn">Float</button><button class="btn">Pulse</button></div></div><div class="panel"><div class="panel-head"><h3>Video animation</h3></div><div class="panel-body field-stack"><button class="btn">Camera zoom</button><button class="btn">Shake</button><button class="btn">Speed ramp</button><button class="btn">Parallax</button><button class="btn">Ken Burns</button></div></div><div class="panel"><div class="panel-head"><h3>Cấu hình</h3></div><div class="panel-body field-stack"><div><label>Duration</label><input type="range" min="100" max="3000" value="600"></div><div><label>Easing</label><select><option>Ease out</option><option>Ease in</option><option>Linear</option><option>Bounce</option></select></div><button class="btn primary">Preview animation</button></div></div></div></section>
+
+        <section class="page" id="history"><div class="page-head"><div><h2>Lịch sử chỉnh sửa</h2><p class="muted">Theo dõi thao tác, hoàn tác và khôi phục phiên bản dự án.</p></div><div class="top-actions"><button class="btn">↶ Undo</button><button class="btn">↷ Redo</button><button class="btn primary">Tạo snapshot</button></div></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Hoạt động gần đây</h3></div><div class="panel-body"><div class="history-row"><div class="history-dot">1</div><div><strong>Thêm transition Fade Zoom</strong><p class="tiny">09:42 · Timeline</p></div><button class="btn">Khôi phục</button></div><div class="history-row"><div class="history-dot">2</div><div><strong>Chỉnh subtitle Scene 03</strong><p class="tiny">09:39 · Text</p></div><button class="btn">Khôi phục</button></div><div class="history-row"><div class="history-dot">3</div><div><strong>AI Auto Edit hoàn tất</strong><p class="tiny">09:35 · AI</p></div><button class="btn">Khôi phục</button></div><div class="history-row"><div class="history-dot">4</div><div><strong>Thêm nhạc Cinematic Rise</strong><p class="tiny">09:30 · Audio</p></div><button class="btn">Khôi phục</button></div></div></div><div class="panel"><div class="panel-head"><h3>Phiên bản đã lưu</h3></div><div class="panel-body field-stack"><div class="asset-row"><strong>V3 — Editor hoàn chỉnh</strong><p class="tiny">Hôm nay, 09:42 · hiện tại</p></div><div class="asset-row"><strong>V2 — Có voice và subtitle</strong><p class="tiny">Hôm nay, 09:10</p></div><div class="asset-row"><strong>V1 — Kịch bản ban đầu</strong><p class="tiny">Hôm qua, 22:18</p></div><button class="btn primary">Khôi phục phiên bản đã chọn</button></div></div></div></section>
+
+        <section class="page" id="account"><div class="page-head"><div><h2>Tài khoản và gói</h2><p class="muted">Thông tin đăng nhập, credits, dung lượng và giới hạn xử lý.</p></div><button class="btn primary">Nâng cấp gói</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3>Hồ sơ</h3><span class="pill ok">Đã xác minh</span></div><div class="panel-body field-stack"><div><label>Email</label><input value="khiempham5209@gmail.com" disabled></div><div><label>Tên hiển thị</label><input value="Khiem Pham"></div><div><label>Ngôn ngữ</label><select><option>Tiếng Việt</option><option>English</option></select></div><button class="btn">Lưu hồ sơ</button></div></div><div class="panel"><div class="panel-head"><h3>Gói hiện tại</h3><span class="pill">Personal</span></div><div class="panel-body field-stack"><div class="card"><span class="muted">Credits AI</span><strong>1,240</strong><span class="trend">Làm mới theo chu kỳ</span></div><div><label>Dung lượng</label><div class="bar"><span style="width:36%;"></span></div><p class="tiny" style="margin-top:7px;">18 GB / 50 GB</p></div><div><label>Render song song</label><input value="2 jobs" disabled></div><button class="btn primary">Quản lý gói</button></div></div></div></section>
 
         <section class="page" id="export">
           <div class="page-head">
@@ -2501,6 +2669,9 @@
         location.reload();
       });
 
+      $("#aiAutoEditButton")?.addEventListener("click", () => toast("Đã tạo bản dựng AI demo: ghép scene, voice, subtitle và nhạc nền."));
+      $$("#templates .btn").forEach((button) => button.addEventListener("click", () => { if (button.textContent.includes("Dùng mẫu")) { toast("Đã áp dụng template vào dự án đang chọn."); switchPage("create"); } }));
+
       (async function boot() {
         if (location.protocol === "file:") {
           $("#fileWarning").classList.add("show");
@@ -2528,6 +2699,22 @@
           showError(error);
         }
       })();
+      // Build V3 demo interactions
+      document.addEventListener("click", (event) => {
+        const clip = event.target.closest(".clip-v3");
+        if (clip) {
+          document.querySelectorAll(".clip-v3.selected").forEach((item) => item.classList.remove("selected"));
+          clip.classList.add("selected");
+          const badge = document.querySelector("#timeline .editor-inspector .pill");
+          if (badge) badge.textContent = clip.classList.contains("voice") || clip.classList.contains("music") || clip.classList.contains("sfx") ? "Audio" : clip.classList.contains("subtitle") || clip.classList.contains("text") ? "Text" : "Video";
+        }
+        const demoButton = event.target.closest("#transitions .btn, #animations .btn, #assets .btn, #history .btn");
+        if (demoButton && !demoButton.dataset.page) {
+          const toast = document.querySelector("#toast");
+          if (toast) { toast.textContent = `${demoButton.textContent.trim()} — thao tác demo đã được ghi nhận.`; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 1800); }
+        }
+      });
+
     </script>
   </body>
 </html>
