@@ -7,6 +7,7 @@ import { extname, join, resolve } from "node:path";
 import dotenv from "dotenv";
 import { generateScriptFromPrompt } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
+import { renderProjectTimeline } from "./render/timeline-renderer.js";
 import { findVoiceOption, VOICE_OPTIONS } from "./tts/voice-catalog.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
@@ -866,6 +867,71 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string, b
         status: "failed",
         error_message: message,
       });
+      updateRenderJob(jobId, {
+        status: "failed",
+        progress: 100,
+        current_step: "Failed",
+        error_message: message,
+        finished_at: new Date().toISOString(),
+      });
+    }
+  })();
+}
+
+function startTimelineRenderJob(projectId: string, jobId: string) {
+  void (async () => {
+    const project = getProject(projectId);
+    if (!project) return;
+    const isCancelled = () => getRenderJob(jobId)?.status === "cancelled";
+    try {
+      if (isCancelled()) return;
+      updateProject(projectId, { status: "rendering", error_message: null });
+      updateRenderJob(jobId, {
+        status: "running",
+        progress: 5,
+        current_step: "Chuẩn bị render timeline",
+        started_at: new Date().toISOString(),
+        error_message: null,
+      });
+
+      const baseFolder = toSlug(project.title || project.topic || "timeline");
+      const outputDir = resolve("output", `${baseFolder}-timeline-${timestampForPath()}`);
+      const aspect = (getUserSettings(project.owner_email).default_ratio as "16:9" | "9:16" | "1:1" | undefined) || "9:16";
+
+      const result = await renderProjectTimeline(
+        projectId,
+        outputDir,
+        aspect,
+        (asset) => localFileForRender(project.owner_email, projectId, asset.file_path, asset.file_name),
+        (step, progress) => {
+          if (isCancelled()) return;
+          updateRenderJob(jobId, { current_step: step, progress: Math.min(89, progress) });
+        },
+      );
+      if (isCancelled()) return;
+
+      const paths = await publishResultPaths(project.owner_email, projectId, {
+        outputDir: result.outputDir,
+        scriptJson: resolve(result.outputDir, "script.json"),
+        scriptText: resolve(result.outputDir, "script.txt"),
+        audio: result.audioPath,
+        subtitle: result.subtitlePath ?? resolve(result.outputDir, "subtitles", "subtitle.srt"),
+        video: result.videoPath,
+      });
+
+      updateProject(projectId, { status: "completed", output_path: paths.video });
+      updateRenderJob(jobId, {
+        status: "completed",
+        progress: 100,
+        current_step: "Hoàn tất",
+        output_dir: paths.outputDir,
+        video_path: paths.video,
+        audio_path: paths.audio,
+        finished_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      updateProject(projectId, { status: "failed", error_message: message });
       updateRenderJob(jobId, {
         status: "failed",
         progress: 100,
@@ -1769,6 +1835,31 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       }
       const deleted = deleteClip(clip.id);
       sendJson(res, 200, { ok: true, clip: deleted });
+      return;
+    }
+
+    const timelineRenderMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/timeline\/render$/);
+    if (req.method === "POST" && timelineRenderMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, timelineRenderMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const runningJob = getLatestJobForProject(project.id);
+      if (runningJob && (runningJob.status === "queued" || runningJob.status === "running")) {
+        sendJson(res, 409, { error: "Project already has a running job", job: runningJob });
+        return;
+      }
+      const clips = listClips(project.id);
+      if (clips.length === 0) {
+        sendJson(res, 400, { error: "Timeline is empty — add at least one clip before rendering" });
+        return;
+      }
+      const job = createRenderJob(project.id);
+      startTimelineRenderJob(project.id, job.id);
+      sendJson(res, 202, { ok: true, project, job });
       return;
     }
 
