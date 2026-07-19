@@ -126,8 +126,9 @@ Return ONLY valid JSON matching this exact structure:
 
 Scene rules:
 - Create ${minScenes} to ${maxScenes} scenes total: first scene type "hook", last scene type "outro", the rest type "body".
-- Total narration should be about ${minWords} to ${maxWords} Vietnamese words (target: this is spoken aloud and must take approximately ${targetDurationSec} seconds at a natural pace, about ${targetWords} words).
-- Each scene.voiceText must be a plain Vietnamese string, 1 to 2 sentences, no emoji, no URL, no markdown.
+- HARD REQUIREMENT: the sum of all scene.voiceText combined must be ${minWords} to ${maxWords} Vietnamese words — this is not a suggestion. Count as you write. A script that is shorter than ${minWords} words is a FAILED response, even if the topic feels "covered" — it is not a valid answer.
+- If the topic alone does not naturally have enough content, you MUST expand it yourself: add more concrete steps/details, examples, comparisons, tips, background context, or elaboration on each point, so the total reaches the required word count. Do not simply repeat the same idea in different words — add genuinely new, useful sub-points.
+- Each scene.voiceText must be a plain Vietnamese string, 2 to 4 sentences (longer per-scene text is expected for longer videos), no emoji, no URL, no markdown.
 - This is a review/commentary video. Do not recreate copyrighted dialogue, do not provide a scene-by-scene substitute for watching the movie, and keep the tone transformative: summary, opinion, themes, strengths, weaknesses, verdict.
 - If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.
 - Write numbers and symbols in voiceText as Vietnamese words when possible.
@@ -163,9 +164,13 @@ export async function generateScriptFromPrompt(
   const voiceSpeed = options.voiceSpeed ?? Number(process.env.TTS_SPEED ?? 1);
   const targetDurationSec = options.targetDurationSec && options.targetDurationSec > 0 ? options.targetDurationSec : 120;
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // Long requests (many minutes of narration) need headroom in the JSON response
+  // so Gemini isn't silently cut off mid-script.
+  const maxOutputTokens = Math.min(32768, Math.max(4096, Math.round(targetDurationSec * 40)));
   const result = await ai.models.generateContent({
     model: options.model ?? DEFAULT_MODEL,
     contents: buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec),
+    config: { maxOutputTokens },
   });
 
   const raw = normalizeGeneratedScript(extractJson(result.text ?? ""));

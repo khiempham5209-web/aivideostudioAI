@@ -595,15 +595,30 @@ async function loadPostgresIntoSqlite() {
   console.log(`Postgres metadata mirror enabled (${rows.projects.length} projects loaded).`);
 }
 
-try {
-  await loadPostgresIntoSqlite();
-} catch (error) {
-  console.error(
-    "Postgres mirror failed to initialize — continuing on local SQLite only. " +
-      "Data will NOT persist across restarts until this is fixed. " +
-      `Cause: ${error instanceof Error ? error.message : String(error)}`,
-  );
-  pgPool = null;
+// Neon/Render free-tier databases can "cold start" — the very first connection
+// attempt right after a period of inactivity can fail even though the DB is
+// fine a moment later. Retry a few times before giving up on Postgres, since
+// giving up too early looks like real data loss to the user.
+const PG_BOOT_RETRIES = 4;
+for (let attempt = 1; attempt <= PG_BOOT_RETRIES; attempt++) {
+  try {
+    await loadPostgresIntoSqlite();
+    break;
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    if (attempt < PG_BOOT_RETRIES) {
+      const delayMs = attempt * 1500;
+      console.warn(`Postgres mirror load failed (attempt ${attempt}/${PG_BOOT_RETRIES}), retrying in ${delayMs}ms. Cause: ${cause}`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    } else {
+      console.error(
+        "Postgres mirror failed to initialize after retries — continuing on local SQLite only. " +
+          "Data will NOT persist across restarts until this is fixed. " +
+          `Cause: ${cause}`,
+      );
+      pgPool = null;
+    }
+  }
 }
 
 function nowIso() {
