@@ -323,7 +323,7 @@ db.exec(`
 type DbRow = Record<string, string | number | null>;
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const pgPool = DATABASE_URL
+let pgPool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
       ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
@@ -332,173 +332,200 @@ const pgPool = DATABASE_URL
 let pgWriteQueue: Promise<void> = Promise.resolve();
 
 async function initPostgresMirror() {
-  if (!pgPool) return;
-  await pgPool.query(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      owner_email TEXT NOT NULL DEFAULT 'local@device',
-      title TEXT NOT NULL,
-      topic TEXT NOT NULL,
-      status TEXT NOT NULL,
-      voice_id TEXT NOT NULL,
-      voice_name TEXT NOT NULL,
-      voice_speed DOUBLE PRECISION NOT NULL,
-      output_path TEXT,
-      error_message TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
+  const pool = pgPool;
+  if (!pool) return;
 
-    CREATE TABLE IF NOT EXISTS users (
-      email TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      picture TEXT,
-      provider TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
+  // Each statement runs (and fails) independently: a legacy/incompatible
+  // table left over from an older deploy must not roll back — and take
+  // down Postgres persistence for — every other unrelated table.
+  const steps: { label: string; sql: string }[] = [
+    {
+      label: "projects",
+      sql: `CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        owner_email TEXT NOT NULL DEFAULT 'local@device',
+        title TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        status TEXT NOT NULL,
+        voice_id TEXT NOT NULL,
+        voice_name TEXT NOT NULL,
+        voice_speed DOUBLE PRECISION NOT NULL,
+        output_path TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "users",
+      sql: `CREATE TABLE IF NOT EXISTS users (
+        email TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        picture TEXT,
+        provider TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "sessions",
+      sql: `CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "user_settings",
+      sql: `CREATE TABLE IF NOT EXISTS user_settings (
+        email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+        storage_quota_bytes BIGINT NOT NULL,
+        credits INTEGER NOT NULL,
+        default_language TEXT NOT NULL,
+        default_ratio TEXT NOT NULL,
+        default_quality TEXT NOT NULL,
+        theme TEXT NOT NULL DEFAULT 'dark',
+        ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1,
+        storage_mode TEXT NOT NULL DEFAULT 'server',
+        save_root TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "render_jobs",
+      sql: `CREATE TABLE IF NOT EXISTS render_jobs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        progress INTEGER NOT NULL,
+        current_step TEXT NOT NULL,
+        output_dir TEXT,
+        script_path TEXT,
+        video_path TEXT,
+        audio_path TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "assets",
+      sql: `CREATE TABLE IF NOT EXISTS assets (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size BIGINT NOT NULL,
+        duration DOUBLE PRECISION,
+        created_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "scenes",
+      sql: `CREATE TABLE IF NOT EXISTS scenes (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        scene_key TEXT NOT NULL,
+        scene_order INTEGER NOT NULL,
+        scene_type TEXT NOT NULL,
+        voice_text TEXT NOT NULL,
+        template_id TEXT NOT NULL,
+        source_asset_id TEXT,
+        source_start DOUBLE PRECISION,
+        source_end DOUBLE PRECISION,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "timeline_tracks",
+      sql: `CREATE TABLE IF NOT EXISTS timeline_tracks (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        track_type TEXT NOT NULL,
+        label TEXT NOT NULL,
+        track_order INTEGER NOT NULL,
+        muted INTEGER NOT NULL DEFAULT 0,
+        locked INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "timeline_clips",
+      sql: `CREATE TABLE IF NOT EXISTS timeline_clips (
+        id TEXT PRIMARY KEY,
+        track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        scene_id TEXT,
+        source_asset_id TEXT,
+        label TEXT NOT NULL,
+        text_content TEXT,
+        start_time DOUBLE PRECISION NOT NULL,
+        duration DOUBLE PRECISION NOT NULL,
+        trim_in DOUBLE PRECISION NOT NULL DEFAULT 0,
+        trim_out DOUBLE PRECISION NOT NULL DEFAULT 0,
+        pos_x DOUBLE PRECISION NOT NULL DEFAULT 0,
+        pos_y DOUBLE PRECISION NOT NULL DEFAULT 0,
+        scale DOUBLE PRECISION NOT NULL DEFAULT 100,
+        rotation DOUBLE PRECISION NOT NULL DEFAULT 0,
+        opacity DOUBLE PRECISION NOT NULL DEFAULT 100,
+        volume DOUBLE PRECISION NOT NULL DEFAULT 100,
+        speed DOUBLE PRECISION NOT NULL DEFAULT 1,
+        animation TEXT NOT NULL DEFAULT 'none',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    { label: "projects.owner_email", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device'` },
+    { label: "projects.voice_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_id TEXT NOT NULL DEFAULT 'vi-VN-HoaiMyNeural'` },
+    { label: "projects.voice_name", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_name TEXT NOT NULL DEFAULT 'Hoai My'` },
+    { label: "projects.voice_speed", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_speed DOUBLE PRECISION NOT NULL DEFAULT 1` },
+    { label: "projects.output_path", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS output_path TEXT` },
+    { label: "projects.error_message", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS error_message TEXT` },
+    { label: "user_settings.theme", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'dark'` },
+    { label: "user_settings.ui_scale", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1` },
+    { label: "user_settings.storage_mode", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server'` },
+    { label: "user_settings.save_root", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS save_root TEXT` },
+    { label: "render_jobs.script_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS script_path TEXT` },
+    { label: "render_jobs.video_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS video_path TEXT` },
+    { label: "render_jobs.audio_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT` },
+    { label: "assets.duration", sql: `ALTER TABLE assets ADD COLUMN IF NOT EXISTS duration DOUBLE PRECISION` },
+    { label: "scenes.source_asset_id", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_asset_id TEXT` },
+    { label: "scenes.source_start", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION` },
+    { label: "scenes.source_end", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION` },
+    { label: "idx_projects_owner_email", sql: `CREATE INDEX IF NOT EXISTS idx_projects_owner_email ON projects(owner_email)` },
+    { label: "idx_render_jobs_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id)` },
+    { label: "idx_assets_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id)` },
+    { label: "idx_scenes_project_id_order", sql: `CREATE INDEX IF NOT EXISTS idx_scenes_project_id_order ON scenes(project_id, scene_order)` },
+    { label: "idx_timeline_tracks_project_id_order", sql: `CREATE INDEX IF NOT EXISTS idx_timeline_tracks_project_id_order ON timeline_tracks(project_id, track_order)` },
+    { label: "idx_timeline_clips_track_id", sql: `CREATE INDEX IF NOT EXISTS idx_timeline_clips_track_id ON timeline_clips(track_id)` },
+    { label: "idx_timeline_clips_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_timeline_clips_project_id ON timeline_clips(project_id)` },
+  ];
 
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
-      expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS user_settings (
-      email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
-      storage_quota_bytes BIGINT NOT NULL,
-      credits INTEGER NOT NULL,
-      default_language TEXT NOT NULL,
-      default_ratio TEXT NOT NULL,
-      default_quality TEXT NOT NULL,
-      theme TEXT NOT NULL DEFAULT 'dark',
-      ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1,
-      storage_mode TEXT NOT NULL DEFAULT 'server',
-      save_root TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS render_jobs (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      status TEXT NOT NULL,
-      progress INTEGER NOT NULL,
-      current_step TEXT NOT NULL,
-      output_dir TEXT,
-      script_path TEXT,
-      video_path TEXT,
-      audio_path TEXT,
-      error_message TEXT,
-      started_at TEXT,
-      finished_at TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS assets (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      type TEXT NOT NULL,
-      file_name TEXT NOT NULL,
-      mime_type TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      file_size BIGINT NOT NULL,
-      duration DOUBLE PRECISION,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS scenes (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      scene_key TEXT NOT NULL,
-      scene_order INTEGER NOT NULL,
-      scene_type TEXT NOT NULL,
-      voice_text TEXT NOT NULL,
-      template_id TEXT NOT NULL,
-      source_asset_id TEXT,
-      source_start DOUBLE PRECISION,
-      source_end DOUBLE PRECISION,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS timeline_tracks (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      track_type TEXT NOT NULL,
-      label TEXT NOT NULL,
-      track_order INTEGER NOT NULL,
-      muted INTEGER NOT NULL DEFAULT 0,
-      locked INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS timeline_clips (
-      id TEXT PRIMARY KEY,
-      track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      scene_id TEXT,
-      source_asset_id TEXT,
-      label TEXT NOT NULL,
-      text_content TEXT,
-      start_time DOUBLE PRECISION NOT NULL,
-      duration DOUBLE PRECISION NOT NULL,
-      trim_in DOUBLE PRECISION NOT NULL DEFAULT 0,
-      trim_out DOUBLE PRECISION NOT NULL DEFAULT 0,
-      pos_x DOUBLE PRECISION NOT NULL DEFAULT 0,
-      pos_y DOUBLE PRECISION NOT NULL DEFAULT 0,
-      scale DOUBLE PRECISION NOT NULL DEFAULT 100,
-      rotation DOUBLE PRECISION NOT NULL DEFAULT 0,
-      opacity DOUBLE PRECISION NOT NULL DEFAULT 100,
-      volume DOUBLE PRECISION NOT NULL DEFAULT 100,
-      speed DOUBLE PRECISION NOT NULL DEFAULT 1,
-      animation TEXT NOT NULL DEFAULT 'none',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-  `);
-
-  await pgPool.query(`
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device';
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_id TEXT NOT NULL DEFAULT 'vi-VN-HoaiMyNeural';
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_name TEXT NOT NULL DEFAULT 'Hoai My';
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_speed DOUBLE PRECISION NOT NULL DEFAULT 1;
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS output_path TEXT;
-    ALTER TABLE projects ADD COLUMN IF NOT EXISTS error_message TEXT;
-
-    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'dark';
-    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1;
-    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server';
-    ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS save_root TEXT;
-
-    ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS script_path TEXT;
-    ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS video_path TEXT;
-    ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT;
-
-    ALTER TABLE assets ADD COLUMN IF NOT EXISTS duration DOUBLE PRECISION;
-
-    ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_asset_id TEXT;
-    ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION;
-    ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION;
-
-    CREATE INDEX IF NOT EXISTS idx_projects_owner_email ON projects(owner_email);
-    CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id);
-    CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id);
-    CREATE INDEX IF NOT EXISTS idx_scenes_project_id_order ON scenes(project_id, scene_order);
-    CREATE INDEX IF NOT EXISTS idx_timeline_tracks_project_id_order ON timeline_tracks(project_id, track_order);
-    CREATE INDEX IF NOT EXISTS idx_timeline_clips_track_id ON timeline_clips(track_id);
-    CREATE INDEX IF NOT EXISTS idx_timeline_clips_project_id ON timeline_clips(project_id);
-  `);
+  for (const step of steps) {
+    try {
+      await pool.query(step.sql);
+    } catch (error) {
+      console.warn(
+        `Postgres schema step "${step.label}" failed — skipping, other tables are unaffected. ` +
+          `Cause: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 }
 
 async function pgExec(sql: string, params: unknown[] = []) {
-  if (!pgPool) return;
+  const pool = pgPool;
+  if (!pool) return;
   pgWriteQueue = pgWriteQueue
-    .then(() => pgPool.query(sql, params).then(() => undefined))
+    .then(() => pool.query(sql, params).then(() => undefined))
     .catch((error) => {
       console.warn("Postgres mirror write failed:", error instanceof Error ? error.message : error);
     });
@@ -517,13 +544,25 @@ function mirrorUpsert(table: string, row: DbRow, conflictKey: string) {
 }
 
 async function loadPostgresIntoSqlite() {
-  if (!pgPool) return;
+  const pool = pgPool;
+  if (!pool) return;
   await initPostgresMirror();
   const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "timeline_tracks", "timeline_clips", "sessions"] as const;
-  const rows = Object.fromEntries(await Promise.all(tables.map(async (table) => [table, (await pgPool.query(`SELECT * FROM ${table}`)).rows]))) as Record<
-    (typeof tables)[number],
-    DbRow[]
-  >;
+  const rows = Object.fromEntries(
+    await Promise.all(
+      tables.map(async (table) => {
+        try {
+          return [table, (await pool.query(`SELECT * FROM ${table}`)).rows];
+        } catch (error) {
+          console.warn(
+            `Postgres table "${table}" unavailable — treating as empty. ` +
+              `Cause: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return [table, []];
+        }
+      }),
+    ),
+  ) as Record<(typeof tables)[number], DbRow[]>;
   db.exec(
     "DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM timeline_clips; DELETE FROM timeline_tracks; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM projects; DELETE FROM users;",
   );
@@ -546,7 +585,16 @@ async function loadPostgresIntoSqlite() {
   console.log(`Postgres metadata mirror enabled (${rows.projects.length} projects loaded).`);
 }
 
-await loadPostgresIntoSqlite();
+try {
+  await loadPostgresIntoSqlite();
+} catch (error) {
+  console.error(
+    "Postgres mirror failed to initialize — continuing on local SQLite only. " +
+      "Data will NOT persist across restarts until this is fixed. " +
+      `Cause: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  pgPool = null;
+}
 
 function nowIso() {
   return new Date().toISOString();
