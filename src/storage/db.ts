@@ -1216,12 +1216,59 @@ export function getStats(ownerEmail: string) {
     JOIN projects ON projects.id = assets.project_id
     WHERE projects.owner_email = ?
   `).get(ownerEmail) as { asset_bytes: number };
+
+  const now = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const last7 = new Date(now - 7 * oneDayMs).toISOString();
+  const prev7 = new Date(now - 14 * oneDayMs).toISOString();
+  const trendRows = db.prepare(`
+    SELECT
+      SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_week,
+      SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS last_week
+    FROM projects
+    WHERE owner_email = ?
+  `).get(last7, prev7, last7, ownerEmail) as { this_week: number | null; last_week: number | null };
+  const thisWeek = trendRows.this_week ?? 0;
+  const lastWeek = trendRows.last_week ?? 0;
+  const weeklyTrendPercent = lastWeek > 0
+    ? Math.round(((thisWeek - lastWeek) / lastWeek) * 1000) / 10
+    : thisWeek > 0
+      ? 100
+      : 0;
+
+  const jobOutcomeRows = db.prepare(`
+    SELECT
+      SUM(CASE WHEN render_jobs.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN render_jobs.status IN ('completed', 'failed', 'cancelled') THEN 1 ELSE 0 END) AS finished
+    FROM render_jobs
+    JOIN projects ON projects.id = render_jobs.project_id
+    WHERE projects.owner_email = ?
+  `).get(ownerEmail) as { completed: number | null; finished: number | null };
+  const finishedJobs = jobOutcomeRows.finished ?? 0;
+  const completionRate = finishedJobs > 0 ? Math.round(((jobOutcomeRows.completed ?? 0) / finishedJobs) * 1000) / 10 : null;
+
+  const dailyRows = db.prepare(`
+    SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS count
+    FROM projects
+    WHERE owner_email = ? AND created_at >= ?
+    GROUP BY day
+  `).all(ownerEmail, new Date(now - 6 * oneDayMs).toISOString()) as Array<{ day: string; count: number }>;
+  const dailyMap = new Map(dailyRows.map((row) => [row.day, row.count]));
+  const dailyProjectCounts = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now - (6 - i) * oneDayMs);
+    const key = d.toISOString().slice(0, 10);
+    return { day: key, count: dailyMap.get(key) ?? 0 };
+  });
+
   return {
     totalVideos: projectRows.total ?? 0,
     completedVideos: projectRows.completed ?? 0,
     renderingVideos: projectRows.rendering ?? 0,
     exports: exportRows.exports ?? 0,
     assetBytes: assetRows.asset_bytes ?? 0,
+    weeklyTrend: { thisWeek, lastWeek, percent: weeklyTrendPercent },
+    completionRate,
+    dailyProjectCounts,
   };
 }
 

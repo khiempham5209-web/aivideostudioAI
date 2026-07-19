@@ -976,6 +976,12 @@
     </style>
   </head>
   <body>
+    <div id="bootLoading" style="position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#070a10;">
+      <div style="text-align:center;">
+        <div style="font-size:32px;">▶</div>
+        <p class="muted" style="margin-top:12px;">Đang kiểm tra đăng nhập...</p>
+      </div>
+    </div>
     <section class="login-screen" id="loginScreen">
       <div class="login-card">
         <div class="brand">
@@ -1053,11 +1059,12 @@
         </nav>
         <div class="storage">
           <div style="display:flex;justify-content:space-between;gap:10px;">
-            <strong>Dung lượng sử dụng</strong>
+            <strong>Dung lượng trên server</strong>
             <span class="tiny" id="storageText">Đang đo...</span>
           </div>
           <div class="bar" style="margin-top:10px;"><span id="storageBar" style="width:0%;"></span></div>
-          <button class="btn" id="upgradeButton" style="width:100%;margin-top:12px;">Nâng cấp gói</button>
+          <p class="tiny" id="storageWarning" style="display:none;margin-top:8px;color:#facc15;">Sắp đầy dung lượng server — hãy tải video về máy ở màn "Video đã xuất" rồi xóa bớt để giải phóng chỗ.</p>
+          <button class="btn" id="storageSettingsButton" style="width:100%;margin-top:12px;">Cài đặt lưu trữ</button>
         </div>
       </aside>
 
@@ -1067,6 +1074,10 @@
           <div class="top-actions">
             <span class="chip credit" id="creditsText">Credits: chưa cấu hình</span>
             <span class="chip" id="serverChip">Đang kiểm tra server</span>
+            <div style="position:relative;display:inline-block;">
+              <button class="btn" id="notifBellButton" type="button" title="Thông báo">🔔<span id="notifBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#fb7185;color:#000;font-size:11px;font-weight:700;border-radius:999px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;"></span></button>
+              <div id="notifDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-height:380px;overflow:auto;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);"></div>
+            </div>
             <button class="btn" id="settingsButton">Cài đặt</button>
             <button class="btn" id="userButton">Chưa đăng nhập</button>
             <button class="btn" id="logoutButton">Đăng xuất</button>
@@ -1109,8 +1120,8 @@
           </div>
 
           <div class="grid metrics">
-            <div class="card"><span class="muted">Tổng video đã tạo</span><strong id="totalVideos">0</strong><span class="trend">+12% tuần này</span></div>
-            <div class="card"><span class="muted">Dung lượng sử dụng</span><strong id="storageUsed">0 B</strong><span class="trend" id="storageQuota">Đang đo quota</span></div>
+            <div class="card"><span class="muted">Tổng video đã tạo</span><strong id="totalVideos">0</strong><span class="trend" id="totalVideosTrend">Tuần này: -</span></div>
+            <div class="card"><span class="muted">Dung lượng trên server</span><strong id="storageUsed">0 B</strong><span class="trend" id="storageQuota">Đang đo quota</span></div>
             <div class="card"><span class="muted">Credits AI</span><strong id="creditsAi">-</strong><span class="trend">Chưa nối hệ thống billing</span></div>
             <div class="card"><span class="muted">Video đang render</span><strong id="renderingVideos">0</strong><span class="trend">Realtime job queue</span></div>
             <div class="card"><span class="muted">Video hoàn thành</span><strong id="doneVideos">0</strong><span class="trend">Sẵn sàng tải xuống</span></div>
@@ -1153,8 +1164,8 @@
             <form class="panel" id="projectForm">
               <div class="panel-head"><h3>Thông tin dự án</h3><span class="pill ok">Step 1</span></div>
               <div class="panel-body field-stack">
-                <div><label for="projectName">Tên dự án</label><input id="projectName" value="Review Kung Fu Panda" /></div>
-                <div><label for="prompt">Đề tài</label><textarea id="prompt">tạo video review phim Kung Fu Panda 3 trong khoảng hai phút, giọng kể chuyện cuốn hút, có nhận xét điểm hay điểm yếu và kết luận có đáng xem không</textarea></div>
+                <div><label for="projectName">Tên dự án</label><input id="projectName" placeholder="Ví dụ: Review phim Kung Fu Panda 3" /></div>
+                <div><label for="prompt">Đề tài</label><textarea id="prompt" placeholder="Ví dụ: tạo video review phim Kung Fu Panda 3 trong khoảng hai phút, giọng kể chuyện cuốn hút, có nhận xét điểm hay điểm yếu và kết luận có đáng xem không"></textarea></div>
                 <div><label for="language">Ngôn ngữ</label><select id="language"><option>Tiếng Việt</option><option>English</option><option>Tiếng Trung</option></select></div>
                 <div><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button">30s</button><button type="button">1 phút</button><button class="active" type="button">2 phút</button></div></div>
                 <div><label>Tỷ lệ video</label><div class="segmented" id="ratioPicker"><button type="button">16:9</button><button class="active" type="button">9:16</button><button type="button">1:1</button></div></div>
@@ -1313,7 +1324,7 @@
             <div class="panel">
               <div class="panel-head"><h3>Preview xuất video</h3><span class="pill">9:16</span></div>
               <div class="panel-body">
-                <div class="preview-frame" style="--art:linear-gradient(135deg,#171717,#713f12 45%,#1e1b4b);"><div style="z-index:1;text-align:center;"><h2>Review Kung Fu Panda</h2><p class="muted">MP4 · 1080p · H.264</p></div></div>
+                <div class="preview-frame" style="--art:linear-gradient(135deg,#171717,#713f12 45%,#1e1b4b);"><div style="z-index:1;text-align:center;"><h2>Chưa có video xuất</h2><p class="muted">Bấm "Xuất video" hoặc render ở Edit V3 để xem video thật ở đây.</p></div></div>
               </div>
             </div>
             <div class="panel">
@@ -1333,19 +1344,16 @@
 
         <section class="page" id="stats">
           <div class="page-head">
-            <div><h2>Thống kê</h2><p class="muted">Số video, dung lượng, lượt xuất video, biểu đồ ngày/tuần/tháng.</p></div>
-            <div class="segmented" style="width:280px;"><button>Ngày</button><button class="active">Tuần</button><button>Tháng</button></div>
+            <div><h2>Thống kê</h2><p class="muted">Số video, dung lượng, lượt xuất video — toàn bộ số liệu thật từ dữ liệu của bạn.</p></div>
           </div>
           <div class="grid metrics">
             <div class="card"><span class="muted">Số video</span><strong id="statVideo">0</strong><span class="trend">Tổng project</span></div>
-            <div class="card"><span class="muted">Dung lượng</span><strong id="statStorage">0 B</strong><span class="trend" id="statStorageTrend">Đo trực tiếp từ máy</span></div>
-            <div class="card"><span class="muted">Lượt xuất video</span><strong id="statExport">0</strong><span class="trend">Completed renders</span></div>
-            <div class="card"><span class="muted">Thời lượng watch</span><strong>01:03</strong><span class="trend">Demo analytics</span></div>
-            <div class="card"><span class="muted">Mobile/Desktop</span><strong>68/32</strong><span class="trend">Responsive usage</span></div>
-            <div class="card"><span class="muted">Tỷ lệ hoàn tất</span><strong>92%</strong><span class="trend">Render success</span></div>
+            <div class="card"><span class="muted">Dung lượng</span><strong id="statStorage">0 B</strong><span class="trend" id="statStorageTrend">Đo trên server</span></div>
+            <div class="card"><span class="muted">Lượt xuất video</span><strong id="statExport">0</strong><span class="trend">Render hoàn tất</span></div>
+            <div class="card"><span class="muted">Tỷ lệ render thành công</span><strong id="statCompletionRate">-</strong><span class="trend" id="statCompletionTrend">Chưa có job nào</span></div>
           </div>
           <div class="grid dashboard-grid" style="margin-top:14px;">
-            <div class="panel"><div class="panel-head"><h3>Biểu đồ ngày/tuần/tháng</h3></div><div class="panel-body"><div class="chart"><svg viewBox="0 0 600 240" preserveAspectRatio="none"><path d="M20 190 C80 120 120 160 170 104 C230 40 270 120 330 85 C390 55 430 160 500 78 C540 38 570 70 590 42" fill="none" stroke="#2dd4bf" stroke-width="4"/><path d="M20 210 C90 150 130 180 190 130 C260 90 320 150 360 115 C430 86 480 178 560 122" fill="none" stroke="#7c3aed" stroke-width="3" stroke-dasharray="8 8"/></svg></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Dự án tạo mới — 7 ngày gần đây</h3></div><div class="panel-body"><div class="chart" id="dailyProjectsChart"></div></div></div>
             <div class="panel"><div class="panel-head"><h3>Top video</h3></div><div class="panel-body"><table class="table"><thead><tr><th>Video</th><th>Xuất</th><th>Dung lượng</th></tr></thead><tbody id="statsRows"></tbody></table></div></div>
           </div>
         </section>
@@ -1648,16 +1656,29 @@
         $("#renderingVideos").textContent = rendering;
         $("#statVideo").textContent = total;
         $("#statExport").textContent = state.stats?.exports ?? completed;
+        if ($("#totalVideosTrend")) {
+          const trend = state.stats?.weeklyTrend;
+          $("#totalVideosTrend").textContent = trend
+            ? `Tuần này: ${trend.thisWeek} dự án mới (${trend.percent >= 0 ? "+" : ""}${trend.percent}% so tuần trước)`
+            : "Tuần này: -";
+        }
         $("#readyVoices").textContent = state.voices.filter((v) => v.status === "ready").length;
         if (state.stats?.storage) {
           const storage = state.stats.storage;
-          $("#storageText").textContent = `${storage.usedHuman} / ${storage.quotaHuman}`;
+          $("#storageText").textContent = `${storage.usedHuman} / ${storage.quotaHuman} (trên server)`;
           $("#storageUsed").textContent = storage.usedHuman;
           $("#statStorage").textContent = storage.usedHuman;
-          $("#storageQuota").textContent = `${storage.percent}% quota`;
-          $("#statStorageTrend").textContent = `${storage.usedBytes.toLocaleString("vi-VN")} bytes trên máy`;
+          $("#storageQuota").textContent = `${storage.percent}% quota server`;
+          $("#statStorageTrend").textContent = `${storage.usedBytes.toLocaleString("vi-VN")} bytes trên server (không phải máy bạn)`;
           $("#storageBar").style.width = `${Math.min(100, storage.percent)}%`;
+          if ($("#storageWarning")) $("#storageWarning").style.display = storage.percent >= 80 ? "block" : "none";
         }
+        if ($("#statCompletionRate")) {
+          const rate = state.stats?.completionRate;
+          $("#statCompletionRate").textContent = rate === null || rate === undefined ? "-" : `${rate}%`;
+          if ($("#statCompletionTrend")) $("#statCompletionTrend").textContent = rate === null || rate === undefined ? "Chưa có job nào" : "Trên tổng job đã hoàn tất/thất bại/hủy";
+        }
+        renderDailyProjectsChart();
         $("#creditsAi").textContent = "-";
         if (state.stats && typeof state.stats.credits === "number") {
           $("#creditsAi").textContent = String(state.stats.credits);
@@ -1682,6 +1703,23 @@
         $("#statsRows").innerHTML = list.length
           ? list.slice(0, 5).map((p) => `<tr><td>${p.title || "Untitled video"}</td><td>${p.status === "completed" ? "1" : "0"}</td><td>${p.output_path ? "Có file xuất" : "Chưa xuất"}</td></tr>`).join("")
           : '<tr><td colspan="3">Chưa có dữ liệu thống kê.</td></tr>';
+      }
+
+      function renderDailyProjectsChart() {
+        const box = $("#dailyProjectsChart");
+        if (!box) return;
+        const days = state.stats?.dailyProjectCounts;
+        if (!days || !days.length) { box.innerHTML = '<div class="empty">Chưa có dữ liệu.</div>'; return; }
+        const max = Math.max(1, ...days.map((d) => d.count));
+        box.innerHTML = `<div style="display:flex;align-items:flex-end;gap:10px;height:180px;">${days.map((d) => {
+          const h = Math.round((d.count / max) * 150);
+          const label = new Date(d.day).toLocaleDateString("vi-VN", { weekday: "short" });
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <span class="tiny">${d.count}</span>
+            <div style="width:100%;height:${Math.max(2, h)}px;background:linear-gradient(180deg,#2dd4bf,#0f766e);border-radius:4px 4px 0 0;"></div>
+            <span class="tiny">${label}</span>
+          </div>`;
+        }).join("")}</div>`;
       }
 
       function renderProjects() {
@@ -1751,22 +1789,6 @@
         $$(".voice").forEach((el) => el.classList.remove("selected"));
       }
 
-      function renderAssets(assets) {
-        $("#assetCount").textContent = `${assets.length} file`;
-        const rows = assets.map((a) => [a.type, a.file_name, a.file_path]);
-        $("#mediaGrid").innerHTML = "";
-        if (!rows.length) {
-          $("#mediaGrid").innerHTML = '<div class="empty">Chưa có media trong project này. Upload file để bắt đầu.</div>';
-          return;
-        }
-        rows.forEach((row, index) => {
-          const item = document.createElement("div");
-          item.className = "media-thumb";
-          item.style.setProperty("--art", art[index % art.length]);
-          item.innerHTML = `<footer><strong>${row[1]}</strong><p class="tiny">${row[0]} · ${row[2] || "demo tag"}</p></footer>`;
-          $("#mediaGrid").appendChild(item);
-        });
-      }
 
       function fileUrl(path) {
         return `/api/files?path=${encodeURIComponent(path)}`;
@@ -2771,6 +2793,7 @@
         state.jobs = data.jobs || [];
         renderJobs();
         renderOutputs();
+        renderNotifBell();
       }
 
       function renderJobs() {
@@ -2915,7 +2938,62 @@
             if (perm === "granted") new Notification(title, { body });
           });
         }
+        loadJobs().then(renderNotifBell).catch(() => {});
       }
+
+      const NOTIF_SEEN_KEY = "avs_notif_last_seen";
+      function notifLastSeen() {
+        return Number(localStorage.getItem(NOTIF_SEEN_KEY) || 0);
+      }
+      function notifUnreadJobs() {
+        const lastSeen = notifLastSeen();
+        return (state.jobs || [])
+          .filter((j) => ["completed", "failed", "cancelled"].includes(j.status))
+          .filter((j) => new Date(j.finished_at || j.updated_at).getTime() > lastSeen)
+          .sort((a, b) => new Date(b.finished_at || b.updated_at) - new Date(a.finished_at || a.updated_at));
+      }
+      function renderNotifBell() {
+        const unread = notifUnreadJobs();
+        const badge = $("#notifBadge");
+        if (badge) {
+          if (unread.length > 0) { badge.textContent = String(unread.length); badge.style.display = "block"; }
+          else badge.style.display = "none";
+        }
+        const dropdown = $("#notifDropdown");
+        if (!dropdown) return;
+        const recent = (state.jobs || [])
+          .filter((j) => ["completed", "failed", "cancelled"].includes(j.status))
+          .sort((a, b) => new Date(b.finished_at || b.updated_at) - new Date(a.finished_at || a.updated_at))
+          .slice(0, 10);
+        if (!recent.length) {
+          dropdown.innerHTML = '<div class="empty" style="padding:12px;">Chưa có thông báo nào.</div>';
+          return;
+        }
+        dropdown.innerHTML = `<div style="font-weight:600;padding:6px 8px;">Thông báo render</div>` + recent.map((j) => {
+          const statusLabel = j.status === "completed" ? "✅ Hoàn tất" : j.status === "failed" ? "❌ Lỗi" : "⏹ Đã hủy";
+          return `<div style="padding:8px;border-top:1px solid rgba(148,163,184,.15);"><strong>${j.project_title || "Dự án"}</strong><p class="tiny">${statusLabel} · ${formatDateTime(j.finished_at || j.updated_at)}</p></div>`;
+        }).join("");
+      }
+      function toggleNotifDropdown(forceOpen) {
+        const dropdown = $("#notifDropdown");
+        if (!dropdown) return;
+        const willOpen = forceOpen !== undefined ? forceOpen : dropdown.style.display === "none";
+        dropdown.style.display = willOpen ? "block" : "none";
+        if (willOpen) {
+          localStorage.setItem(NOTIF_SEEN_KEY, String(Date.now()));
+          renderNotifBell();
+        }
+      }
+      $("#notifBellButton")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleNotifDropdown();
+      });
+      document.addEventListener("click", (event) => {
+        const dropdown = $("#notifDropdown");
+        if (dropdown && dropdown.style.display === "block" && !dropdown.contains(event.target) && event.target.id !== "notifBellButton") {
+          toggleNotifDropdown(false);
+        }
+      });
 
       async function pollJob(jobId) {
         const previousStatus = state.currentJob?.status;
@@ -3015,11 +3093,9 @@
       $("#cancelSettingsButton").addEventListener("click", () => $("#settingsModal").classList.remove("show"));
       $("#settingsTheme").addEventListener("change", () => applyUiSettings({ theme: $("#settingsTheme").value, ui_scale: Number($("#settingsScale").value || 1) }));
       $("#settingsScale").addEventListener("input", () => applyUiSettings({ theme: $("#settingsTheme").value, ui_scale: Number($("#settingsScale").value || 1) }));
-      $("#upgradeButton").addEventListener("click", async () => {
+      $("#storageSettingsButton").addEventListener("click", async () => {
         await loadSettings().catch(showError);
-        $("#settingsQuota").value = String(Math.max(100, Number($("#settingsQuota").value || 50)));
         $("#settingsModal").classList.add("show");
-        toast("Tăng quota trong Cài đặt rồi bấm Lưu.");
       });
       $("#saveSettingsButton").addEventListener("click", async () => {
         await api("/api/settings", {
@@ -3607,32 +3683,35 @@
         if (location.protocol === "file:") {
           $("#fileWarning").classList.add("show");
           setServer(false, "Đang mở file://");
-          renderAssets([]);
+          renderAssetsRich([]);
           renderScenes([]);
           showLogin({ googleConfigured: true, devLoginEnabled: false });
+          $("#bootLoading")?.remove();
           return;
         }
         try {
-          await api("/health");
-          setServer(true, "Server online");
           const me = await api("/api/me");
+          setServer(true, "Server online");
           if (!me.authenticated) {
             showLogin(me);
+            $("#bootLoading")?.remove();
             return;
           }
           setUser(me.user);
           hideLogin();
-          await Promise.all([loadVoices(), loadProjects(), loadStats(), loadSettings()]);
+          $("#bootLoading")?.remove();
+          await Promise.all([loadVoices(), loadProjects(), loadStats(), loadSettings(), loadJobs().catch(() => {})]);
         } catch (error) {
           setServer(false, "Server offline");
-          renderAssets([]);
+          renderAssetsRich([]);
           renderScenes([]);
           showError(error);
+          $("#bootLoading")?.remove();
         }
       })();
       document.addEventListener("click", (event) => {
-        const demoButton = event.target.closest("#assets .btn");
-        if (demoButton && !demoButton.dataset.page) {
+        const demoButton = event.target.closest("[data-demo]");
+        if (demoButton) {
           const toast = document.querySelector("#toast");
           if (toast) { toast.textContent = `${demoButton.textContent.trim()} — chưa hỗ trợ, sẽ làm ở bản sau.`; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 1800); }
         }
