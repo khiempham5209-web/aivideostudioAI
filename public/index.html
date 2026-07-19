@@ -996,9 +996,9 @@
       @media(max-width:860px){.editor-shell{grid-template-columns:1fr;grid-template-areas:"stage" "inspector" "library"}.editor-library,.editor-stage,.editor-inspector{min-height:auto}.screen-cards,.output-grid,.music-grid{grid-template-columns:1fr}.job-row{grid-template-columns:1fr}}
 
       /* BUILD V3 — fixed shell, professional editor and extra workspaces */
-      html, body { width:100%; max-width:100%; overflow-x:hidden; }
-      .app { width:100%; max-width:100vw; overflow:hidden; }
-      .sidebar { overflow:hidden; min-height:100vh; }
+      body { width:100%; max-width:100%; }
+      .app { width:100%; max-width:100vw; }
+      .sidebar { min-height:100vh; }
       .sidebar .nav { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding-right:5px; scrollbar-width:thin; }
       .sidebar .storage { flex:0 0 auto; margin-top:0; }
       .main { width:100%; max-width:100%; overflow-x:hidden; }
@@ -1129,9 +1129,7 @@
           <button data-page="templates">Mẫu video</button>
           <button data-page="jobs">Hàng đợi render</button>
           <button data-page="outputs">Video đã xuất</button>
-          <button data-page="ai-settings">Cài đặt AI/API</button>
           <button data-page="history">Lịch sử chỉnh sửa</button>
-          <button data-page="account">Tài khoản & gói</button>
           <button data-page="export">Xuất video</button>
           <button data-page="stats">Thống kê</button>
         </nav>
@@ -1163,6 +1161,8 @@
               <button class="btn" id="profileButton" type="button" title="Tài khoản">👤</button>
               <div id="profileDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:200px;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);">
                 <div id="userButton" class="tiny" style="padding:6px 8px 10px;font-weight:700;color:var(--text);">Chưa đăng nhập</div>
+                <button class="btn" data-page="account" style="width:100%;margin-bottom:6px;">Tài khoản &amp; gói</button>
+                <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;">Cài đặt AI/API</button>
                 <button class="btn" id="logoutButton" style="width:100%;">Đăng xuất</button>
               </div>
             </div>
@@ -1184,9 +1184,7 @@
           <button data-page="templates">Mẫu</button>
           <button data-page="jobs">Jobs</button>
           <button data-page="outputs">Đã xuất</button>
-          <button data-page="ai-settings">AI/API</button>
           <button data-page="history">History</button>
-          <button data-page="account">Tài khoản</button>
           <button data-page="export">Xuất</button>
           <button data-page="stats">Thống kê</button>
         </nav>
@@ -1346,7 +1344,7 @@
           <div class="editor-shell">
             <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Kéo thả tài nguyên vào timeline</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body"><div class="library-tabs"><button class="btn active">Media</button><button class="btn">Text</button><button class="btn">Audio</button><button class="btn">FX</button></div><div class="editor-assets"><div class="editor-asset" style="background:linear-gradient(135deg,#1e3a8a,#111827);"><strong>Scene 01</strong><span class="tiny">Video · 12.4s</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#065f46,#111827);"><strong>Voice chính</strong><span class="tiny">MP3 · 1:58</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#7c2d12,#111827);"><strong>Ảnh bìa</strong><span class="tiny">PNG · 1080×1920</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#581c87,#111827);"><strong>Logo</strong><span class="tiny">Overlay</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#713f12,#111827);"><strong>Tiêu đề</strong><span class="tiny">Text preset</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#164e63,#111827);"><strong>Fade Zoom</strong><span class="tiny">Transition</span></div></div><div class="top-actions" style="margin-top:12px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button><button class="btn">+ Text</button></div><audio id="editorAssetAudioPreview" controls style="display:none;width:100%;margin-top:10px;"></audio></div></section>
             <section class="panel editor-stage"><div class="panel-head"><div><h3>Program Preview</h3><p class="tiny" id="editorAspectBadge">Canvas 9:16 · 1080×1920</p></div><span class="pill" id="editorPreviewStatus">Scene 02</span></div><div class="panel-body"><div class="editor-preview-wrap"><div class="editor-preview-canvas preview-frame" id="editorPreviewFrame" style="--art:linear-gradient(135deg,#172554,#581c87 52%,#7c2d12);"><div style="z-index:2;text-align:center;padding:24px;"><span class="pill">REVIEW</span><h2 style="margin-top:12px;">Hành trình của Chiến binh Rồng</h2><p class="muted" style="margin-top:8px;">Subtitle preview đang bật</p></div></div></div><div class="editor-controls"><button class="btn" id="previewSkipStartButton" type="button">⏮</button><button class="btn primary" id="previewPlayButton" type="button">▶</button><button class="btn" id="previewSkipEndButton" type="button">⏭</button><input id="timelinePlayheadSlider" type="range" min="0" max="120" value="0" style="flex:1;min-width:60px;"><span class="editor-time" id="timelinePlayheadLabel">00:00 / 00:00</span><div class="editor-controls-group"><button class="btn" id="previewFitButton" type="button" title="Đổi cách khớp khung hình">Fit</button><select id="previewAspectSelect" title="Đổi tỷ lệ khung hình"><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select><button class="btn" id="previewFullscreenButton" type="button" title="Xem toàn màn hình">⛶</button></div></div></div></section>
-            <section class="panel editor-inspector"><div class="panel-head"><div><h3>Inspector</h3><p class="tiny">Đổi thuộc tính theo clip đang chọn</p></div><span class="pill ok" id="clipInspectorBadge">Chưa chọn clip</span></div><div class="panel-body field-stack" id="clipInspectorPanel" style="display:none;"><audio id="clipInspectorAudioPreview" controls style="display:none;width:100%;margin-bottom:4px;"></audio><div><label>Scale <span id="clipScaleValue">100</span>%</label><input id="clipScale" type="range" min="10" max="200" value="100"></div><div><label>Rotation <span id="clipRotationValue">0</span>°</label><input id="clipRotation" type="range" min="-180" max="180" value="0"></div><div><label>Opacity <span id="clipOpacityValue">100</span>%</label><input id="clipOpacity" type="range" min="0" max="100" value="100"></div><div><label>Animation</label><select id="clipAnimation"><option value="none">Không</option><option value="fade-in">Fade in</option><option value="zoom-in">Zoom in</option><option value="slide-up">Slide up</option></select></div><div><label>Speed</label><div class="segmented" id="clipSpeedGroup"><button type="button" data-speed="0.5">0.5x</button><button type="button" class="active" data-speed="1">1x</button><button type="button" data-speed="2">2x</button></div></div><div><label>Volume <span id="clipVolumeValue">100</span>%</label><input id="clipVolume" type="range" min="0" max="150" value="100"></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>Trim start (giây)</label><input id="clipTrimStart" type="number" value="0" step="0.1"></div><div><label>Trim end (giây)</label><input id="clipTrimEnd" type="number" value="0" step="0.1"></div></div><button class="btn primary" id="applyClipInspectorButton" type="button">Áp dụng thay đổi</button><button class="btn" id="deleteClipInspectorButton" type="button">Xóa clip</button></div><div class="empty" id="clipInspectorEmpty">Chọn 1 clip trên timeline để chỉnh thuộc tính.</div></section>
+            <section class="panel editor-inspector"><div class="panel-head"><div><h3>Inspector</h3><p class="tiny">Đổi thuộc tính theo clip đang chọn</p></div><span class="pill ok" id="clipInspectorBadge">Chưa chọn clip</span></div><div class="panel-body field-stack" id="clipInspectorPanel" style="display:none;"><audio id="clipInspectorAudioPreview" controls style="display:none;width:100%;margin-bottom:4px;"></audio><div><label>Scale <span id="clipScaleValue">100</span>%</label><input id="clipScale" type="range" min="10" max="200" value="100"></div><div><label>Rotation <span id="clipRotationValue">0</span>°</label><input id="clipRotation" type="range" min="-180" max="180" value="0"></div><div><label>Opacity <span id="clipOpacityValue">100</span>%</label><input id="clipOpacity" type="range" min="0" max="100" value="100"></div><div><label>Animation</label><select id="clipAnimation"><option value="none">Không</option><option value="fade-in">Fade in</option><option value="zoom-in">Zoom in</option><option value="slide-up">Slide up</option></select></div><div><label>Speed</label><div class="segmented" id="clipSpeedGroup"><button type="button" data-speed="0.5">0.5x</button><button type="button" class="active" data-speed="1">1x</button><button type="button" data-speed="2">2x</button></div></div><div><label>Volume <span id="clipVolumeValue">100</span>%</label><input id="clipVolume" type="range" min="0" max="150" value="100"></div><div id="clipSubStyleGroup" style="display:none;"><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>Cỡ chữ phụ đề (px)</label><input id="clipSubFontSize" type="number" min="10" max="48" value="16"></div><div><label>Màu chữ</label><input id="clipSubColor" type="color" value="#ffffff" style="height:38px;padding:2px;"></div></div><div><label>Font chữ</label><select id="clipSubFontFamily"><option value="Segoe UI, Arial, sans-serif">Segoe UI (mặc định)</option><option value="Arial, sans-serif">Arial</option><option value="'Times New Roman', serif">Times New Roman</option><option value="'Courier New', monospace">Courier New</option><option value="Georgia, serif">Georgia</option><option value="Verdana, sans-serif">Verdana</option></select></div></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>Trim start (giây)</label><input id="clipTrimStart" type="number" value="0" step="0.1"></div><div><label>Trim end (giây)</label><input id="clipTrimEnd" type="number" value="0" step="0.1"></div></div><button class="btn primary" id="applyClipInspectorButton" type="button">Áp dụng thay đổi</button><button class="btn" id="deleteClipInspectorButton" type="button">Xóa clip</button></div><div class="empty" id="clipInspectorEmpty">Chọn 1 clip trên timeline để chỉnh thuộc tính.</div></section>
           </div>
           <div class="timeline-v3"><div class="timeline-inner" id="timelineV3Root"></div></div>
         </section>
@@ -1998,17 +1996,22 @@
         const textHtml = textClips.map((c) => `<div style="position:absolute;z-index:3;top:${50 + Number(c.pos_y || 0)}%;left:${50 + Number(c.pos_x || 0)}%;transform:translate(-50%,-50%) rotate(${Number(c.rotation || 0)}deg);color:#fff;font-weight:700;font-size:18px;text-shadow:0 2px 8px rgba(0,0,0,.6);opacity:${Number(c.opacity || 100) / 100};">${c.text_content || c.label}</div>`).join("");
         const subPosX = subtitleClip ? Number(subtitleClip.pos_x || 0) : 0;
         const subPosY = subtitleClip ? Number(subtitleClip.pos_y || 0) : 0;
-        const subScale = subtitleClip ? Number(subtitleClip.scale || 100) : 100;
-        const subtitleCorners = [
+        const subWidthPct = subtitleClip ? Math.min(92, Math.max(20, 70 * (Number(subtitleClip.scale || 100) / 100))) : 70;
+        const subFontSize = subtitleClip ? Number(subtitleClip.sub_font_size || 16) : 16;
+        const subColor = subtitleClip ? (subtitleClip.sub_color || "#ffffff") : "#ffffff";
+        const subFontFamily = subtitleClip ? (subtitleClip.sub_font_family || "Segoe UI, Arial, sans-serif") : "Segoe UI, Arial, sans-serif";
+        const subtitleHandles = [
           ["nw", "top:-7px;left:-7px;cursor:nwse-resize;"],
           ["ne", "top:-7px;right:-7px;cursor:nesw-resize;"],
           ["sw", "bottom:-7px;left:-7px;cursor:nesw-resize;"],
           ["se", "bottom:-7px;right:-7px;cursor:nwse-resize;"],
-        ].map(([corner, pos]) => `<span class="subtitle-resize-handle" data-corner="${corner}" title="Kéo để đổi tỷ lệ khung" style="position:absolute;${pos}width:12px;height:12px;border-radius:50%;background:#a855f7;border:2px solid #fff;"></span>`).join("");
-        const subtitleHtml = subtitleClip ? `<div id="programSubtitleBox" data-clip-id="${subtitleClip.id}" style="position:absolute;z-index:3;top:calc(88% + ${subPosY}px);left:calc(50% + ${subPosX}px);transform:translate(-50%,-50%) scale(${subScale / 100});max-width:88%;background:rgba(0,0,0,.55);color:#fff;padding:6px 14px;border-radius:8px;text-align:center;font-size:14px;cursor:move;user-select:none;">${subtitleClip.text_content || subtitleClip.label}${subtitleCorners}</div>` : "";
+          ["w", "top:50%;left:-7px;margin-top:-6px;cursor:ew-resize;"],
+          ["e", "top:50%;right:-7px;margin-top:-6px;cursor:ew-resize;"],
+        ].map(([corner, pos]) => `<span class="subtitle-resize-handle" data-corner="${corner}" title="Kéo để đổi độ rộng khung" style="position:absolute;${pos}width:12px;height:12px;border-radius:50%;background:#a855f7;border:2px solid #fff;"></span>`).join("");
+        const subtitleHtml = subtitleClip ? `<div id="programSubtitleBox" data-clip-id="${subtitleClip.id}" style="position:absolute;z-index:3;top:calc(88% + ${subPosY}px);left:calc(50% + ${subPosX}px);transform:translate(-50%,-50%);width:${subWidthPct}%;background:rgba(0,0,0,.55);color:${subColor};padding:6px 14px;border-radius:8px;text-align:center;font-size:${subFontSize}px;font-family:${subFontFamily};cursor:move;user-select:none;">${subtitleClip.text_content || subtitleClip.label}${subtitleHandles}</div>` : "";
         frame.innerHTML = mediaHtml + overlayHtml + textHtml + subtitleHtml;
         $("#editorInlineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
-        wireSubtitleDrag(frame, subtitleClip, subPosX, subPosY, subScale);
+        wireSubtitleDrag(frame, subtitleClip, subPosX, subPosY, Number(subtitleClip?.scale || 100));
         const videoEl = $("#programPreviewVideo");
         if (videoEl) {
           videoEl.addEventListener("loadedmetadata", () => { videoEl.currentTime = Number(videoEl.dataset.seek || 0); }, { once: true });
@@ -2086,9 +2089,10 @@
           document.addEventListener("pointerup", onUp);
         });
 
-        // Each corner handle resizes freely in any direction, anchored at the
-        // OPPOSITE corner (that corner's on-screen position stays fixed) —
-        // dragging any handle any direction grows/shrinks from that anchor.
+        // Frame height is auto (text wraps), so every handle — corner or edge —
+        // only ever adjusts WIDTH, anchored at the opposite side (that edge's
+        // on-screen X stays fixed). Vertical position (posY) never changes here,
+        // so resizing never moves/resets a position you already dragged into place.
         box.querySelectorAll(".subtitle-resize-handle").forEach((handleEl) => {
           handleEl.addEventListener("pointerdown", (downEvent) => {
             downEvent.preventDefault();
@@ -2096,32 +2100,23 @@
             const corner = handleEl.dataset.corner;
             const frameRect = frame.getBoundingClientRect();
             const startRect = box.getBoundingClientRect();
-            const anchorX = corner.includes("e") ? startRect.left : startRect.right;
-            const anchorY = corner.includes("s") ? startRect.top : startRect.bottom;
-            const draggedX = corner.includes("e") ? startRect.right : startRect.left;
-            const draggedY = corner.includes("s") ? startRect.bottom : startRect.top;
-            const startDist = Math.hypot(draggedX - anchorX, draggedY - anchorY) || 1;
-            const oldCenterX = (startRect.left + startRect.right) / 2;
-            const oldCenterY = (startRect.top + startRect.bottom) / 2;
+            const isWestHandle = corner.includes("w");
+            const anchorX = isWestHandle ? startRect.right : startRect.left;
             let posX = startPosX;
-            let posY = startPosY;
             let scale = startScale;
             const onMove = (moveEvent) => {
-              const dist = Math.hypot(moveEvent.clientX - anchorX, moveEvent.clientY - anchorY);
-              const ratio = dist / startDist;
-              scale = Math.min(220, Math.max(40, startScale * ratio));
-              const newCenterX = anchorX + (oldCenterX - anchorX) * ratio;
-              const newCenterY = anchorY + (oldCenterY - anchorY) * ratio;
+              const rawWidth = Math.abs(moveEvent.clientX - anchorX);
+              const newWidth = Math.min(frameRect.width * 0.92, Math.max(80, rawWidth));
+              const newCenterX = isWestHandle ? anchorX - newWidth / 2 : anchorX + newWidth / 2;
+              scale = Math.min(220, Math.max(30, (newWidth / frameRect.width / 0.7) * 100));
               posX = newCenterX - (frameRect.left + frameRect.width * 0.5);
-              posY = newCenterY - (frameRect.top + frameRect.height * 0.88);
               box.style.left = `calc(50% + ${posX}px)`;
-              box.style.top = `calc(88% + ${posY}px)`;
-              box.style.transform = `translate(-50%,-50%) scale(${scale / 100})`;
+              box.style.width = `${Math.min(92, Math.max(20, 70 * (scale / 100)))}%`;
             };
             const onUp = () => {
               document.removeEventListener("pointermove", onMove);
               document.removeEventListener("pointerup", onUp);
-              updateClipRemote(subtitleClip.id, { posX, posY, scale });
+              updateClipRemote(subtitleClip.id, { posX, scale });
             };
             document.addEventListener("pointermove", onMove);
             document.addEventListener("pointerup", onUp);
@@ -2210,6 +2205,15 @@
         $("#clipTrimStart").value = clip.trim_in;
         $("#clipTrimEnd").value = clip.trim_out;
         $$("#clipSpeedGroup button").forEach((btn) => btn.classList.toggle("active", Number(btn.dataset.speed) === Number(clip.speed)));
+        const subStyleGroup = $("#clipSubStyleGroup");
+        if (subStyleGroup) {
+          subStyleGroup.style.display = track?.track_type === "subtitle" ? "block" : "none";
+          if (track?.track_type === "subtitle") {
+            $("#clipSubFontSize").value = clip.sub_font_size || 16;
+            $("#clipSubColor").value = clip.sub_color || "#ffffff";
+            $("#clipSubFontFamily").value = clip.sub_font_family || "Segoe UI, Arial, sans-serif";
+          }
+        }
         const audioPreview = $("#clipInspectorAudioPreview");
         const asset = clip.source_asset_id ? state.assets.find((a) => a.id === clip.source_asset_id) : null;
         if (audioPreview) {
@@ -3382,7 +3386,10 @@
         });
       }
 
-      $$("[data-page]").forEach((btn) => btn.addEventListener("click", () => switchPage(btn.dataset.page)));
+      $$("[data-page]").forEach((btn) => btn.addEventListener("click", () => {
+        switchPage(btn.dataset.page);
+        if ($("#profileDropdown")) $("#profileDropdown").style.display = "none";
+      }));
       $$(".segmented, .quality").forEach((group) => group.addEventListener("click", (e) => {
         if (e.target.tagName !== "BUTTON") return;
         group.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
@@ -3948,6 +3955,9 @@
           volume: Number($("#clipVolume").value || 100),
           trimIn: Number($("#clipTrimStart").value || 0),
           trimOut: Number($("#clipTrimEnd").value || 0),
+          subFontSize: Number($("#clipSubFontSize").value || 16),
+          subColor: $("#clipSubColor").value,
+          subFontFamily: $("#clipSubFontFamily").value,
         }).then(() => toast("Đã áp dụng thay đổi clip."));
       });
       $("#deleteClipInspectorButton")?.addEventListener("click", deleteSelectedClip);

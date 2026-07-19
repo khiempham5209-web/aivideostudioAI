@@ -144,6 +144,9 @@ export interface TimelineClipRecord {
   volume: number;
   speed: number;
   animation: string;
+  sub_font_size: number;
+  sub_color: string;
+  sub_font_family: string;
   created_at: string;
   updated_at: string;
 }
@@ -297,6 +300,9 @@ db.exec(`
     volume REAL NOT NULL DEFAULT 100,
     speed REAL NOT NULL DEFAULT 1,
     animation TEXT NOT NULL DEFAULT 'none',
+    sub_font_size REAL NOT NULL DEFAULT 16,
+    sub_color TEXT NOT NULL DEFAULT '#ffffff',
+    sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(track_id) REFERENCES timeline_tracks(id),
@@ -312,6 +318,9 @@ for (const statement of [
   "ALTER TABLE user_settings ADD COLUMN ui_scale REAL NOT NULL DEFAULT 1",
   "ALTER TABLE user_settings ADD COLUMN storage_mode TEXT NOT NULL DEFAULT 'server'",
   "ALTER TABLE user_settings ADD COLUMN save_root TEXT",
+  "ALTER TABLE timeline_clips ADD COLUMN sub_font_size REAL NOT NULL DEFAULT 16",
+  "ALTER TABLE timeline_clips ADD COLUMN sub_color TEXT NOT NULL DEFAULT '#ffffff'",
+  "ALTER TABLE timeline_clips ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
 ]) {
   try {
     db.exec(statement);
@@ -487,6 +496,9 @@ async function initPostgresMirror() {
         volume DOUBLE PRECISION NOT NULL DEFAULT 100,
         speed DOUBLE PRECISION NOT NULL DEFAULT 1,
         animation TEXT NOT NULL DEFAULT 'none',
+        sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16,
+        sub_color TEXT NOT NULL DEFAULT '#ffffff',
+        sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -510,6 +522,9 @@ async function initPostgresMirror() {
     { label: "scenes.source_asset_id", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_asset_id TEXT` },
     { label: "scenes.source_start", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION` },
     { label: "scenes.source_end", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION` },
+    { label: "timeline_clips.sub_font_size", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16` },
+    { label: "timeline_clips.sub_color", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_color TEXT NOT NULL DEFAULT '#ffffff'` },
+    { label: "timeline_clips.sub_font_family", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'` },
     { label: "idx_projects_owner_email", sql: `CREATE INDEX IF NOT EXISTS idx_projects_owner_email ON projects(owner_email)` },
     { label: "idx_render_jobs_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id)` },
     { label: "idx_assets_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id)` },
@@ -1071,18 +1086,22 @@ export function createClip(data: {
     volume: 100,
     speed: 1,
     animation: "none",
+    sub_font_size: 16,
+    sub_color: "#ffffff",
+    sub_font_family: "Segoe UI, Arial, sans-serif",
     created_at: created,
     updated_at: created,
   };
   db.prepare(`
     INSERT INTO timeline_clips
     (id, track_id, project_id, scene_id, source_asset_id, label, text_content, start_time, duration, trim_in, trim_out,
-     pos_x, pos_y, scale, rotation, opacity, volume, speed, animation, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     pos_x, pos_y, scale, rotation, opacity, volume, speed, animation, sub_font_size, sub_color, sub_font_family, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.id, row.track_id, row.project_id, row.scene_id, row.source_asset_id, row.label, row.text_content,
     row.start_time, row.duration, row.trim_in, row.trim_out,
     row.pos_x, row.pos_y, row.scale, row.rotation, row.opacity, row.volume, row.speed, row.animation,
+    row.sub_font_size, row.sub_color, row.sub_font_family,
     row.created_at, row.updated_at,
   );
   mirrorUpsert("timeline_clips", row as unknown as DbRow, "id");
@@ -1110,6 +1129,9 @@ export function updateClip(
       | "speed"
       | "animation"
       | "source_asset_id"
+      | "sub_font_size"
+      | "sub_color"
+      | "sub_font_family"
     >
   >,
 ): TimelineClipRecord | undefined {
@@ -1120,11 +1142,13 @@ export function updateClip(
   db.prepare(`
     UPDATE timeline_clips
     SET track_id = ?, label = ?, text_content = ?, source_asset_id = ?, start_time = ?, duration = ?, trim_in = ?, trim_out = ?,
-        pos_x = ?, pos_y = ?, scale = ?, rotation = ?, opacity = ?, volume = ?, speed = ?, animation = ?, updated_at = ?
+        pos_x = ?, pos_y = ?, scale = ?, rotation = ?, opacity = ?, volume = ?, speed = ?, animation = ?,
+        sub_font_size = ?, sub_color = ?, sub_font_family = ?, updated_at = ?
     WHERE id = ?
   `).run(
     next.track_id, next.label, next.text_content, next.source_asset_id, next.start_time, next.duration, next.trim_in, next.trim_out,
-    next.pos_x, next.pos_y, next.scale, next.rotation, next.opacity, next.volume, next.speed, next.animation, next.updated_at,
+    next.pos_x, next.pos_y, next.scale, next.rotation, next.opacity, next.volume, next.speed, next.animation,
+    next.sub_font_size, next.sub_color, next.sub_font_family, next.updated_at,
     clipId,
   );
   mirrorUpsert("timeline_clips", next as unknown as DbRow, "id");

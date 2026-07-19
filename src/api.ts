@@ -1978,6 +1978,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         volume: numberField("volume"),
         speed: numberField("speed"),
         animation: stringField("animation"),
+        sub_font_size: numberField("subFontSize"),
+        sub_color: stringField("subColor"),
+        sub_font_family: stringField("subFontFamily"),
       });
       sendJson(res, 200, { ok: true, clip: updated });
       return;
