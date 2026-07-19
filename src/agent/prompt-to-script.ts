@@ -15,7 +15,7 @@ const CHANNEL_NAME = process.env.CHANNEL_NAME ?? "Khiempham AI";
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 const GeneratedScriptSchema = TemplateScriptSchema.extend({
-  scenes: TemplateScriptSchema.shape.scenes.min(6).max(10),
+  scenes: TemplateScriptSchema.shape.scenes.min(3).max(30),
 });
 
 export interface GenerateScriptOptions {
@@ -25,6 +25,8 @@ export interface GenerateScriptOptions {
   voiceProvider?: "edge" | "omnivoice";
   voiceName?: string;
   voiceSpeed?: number;
+  /** Target spoken duration in seconds — shapes requested word count and scene count. */
+  targetDurationSec?: number;
 }
 
 export interface GeneratedScriptResult {
@@ -93,7 +95,15 @@ function buildPrompt(
   voiceProvider: "edge" | "omnivoice",
   voiceName: string,
   voiceSpeed: number,
+  targetDurationSec: number,
 ): string {
+  // Vietnamese TTS at normal speed reads roughly 2.4-2.6 words/sec.
+  const targetWords = Math.round(targetDurationSec * 2.5);
+  const minWords = Math.max(60, Math.round(targetWords * 0.85));
+  const maxWords = Math.round(targetWords * 1.15);
+  const sceneCount = Math.min(30, Math.max(3, Math.round(targetDurationSec / 14)));
+  const minScenes = Math.max(3, sceneCount - 2);
+  const maxScenes = Math.min(30, sceneCount + 2);
   return `
 You create Vietnamese short review videos as JSON for an existing renderer.
 
@@ -115,8 +125,8 @@ Return ONLY valid JSON matching this exact structure:
 }
 
 Scene rules:
-- Create 6 to 10 scenes total: first scene type "hook", last scene type "outro", the rest type "body".
-- Total narration should be about 180 to 280 Vietnamese words.
+- Create ${minScenes} to ${maxScenes} scenes total: first scene type "hook", last scene type "outro", the rest type "body".
+- Total narration should be about ${minWords} to ${maxWords} Vietnamese words (target: this is spoken aloud and must take approximately ${targetDurationSec} seconds at a natural pace, about ${targetWords} words).
 - Each scene.voiceText must be a plain Vietnamese string, 1 to 2 sentences, no emoji, no URL, no markdown.
 - This is a review/commentary video. Do not recreate copyrighted dialogue, do not provide a scene-by-scene substitute for watching the movie, and keep the tone transformative: summary, opinion, themes, strengths, weaknesses, verdict.
 - If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.
@@ -151,10 +161,11 @@ export async function generateScriptFromPrompt(
   const voiceProvider = options.voiceProvider ?? "edge";
   const voiceName = options.voiceName ?? process.env.TTS_VOICE_NAME ?? "vi-VN-HoaiMyNeural";
   const voiceSpeed = options.voiceSpeed ?? Number(process.env.TTS_SPEED ?? 1);
+  const targetDurationSec = options.targetDurationSec && options.targetDurationSec > 0 ? options.targetDurationSec : 120;
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const result = await ai.models.generateContent({
     model: options.model ?? DEFAULT_MODEL,
-    contents: buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed),
+    contents: buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec),
   });
 
   const raw = normalizeGeneratedScript(extractJson(result.text ?? ""));

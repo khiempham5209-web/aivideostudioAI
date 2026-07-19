@@ -1167,7 +1167,7 @@
                 <div><label for="projectName">Tên dự án</label><input id="projectName" placeholder="Ví dụ: Review phim Kung Fu Panda 3" /></div>
                 <div><label for="prompt">Đề tài</label><textarea id="prompt" placeholder="Ví dụ: tạo video review phim Kung Fu Panda 3 trong khoảng hai phút, giọng kể chuyện cuốn hút, có nhận xét điểm hay điểm yếu và kết luận có đáng xem không"></textarea></div>
                 <div><label for="language">Ngôn ngữ</label><select id="language"><option>Tiếng Việt</option><option>English</option><option>Tiếng Trung</option></select></div>
-                <div><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button">30s</button><button type="button">1 phút</button><button class="active" type="button">2 phút</button></div></div>
+                <div><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button" data-sec="30">30s</button><button type="button" data-sec="60">1 phút</button><button class="active" type="button" data-sec="120">2 phút</button><button type="button" data-sec="180">3 phút</button><button type="button" data-sec="300">5 phút</button><button type="button" data-sec="custom">Tùy chỉnh</button></div><input id="durationCustomSec" type="number" min="10" max="1800" step="5" placeholder="Số giây (ví dụ 420 = 7 phút)" style="display:none;margin-top:8px;" /></div>
                 <div><label>Tỷ lệ video</label><div class="segmented" id="ratioPicker"><button type="button">16:9</button><button class="active" type="button">9:16</button><button type="button">1:1</button></div></div>
                 <div><label for="style">Phong cách</label><select id="style"><option>Review phim hài hước</option><option>Tin tức nhanh</option><option>Bán hàng</option><option>Giải thích giáo dục</option><option>Drama cuốn hút</option></select></div>
                 <button class="btn primary" id="createProjectButton" type="submit">AI Tạo Kịch Bản</button>
@@ -1260,8 +1260,8 @@
           </div>
           <div class="editor-shell">
             <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Kéo thả tài nguyên vào timeline</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body"><div class="library-tabs"><button class="btn active">Media</button><button class="btn">Text</button><button class="btn">Audio</button><button class="btn">FX</button></div><div class="editor-assets"><div class="editor-asset" style="background:linear-gradient(135deg,#1e3a8a,#111827);"><strong>Scene 01</strong><span class="tiny">Video · 12.4s</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#065f46,#111827);"><strong>Voice chính</strong><span class="tiny">MP3 · 1:58</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#7c2d12,#111827);"><strong>Ảnh bìa</strong><span class="tiny">PNG · 1080×1920</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#581c87,#111827);"><strong>Logo</strong><span class="tiny">Overlay</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#713f12,#111827);"><strong>Tiêu đề</strong><span class="tiny">Text preset</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#164e63,#111827);"><strong>Fade Zoom</strong><span class="tiny">Transition</span></div></div><div class="top-actions" style="margin-top:12px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button><button class="btn">+ Text</button></div></div></section>
-            <section class="panel editor-stage"><div class="panel-head"><div><h3>Program Preview</h3><p class="tiny">Canvas 9:16 · 1080×1920</p></div><span class="pill" id="editorPreviewStatus">Scene 02</span></div><div class="panel-body"><div class="editor-preview-wrap"><div class="editor-preview-canvas preview-frame" id="editorPreviewFrame" style="--art:linear-gradient(135deg,#172554,#581c87 52%,#7c2d12);"><div style="z-index:2;text-align:center;padding:24px;"><span class="pill">REVIEW</span><h2 style="margin-top:12px;">Hành trình của Chiến binh Rồng</h2><p class="muted" style="margin-top:8px;">Subtitle preview đang bật</p></div></div></div><div class="editor-controls"><button class="btn">⏮</button><button class="btn primary" id="previewPlayButton">▶</button><button class="btn">⏭</button><input id="timelinePlayheadSlider" type="range" min="0" max="120" value="0" style="flex:1;min-width:120px;"><span class="editor-time" id="timelinePlayheadLabel">00:00 / 00:00</span><button class="btn">Fit</button><button class="btn">9:16</button><button class="btn">⛶</button></div></div></section>
-            <section class="panel editor-inspector"><div class="panel-head"><div><h3>Inspector</h3><p class="tiny">Đổi thuộc tính theo clip đang chọn</p></div><span class="pill ok" id="clipInspectorBadge">Chưa chọn clip</span></div><div class="panel-body field-stack" id="clipInspectorPanel" style="display:none;"><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>X</label><input id="clipPosX" type="number" value="0"></div><div><label>Y</label><input id="clipPosY" type="number" value="0"></div></div><div><label>Scale <span id="clipScaleValue">100</span>%</label><input id="clipScale" type="range" min="10" max="200" value="100"></div><div><label>Rotation <span id="clipRotationValue">0</span>°</label><input id="clipRotation" type="range" min="-180" max="180" value="0"></div><div><label>Opacity <span id="clipOpacityValue">100</span>%</label><input id="clipOpacity" type="range" min="0" max="100" value="100"></div><div><label>Animation</label><select id="clipAnimation"><option value="none">Không</option><option value="fade-in">Fade in</option><option value="zoom-in">Zoom in</option><option value="slide-up">Slide up</option></select></div><div><label>Speed</label><div class="segmented" id="clipSpeedGroup"><button type="button" data-speed="0.5">0.5x</button><button type="button" class="active" data-speed="1">1x</button><button type="button" data-speed="2">2x</button></div></div><div><label>Volume <span id="clipVolumeValue">100</span>%</label><input id="clipVolume" type="range" min="0" max="150" value="100"></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>Trim start (giây)</label><input id="clipTrimStart" type="number" value="0" step="0.1"></div><div><label>Trim end (giây)</label><input id="clipTrimEnd" type="number" value="0" step="0.1"></div></div><button class="btn primary" id="applyClipInspectorButton" type="button">Áp dụng thay đổi</button><button class="btn" id="deleteClipInspectorButton" type="button">Xóa clip</button></div><div class="empty" id="clipInspectorEmpty">Chọn 1 clip trên timeline để chỉnh thuộc tính.</div></section>
+            <section class="panel editor-stage"><div class="panel-head"><div><h3>Program Preview</h3><p class="tiny" id="editorAspectBadge">Canvas 9:16 · 1080×1920</p></div><span class="pill" id="editorPreviewStatus">Scene 02</span></div><div class="panel-body"><div class="editor-preview-wrap"><div class="editor-preview-canvas preview-frame" id="editorPreviewFrame" style="--art:linear-gradient(135deg,#172554,#581c87 52%,#7c2d12);"><div style="z-index:2;text-align:center;padding:24px;"><span class="pill">REVIEW</span><h2 style="margin-top:12px;">Hành trình của Chiến binh Rồng</h2><p class="muted" style="margin-top:8px;">Subtitle preview đang bật</p></div></div></div><div class="editor-controls"><button class="btn" id="previewSkipStartButton" type="button">⏮</button><button class="btn primary" id="previewPlayButton" type="button">▶</button><button class="btn" id="previewSkipEndButton" type="button">⏭</button><input id="timelinePlayheadSlider" type="range" min="0" max="120" value="0" style="flex:1;min-width:120px;"><span class="editor-time" id="timelinePlayheadLabel">00:00 / 00:00</span><button class="btn" id="previewFitButton" type="button" title="Đổi cách khớp khung hình">Fit</button><button class="btn" id="previewAspectButton" type="button" title="Đổi tỷ lệ khung hình">9:16</button><button class="btn" id="previewFullscreenButton" type="button" title="Xem toàn màn hình">⛶</button></div></div></section>
+            <section class="panel editor-inspector"><div class="panel-head"><div><h3>Inspector</h3><p class="tiny">Đổi thuộc tính theo clip đang chọn</p></div><span class="pill ok" id="clipInspectorBadge">Chưa chọn clip</span></div><div class="panel-body field-stack" id="clipInspectorPanel" style="display:none;"><audio id="clipInspectorAudioPreview" controls style="display:none;width:100%;margin-bottom:4px;"></audio><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>X</label><input id="clipPosX" type="number" value="0"></div><div><label>Y</label><input id="clipPosY" type="number" value="0"></div></div><div><label>Scale <span id="clipScaleValue">100</span>%</label><input id="clipScale" type="range" min="10" max="200" value="100"></div><div><label>Rotation <span id="clipRotationValue">0</span>°</label><input id="clipRotation" type="range" min="-180" max="180" value="0"></div><div><label>Opacity <span id="clipOpacityValue">100</span>%</label><input id="clipOpacity" type="range" min="0" max="100" value="100"></div><div><label>Animation</label><select id="clipAnimation"><option value="none">Không</option><option value="fade-in">Fade in</option><option value="zoom-in">Zoom in</option><option value="slide-up">Slide up</option></select></div><div><label>Speed</label><div class="segmented" id="clipSpeedGroup"><button type="button" data-speed="0.5">0.5x</button><button type="button" class="active" data-speed="1">1x</button><button type="button" data-speed="2">2x</button></div></div><div><label>Volume <span id="clipVolumeValue">100</span>%</label><input id="clipVolume" type="range" min="0" max="150" value="100"></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div><label>Trim start (giây)</label><input id="clipTrimStart" type="number" value="0" step="0.1"></div><div><label>Trim end (giây)</label><input id="clipTrimEnd" type="number" value="0" step="0.1"></div></div><button class="btn primary" id="applyClipInspectorButton" type="button">Áp dụng thay đổi</button><button class="btn" id="deleteClipInspectorButton" type="button">Xóa clip</button></div><div class="empty" id="clipInspectorEmpty">Chọn 1 clip trên timeline để chỉnh thuộc tính.</div></section>
           </div>
           <div class="timeline-v3"><div class="timeline-inner" id="timelineV3Root"></div></div>
         </section>
@@ -1361,7 +1361,9 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [], assetCategory: "all", selectedAssetId: "" };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [], assetCategory: "all", selectedAssetId: "", previewFit: "contain" };
+      const ASPECT_CSS = { "16:9": "16/9", "9:16": "9/16", "1:1": "1/1" };
+      const ASPECT_PX = { "16:9": "1920×1080", "9:16": "1080×1920", "1:1": "1080×1080" };
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
       const labels = { female: "Nữ", male: "Nam", north: "Miền Bắc", central: "Miền Trung", south: "Miền Nam", neutral: "Trung tính", story: "Kể chuyện", news: "Tin tức", warm: "Ấm", dramatic: "Kịch tính", calm: "Trầm", sales: "Bán hàng", completed: "Hoàn thành", rendering: "Đang render", draft: "Bản nháp", failed: "Lỗi", ready: "Sẵn sàng" };
@@ -1627,8 +1629,22 @@
         return active ? active.textContent.trim() : (state.settings?.default_ratio || "9:16");
       }
 
+      function activeDurationSec() {
+        const active = $("#durationPicker .active");
+        if (!active) return 120;
+        if (active.dataset.sec === "custom") {
+          const custom = Number($("#durationCustomSec")?.value || 0);
+          return custom > 0 ? custom : 120;
+        }
+        return Number(active.dataset.sec) || 120;
+      }
+
       function activeDuration() {
         const active = $("#durationPicker .active");
+        if (active && active.dataset.sec === "custom") {
+          const sec = activeDurationSec();
+          return sec >= 60 ? `${(sec / 60).toFixed(sec % 60 === 0 ? 0 : 1)} phút` : `${sec}s`;
+        }
         return active ? active.textContent.trim() : "2 phút";
       }
 
@@ -1746,6 +1762,7 @@
         $("#scriptHook").textContent = `Đề tài: ${project.topic || ""}`;
         syncProjectControls();
         updateCreatePreview();
+        applyPreviewAspect();
         if (project.latestJob) setJob(project, project.latestJob);
         loadAssets(project.id).catch(showError);
         loadScenes(project.id).catch(showError);
@@ -1826,9 +1843,40 @@
         return (state.timelineClips || []).filter((c) => c.track_id === track.id && time >= c.start_time && time < c.start_time + c.duration);
       }
 
+      function applyPreviewAspect() {
+        const ratio = activeProject()?.aspect_ratio || "9:16";
+        const cssRatio = ASPECT_CSS[ratio] || "9/16";
+        ["#editorPreviewFrame", "#timelinePreviewFrame", "#exportPreviewFrame", "#dashboardPreviewFrame"].forEach((sel) => {
+          const el = $(sel);
+          if (el) el.style.aspectRatio = cssRatio;
+        });
+        if ($("#editorAspectBadge")) $("#editorAspectBadge").textContent = `Canvas ${ratio} · ${ASPECT_PX[ratio] || "1080×1920"}`;
+        if ($("#previewAspectButton")) $("#previewAspectButton").textContent = ratio;
+      }
+
+      async function cyclePreviewAspect() {
+        const project = activeProject();
+        if (!project) return toast("Hãy chọn dự án trước.");
+        const order = ["9:16", "16:9", "1:1"];
+        const next = order[(order.indexOf(project.aspect_ratio || "9:16") + 1) % order.length];
+        try {
+          const data = await api(`/api/projects/${project.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ratio: next }),
+          });
+          const idx = state.projects.findIndex((p) => p.id === project.id);
+          if (idx >= 0) state.projects[idx] = data.project;
+          applyPreviewAspect();
+          renderProgramPreviewAtPlayhead();
+          toast(`Đã đổi tỷ lệ khung hình sang ${next}. Render sẽ dùng đúng tỷ lệ này.`);
+        } catch (error) { showError(error); }
+      }
+
       function renderEditorPreview() {
         const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
         if (!frame) return;
+        applyPreviewAspect();
         if (!(state.timelineTracks || []).length) {
           const video = projectVideoAssets()[0];
           if ($("#editorPreviewStatus")) $("#editorPreviewStatus").textContent = video ? video.file_name : "Chưa có video";
@@ -1858,7 +1906,7 @@
           if (asset) {
             const seekTime = Math.max(0, t - videoClip.start_time + videoClip.trim_in);
             const transform = `translate(${Number(videoClip.pos_x || 0)}px, ${Number(videoClip.pos_y || 0)}px) scale(${Number(videoClip.scale || 100) / 100}) rotate(${Number(videoClip.rotation || 0)}deg)`;
-            mediaHtml = `<video id="programPreviewVideo" playsinline muted style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;opacity:${Number(videoClip.opacity || 100) / 100};transform:${transform};" data-seek="${seekTime}"><source src="${fileUrl(asset.file_path)}" /></video>`;
+            mediaHtml = `<video id="programPreviewVideo" playsinline muted style="position:relative;z-index:1;width:100%;height:100%;object-fit:${state.previewFit};background:#000;border-radius:8px;opacity:${Number(videoClip.opacity || 100) / 100};transform:${transform};" data-seek="${seekTime}"><source src="${fileUrl(asset.file_path)}" /></video>`;
           }
         }
         const overlayHtml = overlayClips.map((c) => {
@@ -1876,6 +1924,49 @@
           attachMediaErrorHandlers(frame);
         }
         if ($("#editorPreviewStatus")) $("#editorPreviewStatus").textContent = videoClip ? videoClip.label : "Chưa có video";
+        ["voice", "music", "sfx"].forEach((trackType) => syncTimelineAudioTrack(trackType, t));
+      }
+
+      const timelineAudioEls = {};
+      function getTimelineAudioEl(trackType) {
+        if (!timelineAudioEls[trackType]) {
+          const el = document.createElement("audio");
+          el.style.display = "none";
+          el.preload = "auto";
+          document.body.appendChild(el);
+          timelineAudioEls[trackType] = el;
+        }
+        return timelineAudioEls[trackType];
+      }
+
+      let timelineIsPlaying = false;
+      function syncTimelineAudioTrack(trackType, time) {
+        const el = getTimelineAudioEl(trackType);
+        const clip = activeClipsAtTime(trackType, time)[0];
+        const asset = clip?.source_asset_id ? state.assets.find((a) => a.id === clip.source_asset_id) : null;
+        if (!clip || !asset) {
+          if (!el.paused) el.pause();
+          el.dataset.clipId = "";
+          return;
+        }
+        const seekTime = Math.max(0, time - clip.start_time + Number(clip.trim_in || 0));
+        el.volume = Math.min(1, Math.max(0, Number(clip.volume || 100) / 100));
+        if (el.dataset.clipId !== clip.id) {
+          el.dataset.clipId = clip.id;
+          el.src = fileUrl(asset.file_path);
+          el.addEventListener("loadedmetadata", () => {
+            el.currentTime = seekTime;
+            if (timelineIsPlaying) el.play().catch(() => {});
+          }, { once: true });
+          return;
+        }
+        if (Math.abs(el.currentTime - seekTime) > 0.35) el.currentTime = seekTime;
+        if (timelineIsPlaying && el.paused) el.play().catch(() => {});
+        if (!timelineIsPlaying && !el.paused) el.pause();
+      }
+
+      function pauseAllTimelineAudio() {
+        Object.values(timelineAudioEls).forEach((el) => { if (!el.paused) el.pause(); });
       }
 
       function syncPlayheadUi() {
@@ -1889,11 +1980,14 @@
       function stopPreviewPlayback() {
         if (previewPlayRaf) cancelAnimationFrame(previewPlayRaf);
         previewPlayRaf = 0;
+        timelineIsPlaying = false;
+        pauseAllTimelineAudio();
         if ($("#previewPlayButton")) $("#previewPlayButton").textContent = "▶";
       }
       function startPreviewPlayback() {
         if (!(state.timelineTracks || []).length) return toast("Chưa có timeline để phát.");
         const duration = timelineDuration();
+        timelineIsPlaying = true;
         if ($("#previewPlayButton")) $("#previewPlayButton").textContent = "⏸";
         let last = performance.now();
         function tick(now) {
@@ -1930,16 +2024,6 @@
         return (state.timelineClips || []).find((c) => c.id === state.selectedClipId) || null;
       }
 
-      function previewAsset(asset) {
-        const frame = $("#editorPreviewFrame") || $("#timelinePreviewFrame");
-        if (!asset || !frame) return;
-        const url = fileUrl(asset.file_path);
-        frame.innerHTML = asset.type === "video"
-          ? `<video controls playsinline style="position:relative;z-index:1;width:100%;height:100%;object-fit:contain;background:#000;border-radius:8px;"><source src="${url}" /></video>`
-          : `<div style="position:relative;z-index:1;width:min(720px,90%);display:grid;gap:12px;"><strong>${asset.file_name}</strong><audio controls src="${url}" style="width:100%;"></audio></div>`;
-        attachMediaErrorHandlers(frame);
-      }
-
       function renderClipInspector() {
         const clip = selectedClip();
         const panel = $("#clipInspectorPanel");
@@ -1969,17 +2053,28 @@
         $("#clipTrimStart").value = clip.trim_in;
         $("#clipTrimEnd").value = clip.trim_out;
         $$("#clipSpeedGroup button").forEach((btn) => btn.classList.toggle("active", Number(btn.dataset.speed) === Number(clip.speed)));
+        const audioPreview = $("#clipInspectorAudioPreview");
+        const asset = clip.source_asset_id ? state.assets.find((a) => a.id === clip.source_asset_id) : null;
+        if (audioPreview) {
+          if (asset && asset.type === "audio") {
+            const url = fileUrl(asset.file_path);
+            if (audioPreview.dataset.assetId !== asset.id) {
+              audioPreview.src = url;
+              audioPreview.dataset.assetId = asset.id;
+            }
+            audioPreview.style.display = "block";
+          } else {
+            audioPreview.removeAttribute("src");
+            audioPreview.dataset.assetId = "";
+            audioPreview.style.display = "none";
+          }
+        }
       }
 
       function selectClip(clipId) {
         state.selectedClipId = clipId;
         $$(".clip-v3").forEach((el) => el.classList.toggle("selected", el.dataset.clipId === clipId));
         renderClipInspector();
-        const clip = selectedClip();
-        if (clip?.source_asset_id) {
-          const asset = state.assets.find((a) => a.id === clip.source_asset_id);
-          if (asset) previewAsset(asset);
-        }
       }
 
       async function updateClipRemote(clipId, payload) {
@@ -2658,6 +2753,7 @@
 
       function setJob(project, job) {
         state.currentJob = job;
+        applyPreviewAspect();
         $("#jobBadge").textContent = label(job.status);
         $("#jobBadge").className = `pill ${job.status === "completed" ? "ok" : "warn"}`;
         setProgress(job.progress || 0, job.current_step || label(job.status));
@@ -3067,8 +3163,13 @@
         if (e.target.tagName !== "BUTTON") return;
         group.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
         e.target.classList.add("active");
+        if (group.id === "durationPicker" && $("#durationCustomSec")) {
+          $("#durationCustomSec").style.display = e.target.dataset.sec === "custom" ? "block" : "none";
+          if (e.target.dataset.sec === "custom") $("#durationCustomSec").focus();
+        }
         updateCreatePreview();
       }));
+      $("#durationCustomSec")?.addEventListener("input", updateCreatePreview);
       ["projectName", "prompt", "language", "style"].forEach((id) => $(`#${id}`)?.addEventListener("input", updateCreatePreview));
       ["language", "style"].forEach((id) => $(`#${id}`)?.addEventListener("change", updateCreatePreview));
       ["genderFilter", "regionFilter", "toneFilter"].forEach((id) => $(`#${id}`).addEventListener("change", renderVoices));
@@ -3125,7 +3226,7 @@
           const data = await api("/api/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ projectName: $("#projectName").value, prompt: $("#prompt").value, voiceId: state.selectedVoiceId, voiceSpeed: Number($("#speed").value) }),
+            body: JSON.stringify({ projectName: $("#projectName").value, prompt: $("#prompt").value, voiceId: state.selectedVoiceId, voiceSpeed: Number($("#speed").value), ratio: activeRatio(), durationSec: activeDurationSec() }),
           });
           await loadProjects();
           await loadStats();
@@ -3637,6 +3738,32 @@
       $("#previewPlayButton")?.addEventListener("click", () => {
         if (previewPlayRaf) stopPreviewPlayback();
         else startPreviewPlayback();
+      });
+      $("#previewSkipStartButton")?.addEventListener("click", () => {
+        stopPreviewPlayback();
+        state.timelinePlayhead = 0;
+        if ($("#timelinePlayheadSlider")) $("#timelinePlayheadSlider").value = "0";
+        syncPlayheadUi();
+        renderProgramPreviewAtPlayhead();
+      });
+      $("#previewSkipEndButton")?.addEventListener("click", () => {
+        stopPreviewPlayback();
+        state.timelinePlayhead = timelineDuration();
+        if ($("#timelinePlayheadSlider")) $("#timelinePlayheadSlider").value = String(state.timelinePlayhead);
+        syncPlayheadUi();
+        renderProgramPreviewAtPlayhead();
+      });
+      $("#previewFitButton")?.addEventListener("click", () => {
+        state.previewFit = state.previewFit === "contain" ? "cover" : "contain";
+        toast(state.previewFit === "contain" ? "Hiện đủ khung hình (Fit)" : "Lấp đầy khung hình (Fill)");
+        renderProgramPreviewAtPlayhead();
+      });
+      $("#previewAspectButton")?.addEventListener("click", cyclePreviewAspect);
+      $("#previewFullscreenButton")?.addEventListener("click", () => {
+        const wrap = $(".editor-preview-wrap") || $("#editorPreviewFrame");
+        if (!wrap) return;
+        if (document.fullscreenElement) document.exitFullscreen();
+        else wrap.requestFullscreen?.().catch(() => toast("Trình duyệt không hỗ trợ toàn màn hình."));
       });
       $$(".add-transition-btn").forEach((button) => button.addEventListener("click", async () => {
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");

@@ -13,6 +13,7 @@ import { createTtsClient } from "./tts/tts-client.js";
 import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
+import { getDurationSec } from "./assets/audio-tools.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import {
   createProject,
@@ -97,6 +98,8 @@ interface CreateVideoBody {
   voiceName?: string;
   voiceSpeed?: number;
   folderName?: string;
+  ratio?: string;
+  durationSec?: number;
 }
 
 interface AuthUser {
@@ -456,6 +459,7 @@ async function handleUploadAsset(req: IncomingMessage, res: ServerResponse, proj
   const safeName = `${Date.now()}-${sanitizeFileName(file.fileName)}`;
   const filePath = join(targetDir, safeName);
   await writeFile(filePath, file.buffer);
+  const duration = type === "video" || type === "audio" ? await getDurationSec(filePath).catch(() => undefined) : undefined;
   const storedPath = isR2Configured()
     ? await uploadFileToR2(filePath, r2Key(user.email, projectId, folder, file.fileName), file.mimeType)
     : filePath;
@@ -466,6 +470,7 @@ async function handleUploadAsset(req: IncomingMessage, res: ServerResponse, proj
     mimeType: file.mimeType,
     filePath: storedPath,
     fileSize: file.buffer.length,
+    duration,
   });
   sendJson(res, 201, { ok: true, asset });
 }
@@ -544,6 +549,18 @@ async function handleConfirmDirectAssetUpload(req: IncomingMessage, res: ServerR
     }
   }
   const type = assetType(mimeType, fileName);
+  let duration: number | undefined;
+  if (type === "video" || type === "audio") {
+    const probePath = resolve(STORAGE_DIR, projectId, "r2-probe", `${Date.now()}-${sanitizeFileName(fileName)}`);
+    try {
+      await downloadR2ToFile(filePath, probePath);
+      duration = await getDurationSec(probePath);
+    } catch {
+      // Duration probe is best-effort — an upload should not fail because of it.
+    } finally {
+      await rm(probePath, { force: true }).catch(() => {});
+    }
+  }
   const asset = createAsset({
     projectId,
     type,
@@ -551,6 +568,7 @@ async function handleConfirmDirectAssetUpload(req: IncomingMessage, res: ServerR
     mimeType,
     filePath,
     fileSize,
+    duration,
   });
   sendJson(res, 201, { ok: true, asset });
 }
@@ -716,6 +734,7 @@ async function generateProjectScript(project: NonNullable<ReturnType<typeof getP
       voiceProvider: "edge",
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
+      targetDurationSec: project.target_duration_sec,
     });
     return { ...generated, usedFallback: false as const, fallbackReason: null as string | null };
   } catch (error) {
@@ -758,7 +777,7 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       channel: "AI Video Studio",
     },
     voice: { provider: "edge", name: project.voice_name || "vi-VN-HoaiMyNeural", speed: project.voice_speed || 1 },
-    aspect: getUserSettings(project.owner_email).default_ratio || "9:16",
+    aspect: project.aspect_ratio || "9:16",
     scenes: scriptScenes,
   };
   await mkdir(outputDir, { recursive: true });
@@ -904,7 +923,7 @@ function startTimelineRenderJob(projectId: string, jobId: string) {
 
       const baseFolder = toSlug(project.title || project.topic || "timeline");
       const outputDir = resolve("output", `${baseFolder}-timeline-${timestampForPath()}`);
-      const aspect = (getUserSettings(project.owner_email).default_ratio as "16:9" | "9:16" | "1:1" | undefined) || "9:16";
+      const aspect = (["16:9", "9:16", "1:1"].includes(project.aspect_ratio) ? project.aspect_ratio : "9:16") as "16:9" | "9:16" | "1:1";
 
       const result = await renderProjectTimeline(
         projectId,
@@ -980,6 +999,7 @@ function startAudioJob(projectId: string, jobId: string) {
       const audioInfo = await stat(localPaths.audio).catch(() => null);
       const paths = await publishResultPaths(project.owner_email, projectId, resultPaths(generated.outputDir));
       if (audioInfo?.isFile()) {
+        const duration = await getDurationSec(localPaths.audio).catch(() => undefined);
         createAsset({
           projectId,
           type: "audio",
@@ -987,6 +1007,7 @@ function startAudioJob(projectId: string, jobId: string) {
           mimeType: "audio/mpeg",
           filePath: paths.audio,
           fileSize: audioInfo.size,
+          duration,
         });
       }
       updateRenderJob(jobId, {
@@ -1066,12 +1087,16 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     });
     return;
   }
+  const ratio = typeof body.ratio === "string" && ["16:9", "9:16", "1:1"].includes(body.ratio) ? body.ratio : undefined;
+  const durationSec = Number(body.durationSec);
   const project = createProject({
     ownerEmail: user.email,
     topic: prompt,
     voiceId: selectedVoice.id,
     voiceName: selectedVoice.runtimeVoiceName,
     voiceSpeed: body.voiceSpeed ?? 1,
+    aspectRatio: ratio,
+    targetDurationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
   });
   if (body.projectName?.trim()) {
     updateProject(project.id, { title: body.projectName.trim() });
@@ -1683,12 +1708,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const selectedVoice = typeof (body as { voiceId?: unknown }).voiceId === "string"
         ? findVoiceOption((body as { voiceId: string }).voiceId)
         : undefined;
+      const ratio = typeof (body as { ratio?: unknown }).ratio === "string" && ["16:9", "9:16", "1:1"].includes((body as { ratio: string }).ratio)
+        ? (body as { ratio: string }).ratio
+        : undefined;
+      const durationSecRaw = Number((body as { durationSec?: unknown }).durationSec);
       updateProject(project.id, {
         title: typeof (body as { title?: unknown }).title === "string" ? (body as { title: string }).title.trim() : undefined,
         topic: typeof (body as { topic?: unknown }).topic === "string" ? (body as { topic: string }).topic.trim() : undefined,
         voice_id: selectedVoice?.status === "ready" ? selectedVoice.id : undefined,
         voice_name: selectedVoice?.status === "ready" ? selectedVoice.runtimeVoiceName : undefined,
         voice_speed: typeof (body as { voiceSpeed?: unknown }).voiceSpeed === "number" ? (body as { voiceSpeed: number }).voiceSpeed : undefined,
+        aspect_ratio: ratio,
+        target_duration_sec: Number.isFinite(durationSecRaw) && durationSecRaw > 0 ? Math.round(durationSecRaw) : undefined,
       });
       sendJson(res, 200, { ok: true, project: getProject(project.id) });
       return;

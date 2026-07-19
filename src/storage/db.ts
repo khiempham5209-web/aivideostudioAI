@@ -27,6 +27,8 @@ export interface ProjectRecord {
   voice_id: string;
   voice_name: string;
   voice_speed: number;
+  aspect_ratio: string;
+  target_duration_sec: number;
   output_path: string | null;
   error_message: string | null;
   created_at: string;
@@ -174,6 +176,8 @@ db.exec(`
     voice_id TEXT NOT NULL,
     voice_name TEXT NOT NULL,
     voice_speed REAL NOT NULL,
+    aspect_ratio TEXT NOT NULL DEFAULT '9:16',
+    target_duration_sec INTEGER NOT NULL DEFAULT 120,
     output_path TEXT,
     error_message TEXT,
     created_at TEXT NOT NULL,
@@ -302,6 +306,8 @@ db.exec(`
 
 for (const statement of [
   "ALTER TABLE projects ADD COLUMN owner_email TEXT NOT NULL DEFAULT 'local@device'",
+  "ALTER TABLE projects ADD COLUMN aspect_ratio TEXT NOT NULL DEFAULT '9:16'",
+  "ALTER TABLE projects ADD COLUMN target_duration_sec INTEGER NOT NULL DEFAULT 120",
   "ALTER TABLE user_settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'dark'",
   "ALTER TABLE user_settings ADD COLUMN ui_scale REAL NOT NULL DEFAULT 1",
   "ALTER TABLE user_settings ADD COLUMN storage_mode TEXT NOT NULL DEFAULT 'server'",
@@ -350,6 +356,8 @@ async function initPostgresMirror() {
         voice_id TEXT NOT NULL,
         voice_name TEXT NOT NULL,
         voice_speed DOUBLE PRECISION NOT NULL,
+        aspect_ratio TEXT NOT NULL DEFAULT '9:16',
+        target_duration_sec INTEGER NOT NULL DEFAULT 120,
         output_path TEXT,
         error_message TEXT,
         created_at TEXT NOT NULL,
@@ -484,6 +492,8 @@ async function initPostgresMirror() {
       )`,
     },
     { label: "projects.owner_email", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device'` },
+    { label: "projects.aspect_ratio", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS aspect_ratio TEXT NOT NULL DEFAULT '9:16'` },
+    { label: "projects.target_duration_sec", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS target_duration_sec INTEGER NOT NULL DEFAULT 120` },
     { label: "projects.voice_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_id TEXT NOT NULL DEFAULT 'vi-VN-HoaiMyNeural'` },
     { label: "projects.voice_name", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_name TEXT NOT NULL DEFAULT 'Hoai My'` },
     { label: "projects.voice_speed", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_speed DOUBLE PRECISION NOT NULL DEFAULT 1` },
@@ -610,6 +620,8 @@ export function createProject(data: {
   voiceId: string;
   voiceName: string;
   voiceSpeed: number;
+  aspectRatio?: string;
+  targetDurationSec?: number;
 }): ProjectRecord {
   const created = nowIso();
   const project: ProjectRecord = {
@@ -621,6 +633,8 @@ export function createProject(data: {
     voice_id: data.voiceId,
     voice_name: data.voiceName,
     voice_speed: data.voiceSpeed,
+    aspect_ratio: data.aspectRatio && ["16:9", "9:16", "1:1"].includes(data.aspectRatio) ? data.aspectRatio : "9:16",
+    target_duration_sec: data.targetDurationSec && data.targetDurationSec > 0 ? Math.round(data.targetDurationSec) : 120,
     output_path: null,
     error_message: null,
     created_at: created,
@@ -628,8 +642,8 @@ export function createProject(data: {
   };
   db.prepare(`
     INSERT INTO projects
-    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, output_path, error_message, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -639,6 +653,8 @@ export function createProject(data: {
     project.voice_id,
     project.voice_name,
     project.voice_speed,
+    project.aspect_ratio,
+    project.target_duration_sec,
     project.output_path,
     project.error_message,
     project.created_at,
@@ -1134,12 +1150,12 @@ export function deleteClipsForAsset(assetId: string) {
   void pgExec("DELETE FROM timeline_clips WHERE source_asset_id = $1", [assetId]);
 }
 
-export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "output_path" | "error_message">>) {
+export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "aspect_ratio" | "target_duration_sec" | "output_path" | "error_message">>) {
   const current = getProject(projectId);
   if (!current) return;
   db.prepare(`
     UPDATE projects
-    SET title = ?, topic = ?, status = ?, voice_id = ?, voice_name = ?, voice_speed = ?, output_path = ?, error_message = ?, updated_at = ?
+    SET title = ?, topic = ?, status = ?, voice_id = ?, voice_name = ?, voice_speed = ?, aspect_ratio = ?, target_duration_sec = ?, output_path = ?, error_message = ?, updated_at = ?
     WHERE id = ?
   `).run(
     data.title ?? current.title,
@@ -1148,6 +1164,8 @@ export function updateProject(projectId: string, data: Partial<Pick<ProjectRecor
     data.voice_id ?? current.voice_id,
     data.voice_name ?? current.voice_name,
     data.voice_speed ?? current.voice_speed,
+    data.aspect_ratio ?? current.aspect_ratio,
+    data.target_duration_sec ?? current.target_duration_sec,
     data.output_path ?? current.output_path,
     data.error_message ?? current.error_message,
     nowIso(),
