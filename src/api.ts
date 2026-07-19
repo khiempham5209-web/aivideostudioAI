@@ -1503,7 +1503,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         default_quality: typeof (body as { defaultQuality?: unknown }).defaultQuality === "string" ? (body as { defaultQuality: string }).defaultQuality : undefined,
         theme: typeof (body as { theme?: unknown }).theme === "string" ? (body as { theme: string }).theme : undefined,
         ui_scale: typeof (body as { uiScale?: unknown }).uiScale === "number"
-          ? Math.min(1.25, Math.max(0.85, (body as { uiScale: number }).uiScale))
+          ? Math.min(1.35, Math.max(0.8, (body as { uiScale: number }).uiScale))
           : undefined,
         storage_mode: typeof (body as { storageMode?: unknown }).storageMode === "string" ? (body as { storageMode: string }).storageMode : undefined,
         save_root: typeof (body as { saveRoot?: unknown }).saveRoot === "string"

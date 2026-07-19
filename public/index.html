@@ -462,6 +462,45 @@
 
       input[type="range"] {
         accent-color: var(--purple-2);
+        -webkit-appearance: none;
+        appearance: none;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.22);
+        cursor: pointer;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        height: 6px;
+        border-radius: 999px;
+        background: transparent;
+      }
+      input[type="range"]::-moz-range-track {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.22);
+      }
+      input[type="range"]::-moz-range-progress {
+        height: 6px;
+        border-radius: 999px;
+        background: var(--purple-2);
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        margin-top: -4px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid var(--purple-2);
+        cursor: pointer;
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid var(--purple-2);
+        cursor: pointer;
       }
 
       .field-stack {
@@ -926,12 +965,11 @@
         align-items:start;
       }
       .editor-stage { grid-area:stage; }
-      .editor-inspector { grid-area:inspector; }
-      .editor-library { grid-area:library; }
-      .editor-library,.editor-inspector { min-height:auto; }
+      .editor-inspector { grid-area:inspector; max-height:280px; overflow-y:auto; }
+      .editor-library { grid-area:library; max-height:280px; overflow-y:auto; }
       .editor-stage .panel-body { display:grid; gap:12px; }
-      .editor-preview-wrap { display:grid; place-items:center; min-height:320px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
-      .editor-preview-canvas { width:min(100%,520px); aspect-ratio:16/9; position:relative; display:grid; place-items:center; background:linear-gradient(135deg,#111827,#0f766e 48%,#581c87); }
+      .editor-preview-wrap { display:grid; place-items:center; height:420px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
+      .editor-preview-canvas { height:100%; width:auto; max-width:100%; aspect-ratio:16/9; position:relative; display:grid; place-items:center; background:linear-gradient(135deg,#111827,#0f766e 48%,#581c87); }
       .editor-controls { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
       .editor-controls-group { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0; }
       .editor-controls-group select { padding:0 8px; }
@@ -1110,7 +1148,10 @@
 
       <main class="main">
         <header class="topbar">
-          <input class="search" type="search" placeholder="Tìm dự án, media, voice, kịch bản..." />
+          <div id="headerSearchWrap" style="position:relative;flex:1;min-width:0;">
+            <input class="search" id="headerSearchInput" type="search" placeholder="Tìm dự án, media, voice, kịch bản..." autocomplete="off" style="width:100%;" />
+            <div id="headerSearchResults" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);max-height:360px;overflow:auto;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:6px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);"></div>
+          </div>
           <div class="top-actions">
             <span class="chip" id="serverChip">Đang kiểm tra server</span>
             <div style="position:relative;display:inline-block;">
@@ -1118,8 +1159,13 @@
               <div id="notifDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-height:380px;overflow:auto;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);"></div>
             </div>
             <button class="btn" id="settingsButton">Cài đặt</button>
-            <button class="btn" id="userButton">Chưa đăng nhập</button>
-            <button class="btn" id="logoutButton">Đăng xuất</button>
+            <div style="position:relative;display:inline-block;">
+              <button class="btn" id="profileButton" type="button" title="Tài khoản">👤</button>
+              <div id="profileDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:200px;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);">
+                <div id="userButton" class="tiny" style="padding:6px 8px 10px;font-weight:700;color:var(--text);">Chưa đăng nhập</div>
+                <button class="btn" id="logoutButton" style="width:100%;">Đăng xuất</button>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -1411,14 +1457,14 @@
 
       function ensureRuntimeControls() {
         if (!$("#activeProjectSelect")) {
-          $(".search").insertAdjacentHTML("afterend", `<select id="activeProjectSelect" class="search" style="width:min(360px,30vw);"><option value="">Chưa chọn dự án</option></select>`);
+          $("#headerSearchWrap").insertAdjacentHTML("afterend", `<select id="activeProjectSelect" class="search" style="width:min(360px,30vw);"><option value="">Chưa chọn dự án</option></select>`);
         }
         $("#renderButton").textContent = "Xuất video";
         const settingsBody = $("#settingsModal .panel-body");
         if (settingsBody && !$("#settingsTheme")) {
           settingsBody.insertAdjacentHTML("beforeend", `
             <div><label for="settingsTheme">Giao diện</label><select id="settingsTheme"><option value="dark">Tối</option><option value="light">Sáng</option></select></div>
-            <div><label for="settingsScale">Tỷ lệ hiển thị web</label><input id="settingsScale" type="range" min="0.85" max="1.25" step="0.05" value="1" /></div>
+            <div><label for="settingsScale">Cỡ chữ hiển thị web</label><select id="settingsScale"><option value="0.857">12px</option><option value="0.929">13px</option><option value="1" selected>14px (mặc định)</option><option value="1.071">15px</option><option value="1.143">16px</option><option value="1.214">17px</option><option value="1.286">18px</option></select></div>
             <div><label for="settingsStorageMode">Chế độ lưu file</label><select id="settingsStorageMode"><option value="server">Server/local app storage</option><option value="download">Browser download sau khi xuất</option></select><p class="tiny">Deploy web lưu trên server và tải về máy người dùng. Local app có thể mở thư mục output trên máy đang chạy server.</p></div>
             <div><label for="settingsSaveRoot">Thư mục lưu local/server</label><input id="settingsSaveRoot" placeholder="Ví dụ: D:\\AI_Video_Studio_Output" /></div>
           `);
@@ -1953,7 +1999,13 @@
         const subPosX = subtitleClip ? Number(subtitleClip.pos_x || 0) : 0;
         const subPosY = subtitleClip ? Number(subtitleClip.pos_y || 0) : 0;
         const subScale = subtitleClip ? Number(subtitleClip.scale || 100) : 100;
-        const subtitleHtml = subtitleClip ? `<div id="programSubtitleBox" data-clip-id="${subtitleClip.id}" style="position:absolute;z-index:3;bottom:${16 + subPosY}px;left:calc(50% + ${subPosX}px);transform:translateX(-50%) scale(${subScale / 100});max-width:88%;background:rgba(0,0,0,.55);color:#fff;padding:6px 14px;border-radius:8px;text-align:center;font-size:14px;cursor:move;user-select:none;">${subtitleClip.text_content || subtitleClip.label}<span id="programSubtitleResizeHandle" title="Kéo để đổi tỷ lệ" style="position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;border-radius:50%;background:#a855f7;border:2px solid #fff;cursor:nwse-resize;"></span></div>` : "";
+        const subtitleCorners = [
+          ["nw", "top:-7px;left:-7px;cursor:nwse-resize;"],
+          ["ne", "top:-7px;right:-7px;cursor:nesw-resize;"],
+          ["sw", "bottom:-7px;left:-7px;cursor:nesw-resize;"],
+          ["se", "bottom:-7px;right:-7px;cursor:nwse-resize;"],
+        ].map(([corner, pos]) => `<span class="subtitle-resize-handle" data-corner="${corner}" title="Kéo để đổi tỷ lệ khung" style="position:absolute;${pos}width:12px;height:12px;border-radius:50%;background:#a855f7;border:2px solid #fff;"></span>`).join("");
+        const subtitleHtml = subtitleClip ? `<div id="programSubtitleBox" data-clip-id="${subtitleClip.id}" style="position:absolute;z-index:3;top:calc(88% + ${subPosY}px);left:calc(50% + ${subPosX}px);transform:translate(-50%,-50%) scale(${subScale / 100});max-width:88%;background:rgba(0,0,0,.55);color:#fff;padding:6px 14px;border-radius:8px;text-align:center;font-size:14px;cursor:move;user-select:none;">${subtitleClip.text_content || subtitleClip.label}${subtitleCorners}</div>` : "";
         frame.innerHTML = mediaHtml + overlayHtml + textHtml + subtitleHtml;
         $("#editorInlineAddVideoButton")?.addEventListener("click", triggerVideoUpload);
         wireSubtitleDrag(frame, subtitleClip, subPosX, subPosY, subScale);
@@ -2011,40 +2063,70 @@
       function wireSubtitleDrag(frame, subtitleClip, startPosX, startPosY, startScale) {
         const box = frame.querySelector("#programSubtitleBox");
         if (!box || !subtitleClip) return;
-        const handle = box.querySelector("#programSubtitleResizeHandle");
 
-        const startDrag = (mode) => (downEvent) => {
+        box.addEventListener("pointerdown", (downEvent) => {
+          if (downEvent.target.closest(".subtitle-resize-handle")) return;
           downEvent.preventDefault();
-          downEvent.stopPropagation();
           const startX = downEvent.clientX;
           const startY = downEvent.clientY;
           let posX = startPosX;
           let posY = startPosY;
-          let scale = startScale;
           const onMove = (moveEvent) => {
-            const dx = moveEvent.clientX - startX;
-            const dy = moveEvent.clientY - startY;
-            if (mode === "move") {
-              posX = startPosX + dx;
-              posY = startPosY - dy;
-              box.style.left = `calc(50% + ${posX}px)`;
-              box.style.bottom = `${16 + posY}px`;
-            } else {
-              scale = Math.min(220, Math.max(50, startScale + dx * 0.6));
-              box.style.transform = `translateX(-50%) scale(${scale / 100})`;
-            }
+            posX = startPosX + (moveEvent.clientX - startX);
+            posY = startPosY + (moveEvent.clientY - startY);
+            box.style.left = `calc(50% + ${posX}px)`;
+            box.style.top = `calc(88% + ${posY}px)`;
           };
           const onUp = () => {
             document.removeEventListener("pointermove", onMove);
             document.removeEventListener("pointerup", onUp);
-            updateClipRemote(subtitleClip.id, { posX, posY, scale });
+            updateClipRemote(subtitleClip.id, { posX, posY });
           };
           document.addEventListener("pointermove", onMove);
           document.addEventListener("pointerup", onUp);
-        };
+        });
 
-        box.addEventListener("pointerdown", startDrag("move"));
-        handle?.addEventListener("pointerdown", startDrag("resize"));
+        // Each corner handle resizes freely in any direction, anchored at the
+        // OPPOSITE corner (that corner's on-screen position stays fixed) —
+        // dragging any handle any direction grows/shrinks from that anchor.
+        box.querySelectorAll(".subtitle-resize-handle").forEach((handleEl) => {
+          handleEl.addEventListener("pointerdown", (downEvent) => {
+            downEvent.preventDefault();
+            downEvent.stopPropagation();
+            const corner = handleEl.dataset.corner;
+            const frameRect = frame.getBoundingClientRect();
+            const startRect = box.getBoundingClientRect();
+            const anchorX = corner.includes("e") ? startRect.left : startRect.right;
+            const anchorY = corner.includes("s") ? startRect.top : startRect.bottom;
+            const draggedX = corner.includes("e") ? startRect.right : startRect.left;
+            const draggedY = corner.includes("s") ? startRect.bottom : startRect.top;
+            const startDist = Math.hypot(draggedX - anchorX, draggedY - anchorY) || 1;
+            const oldCenterX = (startRect.left + startRect.right) / 2;
+            const oldCenterY = (startRect.top + startRect.bottom) / 2;
+            let posX = startPosX;
+            let posY = startPosY;
+            let scale = startScale;
+            const onMove = (moveEvent) => {
+              const dist = Math.hypot(moveEvent.clientX - anchorX, moveEvent.clientY - anchorY);
+              const ratio = dist / startDist;
+              scale = Math.min(220, Math.max(40, startScale * ratio));
+              const newCenterX = anchorX + (oldCenterX - anchorX) * ratio;
+              const newCenterY = anchorY + (oldCenterY - anchorY) * ratio;
+              posX = newCenterX - (frameRect.left + frameRect.width * 0.5);
+              posY = newCenterY - (frameRect.top + frameRect.height * 0.88);
+              box.style.left = `calc(50% + ${posX}px)`;
+              box.style.top = `calc(88% + ${posY}px)`;
+              box.style.transform = `translate(-50%,-50%) scale(${scale / 100})`;
+            };
+            const onUp = () => {
+              document.removeEventListener("pointermove", onMove);
+              document.removeEventListener("pointerup", onUp);
+              updateClipRemote(subtitleClip.id, { posX, posY, scale });
+            };
+            document.addEventListener("pointermove", onMove);
+            document.addEventListener("pointerup", onUp);
+          });
+        });
       }
 
       function syncPlayheadUi() {
@@ -2541,6 +2623,17 @@
         document.addEventListener("mouseup", onUp);
       }
 
+      function splitSubtitleText(text) {
+        const sentences = (text || "").split(/(?<=[.!?…])\s+/).map((s) => s.trim()).filter(Boolean);
+        const chunks = [];
+        for (const sentence of sentences) {
+          if (sentence.length <= 70) { chunks.push(sentence); continue; }
+          const parts = sentence.split(/(?<=,)\s+/).map((s) => s.trim()).filter(Boolean);
+          chunks.push(...(parts.length ? parts : [sentence]));
+        }
+        return chunks.length ? chunks : [text || ""];
+      }
+
       async function runAiAutoEdit() {
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
         const videos = projectVideoAssets();
@@ -2583,15 +2676,21 @@
           }
           let subtitleCursor = 0;
           for (const [index, scene] of scenes.entries()) {
-            const duration = Math.max(2, Math.round((scene.voice_text || "").length / 14));
-            if (subtitleTrack) {
-              await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ trackId: subtitleTrack.id, sceneId: scene.id, label: `Scene ${index + 1}`, textContent: scene.voice_text, startTime: subtitleCursor, duration }),
-              });
+            const fullText = scene.voice_text || "";
+            const sceneDuration = Math.max(2, Math.round(fullText.length / 14));
+            const chunks = splitSubtitleText(fullText);
+            const totalChars = chunks.reduce((sum, c) => sum + c.length, 0) || 1;
+            for (const chunk of chunks) {
+              const chunkDuration = Math.max(1, Math.round((chunk.length / totalChars) * sceneDuration * 10) / 10);
+              if (subtitleTrack) {
+                await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ trackId: subtitleTrack.id, sceneId: scene.id, label: `Scene ${index + 1}`, textContent: chunk, startTime: Math.round(subtitleCursor * 10) / 10, duration: chunkDuration }),
+                });
+              }
+              subtitleCursor += chunkDuration;
             }
-            subtitleCursor += duration;
           }
           await loadTimeline(state.activeProjectId);
           toast("Đã tự động sắp xếp Video/Voice/Subtitle theo dữ liệu thật của dự án.");
@@ -3165,9 +3264,49 @@
           renderNotifBell();
         }
       }
+      function renderHeaderSearchResults(query) {
+        const box = $("#headerSearchResults");
+        if (!box) return;
+        const q = query.trim().toLowerCase();
+        if (!q) { box.style.display = "none"; box.innerHTML = ""; return; }
+        const matches = (state.projects || []).filter((p) =>
+          (p.title || "").toLowerCase().includes(q) || (p.topic || "").toLowerCase().includes(q)
+        ).slice(0, 8);
+        box.innerHTML = matches.length
+          ? matches.map((p) => `<button type="button" class="btn" data-project-id="${p.id}" style="width:100%;text-align:left;margin-bottom:4px;display:block;"><strong>${p.title || "Untitled video"}</strong><div class="tiny" style="margin-top:2px;">${(p.topic || "").slice(0, 80)}</div></button>`).join("")
+          : '<div class="empty" style="padding:10px;">Không tìm thấy dự án phù hợp.</div>';
+        box.querySelectorAll("[data-project-id]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const project = state.projects.find((p) => p.id === btn.dataset.projectId);
+            if (project) { selectProject(project); switchPage("script"); }
+            box.style.display = "none";
+            $("#headerSearchInput").value = "";
+          });
+        });
+        box.style.display = "block";
+      }
+      $("#headerSearchInput")?.addEventListener("input", (e) => renderHeaderSearchResults(e.target.value));
+      $("#headerSearchInput")?.addEventListener("focus", (e) => { if (e.target.value.trim()) renderHeaderSearchResults(e.target.value); });
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest("#headerSearchWrap")) {
+          const box = $("#headerSearchResults");
+          if (box) box.style.display = "none";
+        }
+      });
       $("#notifBellButton")?.addEventListener("click", (event) => {
         event.stopPropagation();
         toggleNotifDropdown();
+      });
+      $("#profileButton")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const dropdown = $("#profileDropdown");
+        if (dropdown) dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+      });
+      document.addEventListener("click", (event) => {
+        const dropdown = $("#profileDropdown");
+        if (dropdown && dropdown.style.display === "block" && !dropdown.contains(event.target) && event.target.id !== "profileButton") {
+          dropdown.style.display = "none";
+        }
       });
       document.addEventListener("click", (event) => {
         const dropdown = $("#notifDropdown");
