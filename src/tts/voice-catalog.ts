@@ -164,8 +164,27 @@ export const VOICE_OPTIONS: VoiceOption[] = [
   },
 ];
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { PIPER_VOICES_DIR } from "../utils/binaries.js";
+
+/** Piper voices are only "ready" on whichever instance actually downloaded
+ *  their model files (the desktop app's first-run setup) — the deployed
+ *  server never does (see scripts/install-edge-tts.mjs), so it should show
+ *  them as unavailable instead of offering a voice that will fail. */
+function effectiveStatus(voice: VoiceOption): VoiceStatus {
+  if (voice.provider !== "piper") return voice.status;
+  const modelPath = join(PIPER_VOICES_DIR, `${voice.name}.onnx`);
+  return existsSync(modelPath) ? voice.status : "needs-server";
+}
+
+export function getEffectiveVoiceOptions(): VoiceOption[] {
+  return VOICE_OPTIONS.map((voice) => ({ ...voice, status: effectiveStatus(voice) }));
+}
+
 export function findVoiceOption(idOrName?: string): VoiceOption {
-  const fallback = VOICE_OPTIONS[0];
+  const options = getEffectiveVoiceOptions();
+  const fallback = options[0];
   if (!idOrName) return fallback;
-  return VOICE_OPTIONS.find((voice) => voice.id === idOrName || voice.name === idOrName) ?? fallback;
+  return options.find((voice) => voice.id === idOrName || voice.name === idOrName) ?? fallback;
 }

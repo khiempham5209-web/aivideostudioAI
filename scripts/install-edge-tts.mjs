@@ -64,6 +64,17 @@ function findPython() {
 }
 
 function installPiperVoices() {
+  // Piper is a desktop-app-only feature (local CPU voices for the installed
+  // .exe) — it has no reason to run during a Render deploy, and doing so
+  // there added real risk: pip-installing piper-tts plus downloading 3
+  // voice models (15-90MB each, from Hugging Face) inside the production
+  // build step, which can slow down or outright break a deploy that
+  // previously had no such network dependency. Skip it outright in that
+  // environment; the desktop build's own first-run setup handles this.
+  if (process.env.RENDER || process.env.APP_ENV === "production") {
+    console.log("Skipping Piper voice setup (server/production environment — desktop-only feature).");
+    return;
+  }
   console.log("Ensuring piper-tts is installed");
   if (!run(pythonBin, ["-m", "pip", "install", "piper-tts"])) {
     console.error("Failed to install piper-tts — local Vietnamese voices will be unavailable.");

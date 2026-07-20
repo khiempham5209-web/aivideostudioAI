@@ -9,7 +9,7 @@ import dotenv from "dotenv";
 import { generateScriptFromPrompt } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
-import { findVoiceOption, VOICE_OPTIONS } from "./tts/voice-catalog.js";
+import { findVoiceOption, getEffectiveVoiceOptions } from "./tts/voice-catalog.js";
 import { createTtsClient } from "./tts/tts-client.js";
 import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
@@ -1587,9 +1587,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/voices") {
+      const effectiveVoices = getEffectiveVoiceOptions();
       sendJson(res, 200, {
-        voices: VOICE_OPTIONS,
-        defaultVoice: VOICE_OPTIONS[0].id,
+        voices: effectiveVoices,
+        defaultVoice: effectiveVoices[0].id,
         defaultSpeed: 1,
         readyProviders: ["edge"],
       });
@@ -1601,7 +1602,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       if (!user) return;
       const body = await readJsonBody(req);
       const voiceId = String((body as { voiceId?: unknown }).voiceId || "");
-      const voice = VOICE_OPTIONS.find((item) => item.id === voiceId);
+      const voice = getEffectiveVoiceOptions().find((item) => item.id === voiceId);
       if (!voice) {
         sendJson(res, 404, { error: "Voice not found" });
         return;
@@ -1767,7 +1768,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         r2Configured: isR2Configured(),
         databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
         databaseWriteHealth: getPgWriteHealth(),
-        readyVoices: VOICE_OPTIONS.filter((v) => v.status === "ready").map((v) => v.label),
+        readyVoices: getEffectiveVoiceOptions().filter((v) => v.status === "ready").map((v) => v.label),
       });
       return;
     }
@@ -1805,7 +1806,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
           return;
         }
         if (target === "tts") {
-          const voice = VOICE_OPTIONS.find((v) => v.status === "ready");
+          const voice = getEffectiveVoiceOptions().find((v) => v.status === "ready");
           if (!voice) {
             sendJson(res, 200, { ok: false, message: "Không có giọng nào ở trạng thái sẵn sàng." });
             return;
@@ -2495,7 +2496,7 @@ async function warmVoicePreviewCache() {
   const previewDir = resolve("storage", "voice-previews");
   await mkdir(previewDir, { recursive: true });
   const textHash = createHash("sha1").update(DEFAULT_VOICE_PREVIEW_TEXT).digest("hex").slice(0, 16);
-  for (const voice of VOICE_OPTIONS) {
+  for (const voice of getEffectiveVoiceOptions()) {
     if (voice.status !== "ready") continue;
     const previewPath = join(previewDir, `${voice.id}-1-${textHash}.mp3`);
     if (existsSync(previewPath)) continue;
