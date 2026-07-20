@@ -483,9 +483,16 @@ async function initPostgresMirror() {
     },
     {
       label: "timeline_tracks",
+      // No REFERENCES/FK here on purpose: on at least one deployed Neon DB, the
+      // pre-existing `projects` table's `id` column is incompatible in a way
+      // Postgres reports as "foreign key constraint cannot be implemented" —
+      // that permanently blocked CREATE TABLE for this table (every write then
+      // failed with "relation timeline_tracks does not exist"). App code already
+      // deletes clips before deleting a track/project, so the DB-level cascade
+      // was belt-and-suspenders, not load-bearing.
       sql: `CREATE TABLE IF NOT EXISTS timeline_tracks (
         id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL,
         track_type TEXT NOT NULL,
         label TEXT NOT NULL,
         track_order INTEGER NOT NULL,
@@ -504,10 +511,11 @@ async function initPostgresMirror() {
     },
     {
       label: "timeline_clips",
+      // Same reasoning as timeline_tracks above — no FK, app code handles cleanup.
       sql: `CREATE TABLE IF NOT EXISTS timeline_clips (
         id TEXT PRIMARY KEY,
-        track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
         scene_id TEXT,
         source_asset_id TEXT,
         label TEXT NOT NULL,
