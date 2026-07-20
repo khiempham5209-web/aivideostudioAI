@@ -581,13 +581,35 @@ async function initPostgresMirror() {
   }
 }
 
+let pgWriteFailureCount = 0;
+let pgWriteSuccessCount = 0;
+let pgLastWriteError: string | null = null;
+let pgLastWriteErrorAt: string | null = null;
+
+export function getPgWriteHealth() {
+  return {
+    configured: pgPool !== null,
+    successCount: pgWriteSuccessCount,
+    failureCount: pgWriteFailureCount,
+    lastError: pgLastWriteError,
+    lastErrorAt: pgLastWriteErrorAt,
+  };
+}
+
 async function pgExec(sql: string, params: unknown[] = []) {
   const pool = pgPool;
   if (!pool) return;
   pgWriteQueue = pgWriteQueue
-    .then(() => pool.query(sql, params).then(() => undefined))
+    .then(() =>
+      pool.query(sql, params).then(() => {
+        pgWriteSuccessCount++;
+      }),
+    )
     .catch((error) => {
-      console.warn("Postgres mirror write failed:", error instanceof Error ? error.message : error);
+      pgWriteFailureCount++;
+      pgLastWriteError = error instanceof Error ? error.message : String(error);
+      pgLastWriteErrorAt = new Date().toISOString();
+      console.warn("Postgres mirror write failed:", pgLastWriteError);
     });
   await pgWriteQueue;
 }

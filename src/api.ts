@@ -37,6 +37,7 @@ import {
   getLatestJobForProject,
   getProject,
   getStats,
+  getPgWriteHealth,
   getUserProject,
   getRenderJob,
   isUserFile,
@@ -1524,6 +1525,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         edgeTtsMode: process.env.EDGE_TTS_MODE === "edge-first" ? "edge-first" : "fallback-first",
         r2Configured: isR2Configured(),
         databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
+        databaseWriteHealth: getPgWriteHealth(),
         readyVoices: VOICE_OPTIONS.filter((v) => v.status === "ready").map((v) => v.label),
       });
       return;
