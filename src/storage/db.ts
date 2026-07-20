@@ -120,6 +120,13 @@ export interface TimelineTrackRecord {
   track_order: number;
   muted: number;
   locked: number;
+  sub_pos_x: number;
+  sub_pos_y: number;
+  sub_width_pct: number;
+  sub_font_size: number;
+  sub_color: string;
+  sub_bg_color: string;
+  sub_font_family: string;
   created_at: string;
   updated_at: string;
 }
@@ -275,6 +282,13 @@ db.exec(`
     track_order INTEGER NOT NULL,
     muted INTEGER NOT NULL DEFAULT 0,
     locked INTEGER NOT NULL DEFAULT 0,
+    sub_pos_x REAL NOT NULL DEFAULT 0,
+    sub_pos_y REAL NOT NULL DEFAULT 0,
+    sub_width_pct REAL NOT NULL DEFAULT 70,
+    sub_font_size REAL NOT NULL DEFAULT 16,
+    sub_color TEXT NOT NULL DEFAULT '#ffffff',
+    sub_bg_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.55)',
+    sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -321,6 +335,13 @@ for (const statement of [
   "ALTER TABLE timeline_clips ADD COLUMN sub_font_size REAL NOT NULL DEFAULT 16",
   "ALTER TABLE timeline_clips ADD COLUMN sub_color TEXT NOT NULL DEFAULT '#ffffff'",
   "ALTER TABLE timeline_clips ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_pos_x REAL NOT NULL DEFAULT 0",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_pos_y REAL NOT NULL DEFAULT 0",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_width_pct REAL NOT NULL DEFAULT 70",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_font_size REAL NOT NULL DEFAULT 16",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_color TEXT NOT NULL DEFAULT '#ffffff'",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_bg_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.55)'",
+  "ALTER TABLE timeline_tracks ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
 ]) {
   try {
     db.exec(statement);
@@ -470,6 +491,13 @@ async function initPostgresMirror() {
         track_order INTEGER NOT NULL,
         muted INTEGER NOT NULL DEFAULT 0,
         locked INTEGER NOT NULL DEFAULT 0,
+        sub_pos_x DOUBLE PRECISION NOT NULL DEFAULT 0,
+        sub_pos_y DOUBLE PRECISION NOT NULL DEFAULT 0,
+        sub_width_pct DOUBLE PRECISION NOT NULL DEFAULT 70,
+        sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16,
+        sub_color TEXT NOT NULL DEFAULT '#ffffff',
+        sub_bg_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.55)',
+        sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -525,6 +553,13 @@ async function initPostgresMirror() {
     { label: "timeline_clips.sub_font_size", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16` },
     { label: "timeline_clips.sub_color", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_color TEXT NOT NULL DEFAULT '#ffffff'` },
     { label: "timeline_clips.sub_font_family", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'` },
+    { label: "timeline_tracks.sub_pos_x", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_pos_x DOUBLE PRECISION NOT NULL DEFAULT 0` },
+    { label: "timeline_tracks.sub_pos_y", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_pos_y DOUBLE PRECISION NOT NULL DEFAULT 0` },
+    { label: "timeline_tracks.sub_width_pct", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_width_pct DOUBLE PRECISION NOT NULL DEFAULT 70` },
+    { label: "timeline_tracks.sub_font_size", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16` },
+    { label: "timeline_tracks.sub_color", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_color TEXT NOT NULL DEFAULT '#ffffff'` },
+    { label: "timeline_tracks.sub_bg_color", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_bg_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.55)'` },
+    { label: "timeline_tracks.sub_font_family", sql: `ALTER TABLE timeline_tracks ADD COLUMN IF NOT EXISTS sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'` },
     { label: "idx_projects_owner_email", sql: `CREATE INDEX IF NOT EXISTS idx_projects_owner_email ON projects(owner_email)` },
     { label: "idx_render_jobs_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_render_jobs_project_id ON render_jobs(project_id)` },
     { label: "idx_assets_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_assets_project_id ON assets(project_id)` },
@@ -985,6 +1020,13 @@ function insertTrack(projectId: string, order: number, type: TimelineTrackType, 
     track_order: order,
     muted: 0,
     locked: 0,
+    sub_pos_x: 0,
+    sub_pos_y: 0,
+    sub_width_pct: 70,
+    sub_font_size: 16,
+    sub_color: "#ffffff",
+    sub_bg_color: "rgba(0,0,0,0.55)",
+    sub_font_family: "Segoe UI, Arial, sans-serif",
     created_at: created,
     updated_at: created,
   };
@@ -1016,17 +1058,42 @@ export function addTrack(projectId: string, type: TimelineTrackType, label: stri
   return insertTrack(projectId, orderRow.next_order, type, label);
 }
 
-export function updateTrack(trackId: string, data: Partial<Pick<TimelineTrackRecord, "label" | "muted" | "locked">>): TimelineTrackRecord | undefined {
+export function updateTrack(
+  trackId: string,
+  data: Partial<
+    Pick<
+      TimelineTrackRecord,
+      | "label"
+      | "muted"
+      | "locked"
+      | "sub_pos_x"
+      | "sub_pos_y"
+      | "sub_width_pct"
+      | "sub_font_size"
+      | "sub_color"
+      | "sub_bg_color"
+      | "sub_font_family"
+    >
+  >,
+): TimelineTrackRecord | undefined {
   const current = getTrack(trackId);
   if (!current) return undefined;
   db.prepare(`
     UPDATE timeline_tracks
-    SET label = ?, muted = ?, locked = ?, updated_at = ?
+    SET label = ?, muted = ?, locked = ?, sub_pos_x = ?, sub_pos_y = ?, sub_width_pct = ?,
+        sub_font_size = ?, sub_color = ?, sub_bg_color = ?, sub_font_family = ?, updated_at = ?
     WHERE id = ?
   `).run(
     data.label ?? current.label,
     data.muted ?? current.muted,
     data.locked ?? current.locked,
+    data.sub_pos_x ?? current.sub_pos_x,
+    data.sub_pos_y ?? current.sub_pos_y,
+    data.sub_width_pct ?? current.sub_width_pct,
+    data.sub_font_size ?? current.sub_font_size,
+    data.sub_color ?? current.sub_color,
+    data.sub_bg_color ?? current.sub_bg_color,
+    data.sub_font_family ?? current.sub_font_family,
     nowIso(),
     trackId,
   );

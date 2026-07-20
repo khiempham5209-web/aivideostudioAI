@@ -1871,10 +1871,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         return;
       }
       const body = await readJsonBody(req);
+      const trackNumberField = (key: string) => (typeof (body as Record<string, unknown>)[key] === "number" ? (body as Record<string, number>)[key] : undefined);
+      const trackStringField = (key: string) => (typeof (body as Record<string, unknown>)[key] === "string" ? (body as Record<string, string>)[key] : undefined);
       const updated = updateTrack(track.id, {
         label: typeof (body as { label?: unknown }).label === "string" ? (body as { label: string }).label : undefined,
         muted: typeof (body as { muted?: unknown }).muted === "boolean" ? ((body as { muted: boolean }).muted ? 1 : 0) : undefined,
         locked: typeof (body as { locked?: unknown }).locked === "boolean" ? ((body as { locked: boolean }).locked ? 1 : 0) : undefined,
+        sub_pos_x: trackNumberField("subPosX"),
+        sub_pos_y: trackNumberField("subPosY"),
+        sub_width_pct: trackNumberField("subWidthPct"),
+        sub_font_size: trackNumberField("subFontSize"),
+        sub_color: trackStringField("subColor"),
+        sub_bg_color: trackStringField("subBgColor"),
+        sub_font_family: trackStringField("subFontFamily"),
       });
       sendJson(res, 200, { ok: true, track: updated });
       return;
