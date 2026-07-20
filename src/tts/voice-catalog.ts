@@ -1,4 +1,4 @@
-export type VoiceProvider = "edge" | "omnivoice";
+export type VoiceProvider = "edge" | "omnivoice" | "piper";
 export type VoiceGender = "male" | "female";
 export type VoiceRegion = "north" | "central" | "south" | "neutral";
 export type VoiceTone = "story" | "news" | "warm" | "dramatic" | "calm" | "sales";
@@ -44,6 +44,45 @@ export const VOICE_OPTIONS: VoiceOption[] = [
     source: "Microsoft Edge TTS",
     status: "ready",
     description: "Nam, mien Bac, ro rang cho review va tin ngan.",
+  },
+  {
+    id: "piper-vivos",
+    name: "vi_VN-vivos-x_low",
+    runtimeVoiceName: "vi_VN-vivos-x_low",
+    label: "Piper - Vivos",
+    gender: "female",
+    region: "neutral",
+    tone: "calm",
+    provider: "piper",
+    source: "Piper TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline, chat luong x_low. Tu dong chuyen sang Edge TTS neu gap tu hiem loi phat am.",
+  },
+  {
+    id: "piper-vais1000",
+    name: "vi_VN-vais1000-medium",
+    runtimeVoiceName: "vi_VN-vais1000-medium",
+    label: "Piper - Vais1000",
+    gender: "female",
+    region: "neutral",
+    tone: "news",
+    provider: "piper",
+    source: "Piper TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline, chat luong medium. Tu dong chuyen sang Edge TTS neu gap tu hiem loi phat am.",
+  },
+  {
+    id: "piper-25hours",
+    name: "vi_VN-25hours_single-low",
+    runtimeVoiceName: "vi_VN-25hours_single-low",
+    label: "Piper - 25hours",
+    gender: "male",
+    region: "neutral",
+    tone: "story",
+    provider: "piper",
+    source: "Piper TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline, chat luong low. Tu dong chuyen sang Edge TTS neu gap tu hiem loi phat am.",
   },
   {
     id: "omni-female-north-warm",

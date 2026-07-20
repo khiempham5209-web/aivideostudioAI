@@ -788,7 +788,11 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       source: { url: "local://web-app-project", domain: "local", image: null },
       channel: "AI Video Studio",
     },
-    voice: { provider: "edge", name: project.voice_name || "vi-VN-HoaiMyNeural", speed: project.voice_speed || 1 },
+    voice: {
+      provider: findVoiceOption(project.voice_id).provider,
+      name: project.voice_name || "vi-VN-HoaiMyNeural",
+      speed: project.voice_speed || 1,
+    },
     aspect: project.aspect_ratio || "9:16",
     scenes: scriptScenes,
   };
@@ -1607,7 +1611,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         return;
       }
       const rawText = typeof (body as { text?: unknown }).text === "string" ? (body as { text: string }).text : "";
-      const text = (rawText.trim() || "Xin chào, đây là giọng đọc thử trong AI Video Studio.").slice(0, 220);
+      const text = (rawText.trim() || "Xin chào, chào mừng bạn đến với AI Video Studio.").slice(0, 220);
       const speed = Math.min(2, Math.max(0.5, Number((body as { speed?: unknown }).speed) || 1));
       // Cached by (voice, speed, text) — the common case is the same default
       // demo phrase at speed 1 for a given voice, so after the first request
@@ -1619,7 +1623,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const previewPath = join(previewDir, `${voice.id}-${speed}-${textHash}.mp3`);
       try {
         if (!existsSync(previewPath)) {
-          const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed });
+          const client = createTtsClient(loadConfig(), { provider: voice.provider, voiceName: voice.runtimeVoiceName, speed });
           await client.generate(text, previewPath);
         }
         const audioBuffer = await readFile(previewPath);
@@ -1810,7 +1814,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
           await mkdir(previewDir, { recursive: true });
           const testPath = join(previewDir, `healthcheck-${Date.now()}.mp3`);
           const started = Date.now();
-          const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed: 1 });
+          const client = createTtsClient(loadConfig(), { provider: voice.provider, voiceName: voice.runtimeVoiceName, speed: 1 });
           await client.generate("Test", testPath);
           const info = await stat(testPath).catch(() => null);
           void rm(testPath, { force: true }).catch(() => undefined);
@@ -2482,7 +2486,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-const DEFAULT_VOICE_PREVIEW_TEXT = "Xin chào, đây là giọng đọc thử trong AI Video Studio.";
+const DEFAULT_VOICE_PREVIEW_TEXT = "Xin chào, chào mừng bạn đến với AI Video Studio.";
 
 /** Pre-generates the default demo-phrase preview for every ready voice at
  *  startup, so the very first "nghe thử giọng" click a user makes is
@@ -2496,7 +2500,7 @@ async function warmVoicePreviewCache() {
     const previewPath = join(previewDir, `${voice.id}-1-${textHash}.mp3`);
     if (existsSync(previewPath)) continue;
     try {
-      const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed: 1 });
+      const client = createTtsClient(loadConfig(), { provider: voice.provider, voiceName: voice.runtimeVoiceName, speed: 1 });
       await client.generate(DEFAULT_VOICE_PREVIEW_TEXT, previewPath);
       console.log(`Warmed voice preview cache: ${voice.label}`);
     } catch (error) {

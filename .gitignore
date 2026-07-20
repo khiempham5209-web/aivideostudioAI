@@ -1,5 +1,6 @@
 node_modules/
 .edge-tts-venv/
+.piper-voices/
 dist/
 output/
 /storage/

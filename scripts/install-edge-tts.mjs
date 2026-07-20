@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 
 const root = process.cwd();
 const venvDir = resolve(root, ".edge-tts-venv");
+const piperVoicesDir = resolve(root, ".piper-voices");
 const edgeTtsBin =
   process.platform === "win32"
     ? join(venvDir, "Scripts", "edge-tts.exe")
@@ -12,6 +13,11 @@ const pythonBin =
   process.platform === "win32"
     ? join(venvDir, "Scripts", "python.exe")
     : join(venvDir, "bin", "python");
+
+// Local Vietnamese Piper voices — offline, CPU-only, no GPU needed. Quality
+// is lower than Edge TTS's neural voices, but they're 3 more real, distinct
+// local voice options alongside Edge's 2 — see voice-catalog.ts.
+const PIPER_VOICES = ["vi_VN-25hours_single-low", "vi_VN-vais1000-medium", "vi_VN-vivos-x_low"];
 
 function quoteIfNeeded(value) {
   return typeof value === "string" && value.includes(" ") && !value.startsWith('"') ? `"${value}"` : value;
@@ -57,6 +63,25 @@ function findPython() {
   return null;
 }
 
+function installPiperVoices() {
+  console.log("Ensuring piper-tts is installed");
+  if (!run(pythonBin, ["-m", "pip", "install", "piper-tts"])) {
+    console.error("Failed to install piper-tts — local Vietnamese voices will be unavailable.");
+    return;
+  }
+  for (const voice of PIPER_VOICES) {
+    const modelPath = join(piperVoicesDir, `${voice}.onnx`);
+    if (existsSync(modelPath)) {
+      console.log(`Piper voice already downloaded: ${voice}`);
+      continue;
+    }
+    console.log(`Downloading Piper voice: ${voice}`);
+    if (!run(pythonBin, ["-m", "piper.download_voices", "--download-dir", piperVoicesDir, voice])) {
+      console.error(`Failed to download Piper voice "${voice}" — it will be unavailable.`);
+    }
+  }
+}
+
 if (existsSync(edgeTtsBin) && existsSync(pythonBin)) {
   console.log(`edge-tts virtualenv already exists: ${edgeTtsBin}`);
   console.log("Ensuring gTTS fallback is installed");
@@ -64,6 +89,7 @@ if (existsSync(edgeTtsBin) && existsSync(pythonBin)) {
     console.error("Failed to install gTTS fallback.");
     process.exit(1);
   }
+  installPiperVoices();
   process.exit(0);
 }
 
@@ -91,3 +117,4 @@ if (!existsSync(edgeTtsBin)) {
 }
 
 console.log(`edge-tts installed: ${edgeTtsBin}`);
+installPiperVoices();
