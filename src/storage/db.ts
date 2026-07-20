@@ -367,9 +367,53 @@ let pgPool = DATABASE_URL
   : null;
 let pgWriteQueue: Promise<void> = Promise.resolve();
 
+const LEGACY_MIRROR_TABLES = [
+  "timeline_clips",
+  "timeline_tracks",
+  "scenes",
+  "assets",
+  "render_jobs",
+  "sessions",
+  "user_settings",
+  "users",
+  "projects",
+];
+
+/**
+ * Runs once, ever: this Postgres database had tables left over from an older
+ * version of the app (missing base columns like projects.title,
+ * user_settings.email — confirmed live via write-health errors), and patching
+ * one missing column at a time just kept surfacing the next one on a
+ * different table. Since this is a MIRROR of local SQLite (the source of
+ * truth), not the primary store, dropping and letting the normal CREATE
+ * TABLE steps rebuild everything fresh is safe and final. Gated by a marker
+ * row so it can never run again (and never touches SQLite).
+ */
+async function resetLegacyMirrorTablesOnce(pool: Pool) {
+  await pool.query(`CREATE TABLE IF NOT EXISTS _schema_reset_markers (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`);
+  const existing = await pool.query(`SELECT 1 FROM _schema_reset_markers WHERE name = $1`, ["drop_legacy_tables_v1"]);
+  if ((existing.rowCount ?? 0) > 0) return;
+  for (const table of LEGACY_MIRROR_TABLES) {
+    try {
+      await pool.query(`DROP TABLE IF EXISTS ${table}`);
+    } catch (error) {
+      console.warn(`Legacy mirror table reset: failed to drop "${table}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  await pool.query(`INSERT INTO _schema_reset_markers (name, applied_at) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`, [
+    "drop_legacy_tables_v1",
+    new Date().toISOString(),
+  ]);
+  console.log("Legacy mirror tables dropped — will be recreated fresh from the current schema.");
+}
+
 async function initPostgresMirror() {
   const pool = pgPool;
   if (!pool) return;
+
+  await resetLegacyMirrorTablesOnce(pool).catch((error) => {
+    console.warn(`Legacy mirror table reset failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
 
   // Each statement runs (and fails) independently: a legacy/incompatible
   // table left over from an older deploy must not roll back — and take
