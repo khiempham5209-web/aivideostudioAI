@@ -54,6 +54,14 @@ function extractJson(text: string): unknown {
     .replace(/```/g, "")
     .trim();
 
+  // With responseMimeType "application/json" this should already be pure JSON;
+  // try it directly first before falling back to a lenient substring extraction.
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // fall through
+  }
+
   const first = cleaned.indexOf("{");
   const last = cleaned.lastIndexOf("}");
   if (first === -1 || last === -1 || last <= first) {
@@ -170,7 +178,10 @@ export async function generateScriptFromPrompt(
   const result = await ai.models.generateContent({
     model: options.model ?? DEFAULT_MODEL,
     contents: buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec),
-    config: { maxOutputTokens },
+    // responseMimeType constrains Gemini to emit syntactically valid JSON at the
+    // API level, instead of hoping a free-text completion happens to be parseable
+    // (Vietnamese text with embedded quotes was breaking naive JSON parsing).
+    config: { maxOutputTokens, responseMimeType: "application/json" },
   });
 
   const raw = normalizeGeneratedScript(extractJson(result.text ?? ""));
