@@ -756,8 +756,12 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
     throw new Error("Cần ít nhất 3 scene trước khi tạo MP3/MP4");
   }
   const requestedFolder = folderName?.trim() ? sanitizeFileName(folderName.trim()) : "";
-  const baseFolder = requestedFolder || toSlug(project.title || project.topic || "video");
-  const outputDir = resolve("output", `${baseFolder}-${timestampForPath()}`);
+  // Stable per project (not timestamped): a crashed/interrupted render can be
+  // retried by just re-triggering "Xuất video" and it will resume from
+  // whichever scenes/clips already finished (see the REUSE checks in
+  // runTemplatePipeline) instead of starting over from scratch every time.
+  const baseFolder = requestedFolder || `${toSlug(project.title || project.topic || "video")}-${projectId}`;
+  const outputDir = resolve("output", baseFolder);
   const scriptPath = join(outputDir, "script.json");
   const scriptScenes = scenes.map((scene, index) => {
     const normalizedType = index === 0 ? "hook" : index === scenes.length - 1 ? "outro" : "body";
