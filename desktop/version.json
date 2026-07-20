@@ -1,5 +1,5 @@
 {
   "version": "1.0.0",
-  "downloadUrl": "",
-  "notes": "Chua co ban cai dat nao duoc phat hanh. downloadUrl se duoc dien khi installer dau tien duoc build va dang len GitHub Releases."
+  "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
+  "notes": "Ban cai dat dau tien cho Windows. Cai xong mo app, bam \"Ket noi voi tai khoan tren web\" de tu dong lay cau hinh."
 }
