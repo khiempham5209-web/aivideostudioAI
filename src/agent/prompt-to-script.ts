@@ -1,10 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import dotenv from "dotenv";
 import { z } from "zod";
 import {
   TemplateScriptSchema,
+  TemplateScene,
   type TemplateScript,
 } from "../render/template-script-schema.js";
 import { toSlug } from "../utils/slug.js";
@@ -14,8 +16,19 @@ dotenv.config({ path: ".env.local" });
 const CHANNEL_NAME = process.env.CHANNEL_NAME ?? "Khiempham AI";
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
+// TemplateScriptSchema.shape.scenes is already a ZodEffects (it has .refine()
+// chains applied), so calling .max() on it doesn't actually widen the bound —
+// the original .max(12) baked into that chain still wins. Rebuild the array
+// schema from scratch with the same shape/refinements but a real wider cap,
+// so long-duration scripts (many scenes) aren't silently rejected and
+// downgraded to the generic fallback template.
 const GeneratedScriptSchema = TemplateScriptSchema.extend({
-  scenes: TemplateScriptSchema.shape.scenes.min(3).max(30),
+  scenes: z
+    .array(TemplateScene)
+    .min(3)
+    .max(60)
+    .refine((s) => s[0]?.type === "hook", { message: "scenes[0] must be type=hook" })
+    .refine((s) => s[s.length - 1]?.type === "outro", { message: "last scene must be type=outro" }),
 });
 
 export interface GenerateScriptOptions {
@@ -27,6 +40,8 @@ export interface GenerateScriptOptions {
   voiceSpeed?: number;
   /** Target spoken duration in seconds — shapes requested word count and scene count. */
   targetDurationSec?: number;
+  /** Which AI writes the script. Defaults to Gemini. */
+  aiProvider?: "gemini" | "openai";
 }
 
 export interface GeneratedScriptResult {
@@ -109,9 +124,9 @@ function buildPrompt(
   const targetWords = Math.round(targetDurationSec * 2.5);
   const minWords = Math.max(60, Math.round(targetWords * 0.85));
   const maxWords = Math.round(targetWords * 1.15);
-  const sceneCount = Math.min(30, Math.max(3, Math.round(targetDurationSec / 14)));
+  const sceneCount = Math.min(50, Math.max(3, Math.round(targetDurationSec / 14)));
   const minScenes = Math.max(3, sceneCount - 2);
-  const maxScenes = Math.min(30, sceneCount + 2);
+  const maxScenes = Math.min(55, sceneCount + 2);
   return `
 You create Vietnamese short review videos as JSON for an existing renderer.
 
@@ -156,35 +171,60 @@ Use id values like "hook", "body-1", "body-2", "outro".
 `;
 }
 
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+async function callGemini(promptText: string, model: string, maxOutputTokens: number): Promise<string> {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("Missing GEMINI_API_KEY in .env.local");
+  }
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const result = await ai.models.generateContent({
+    model,
+    contents: promptText,
+    // responseMimeType constrains Gemini to emit syntactically valid JSON at the
+    // API level, instead of hoping a free-text completion happens to be parseable
+    // (Vietnamese text with embedded quotes was breaking naive JSON parsing).
+    config: { maxOutputTokens, responseMimeType: "application/json" },
+  });
+  return result.text ?? "";
+}
+
+async function callOpenAI(promptText: string, model: string, maxOutputTokens: number): Promise<string> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("Missing OPENAI_API_KEY in .env.local");
+  }
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const completion = await client.chat.completions.create({
+    model,
+    max_tokens: maxOutputTokens,
+    response_format: { type: "json_object" },
+    messages: [{ role: "user", content: promptText }],
+  });
+  return completion.choices[0]?.message?.content ?? "";
+}
+
 export async function generateScriptFromPrompt(
   userRequest: string,
   options: GenerateScriptOptions = {},
 ): Promise<GeneratedScriptResult> {
   const prompt = userRequest.trim();
   if (!prompt) throw new Error("Prompt is required");
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("Missing GEMINI_API_KEY in .env.local");
-  }
 
   const channel = options.channel ?? CHANNEL_NAME;
   const voiceProvider = options.voiceProvider ?? "edge";
   const voiceName = options.voiceName ?? process.env.TTS_VOICE_NAME ?? "vi-VN-HoaiMyNeural";
   const voiceSpeed = options.voiceSpeed ?? Number(process.env.TTS_SPEED ?? 1);
   const targetDurationSec = options.targetDurationSec && options.targetDurationSec > 0 ? options.targetDurationSec : 120;
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const aiProvider = options.aiProvider ?? "gemini";
   // Long requests (many minutes of narration) need headroom in the JSON response
-  // so Gemini isn't silently cut off mid-script.
+  // so the model isn't silently cut off mid-script.
   const maxOutputTokens = Math.min(32768, Math.max(4096, Math.round(targetDurationSec * 40)));
-  const result = await ai.models.generateContent({
-    model: options.model ?? DEFAULT_MODEL,
-    contents: buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec),
-    // responseMimeType constrains Gemini to emit syntactically valid JSON at the
-    // API level, instead of hoping a free-text completion happens to be parseable
-    // (Vietnamese text with embedded quotes was breaking naive JSON parsing).
-    config: { maxOutputTokens, responseMimeType: "application/json" },
-  });
+  const promptText = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec);
+  const responseText = aiProvider === "openai"
+    ? await callOpenAI(promptText, options.model ?? DEFAULT_OPENAI_MODEL, maxOutputTokens)
+    : await callGemini(promptText, options.model ?? DEFAULT_MODEL, maxOutputTokens);
 
-  const raw = normalizeGeneratedScript(extractJson(result.text ?? ""));
+  const raw = normalizeGeneratedScript(extractJson(responseText));
   const script = GeneratedScriptSchema.parse(raw);
   const outputDir = join(
     options.outputRoot ?? "output",

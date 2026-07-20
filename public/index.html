@@ -1270,6 +1270,7 @@
                 <div><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button" data-sec="30">30s</button><button type="button" data-sec="60">1 phút</button><button class="active" type="button" data-sec="120">2 phút</button><button type="button" data-sec="180">3 phút</button><button type="button" data-sec="300">5 phút</button><button type="button" data-sec="custom">Tùy chỉnh</button></div><input id="durationCustomSec" type="number" min="10" max="1800" step="5" placeholder="Số giây (ví dụ 420 = 7 phút)" style="display:none;margin-top:8px;" /></div>
                 <div><label>Tỷ lệ video</label><div class="segmented" id="ratioPicker"><button type="button">16:9</button><button class="active" type="button">9:16</button><button type="button">1:1</button></div></div>
                 <div><label for="style">Phong cách</label><select id="style"><option>Review phim hài hước</option><option>Tin tức nhanh</option><option>Bán hàng</option><option>Giải thích giáo dục</option><option>Drama cuốn hút</option></select></div>
+                <div><label>AI viết kịch bản</label><div class="segmented" id="aiProviderPicker"><button type="button" class="active" data-provider="gemini">Gemini</button><button type="button" data-provider="openai">ChatGPT</button></div></div>
                 <button class="btn primary" id="createProjectButton" type="submit">AI Tạo Kịch Bản</button>
               </div>
             </form>
@@ -1402,9 +1403,10 @@
           <div class="page-head"><div><h2>Cài đặt AI và API</h2><p class="muted">Trạng thái thật của các dịch vụ đang chạy phía server — không phải cấu hình giả.</p></div><button class="btn" id="refreshSettingsStatusButton">Làm mới trạng thái</button></div>
           <div class="grid dashboard-grid">
             <div class="panel"><div class="panel-head"><h3>AI viết kịch bản</h3><span class="pill" id="statusAiPill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny">Provider: Google Gemini (env GEMINI_API_KEY)</p><p class="tiny" id="statusAiModel">Model: -</p><p class="tiny">Đổi provider/API key thật ở file .env.local trên server, không lưu qua web vì lý do bảo mật.</p></div></div>
+            <div class="panel"><div class="panel-head"><h3>AI viết kịch bản (ChatGPT)</h3><span class="pill" id="statusOpenAiPill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny">Provider: OpenAI (env OPENAI_API_KEY) — chọn ở bước Tạo dự án mới</p><p class="tiny" id="statusOpenAiModel">Model: -</p></div></div>
             <div class="panel"><div class="panel-head"><h3>Text-to-Speech</h3><span class="pill" id="statusTtsPill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny">Provider: Microsoft Edge TTS</p><p class="tiny" id="statusTtsVoices">Giọng sẵn sàng: -</p><p class="tiny" id="statusTtsMode">Mode: -</p></div></div>
             <div class="panel"><div class="panel-head"><h3>Render và lưu trữ</h3><span class="pill" id="statusStoragePill">Đang kiểm tra...</span></div><div class="panel-body field-stack"><p class="tiny" id="statusFfmpegPath">FFmpeg: -</p><p class="tiny" id="statusR2">Cloud storage (R2): -</p><p class="tiny" id="statusDb">Postgres mirror: -</p><p class="tiny" id="statusDbHealth"></p></div></div>
-            <div class="panel"><div class="panel-head"><h3>Kiểm tra kết nối thật</h3></div><div class="panel-body field-stack"><button class="btn" id="testAiButton">Test AI API</button><button class="btn" id="testTtsButton">Test TTS</button><button class="btn" id="testFfmpegButton">Test FFmpeg</button><button class="btn" id="testStorageButton">Test quyền ghi thư mục</button><div class="empty" id="connectionTestResults" style="text-align:left;">Bấm 1 nút để chạy kiểm tra thật (gọi API/tạo file thử) và xem kết quả.</div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Kiểm tra kết nối thật</h3></div><div class="panel-body field-stack"><button class="btn" id="testAiButton">Test AI API</button><button class="btn" id="testOpenAiButton">Test ChatGPT</button><button class="btn" id="testTtsButton">Test TTS</button><button class="btn" id="testFfmpegButton">Test FFmpeg</button><button class="btn" id="testStorageButton">Test quyền ghi thư mục</button><div class="empty" id="connectionTestResults" style="text-align:left;">Bấm 1 nút để chạy kiểm tra thật (gọi API/tạo file thử) và xem kết quả.</div></div></div>
           </div>
         </section>
 
@@ -1729,6 +1731,11 @@
       function activeRatio() {
         const active = $("#ratioPicker .active");
         return active ? active.textContent.trim() : (state.settings?.default_ratio || "9:16");
+      }
+
+      function activeAiProvider() {
+        const active = $("#aiProviderPicker .active");
+        return active ? active.dataset.provider : "gemini";
       }
 
       function activeDurationSec() {
@@ -3229,6 +3236,11 @@
           $("#statusAiPill").className = `pill ${data.geminiConfigured ? "ok" : "warn"}`;
         }
         if ($("#statusAiModel")) $("#statusAiModel").textContent = `Model: ${data.geminiModel}`;
+        if ($("#statusOpenAiPill")) {
+          $("#statusOpenAiPill").textContent = data.openaiConfigured ? "Đã cấu hình" : "Chưa cấu hình";
+          $("#statusOpenAiPill").className = `pill ${data.openaiConfigured ? "ok" : "warn"}`;
+        }
+        if ($("#statusOpenAiModel")) $("#statusOpenAiModel").textContent = `Model: ${data.openaiModel}`;
         if ($("#statusTtsPill")) {
           $("#statusTtsPill").textContent = data.readyVoices.length ? "Sẵn sàng" : "Chưa có giọng";
           $("#statusTtsPill").className = `pill ${data.readyVoices.length ? "ok" : "warn"}`;
@@ -3248,6 +3260,10 @@
             const parts = [`Ghi thành công: ${health.successCount}`, `Ghi lỗi: ${health.failureCount}`];
             if (health.failureCount > 0 && health.lastError) {
               parts.push(`Lỗi gần nhất (${new Date(health.lastErrorAt).toLocaleString("vi-VN")}): ${health.lastError}`);
+            }
+            if (health.schemaStepFailures && health.schemaStepFailures.length) {
+              const latest = health.schemaStepFailures[health.schemaStepFailures.length - 1];
+              parts.push(`Bảng lỗi khi tạo schema: ${health.schemaStepFailures.length} bước (gần nhất "${latest.label}": ${latest.error})`);
             }
             $("#statusDbHealth").textContent = parts.join(" · ");
             $("#statusDbHealth").style.color = health.failureCount > 0 ? "#fb7185" : "";
@@ -3269,6 +3285,7 @@
         }
       }
       $("#testAiButton")?.addEventListener("click", () => runConnectionTest("ai", "AI API (Gemini)"));
+      $("#testOpenAiButton")?.addEventListener("click", () => runConnectionTest("openai", "AI API (ChatGPT)"));
       $("#testTtsButton")?.addEventListener("click", () => runConnectionTest("tts", "TTS (Edge TTS)"));
       $("#testFfmpegButton")?.addEventListener("click", () => runConnectionTest("ffmpeg", "FFmpeg"));
       $("#testStorageButton")?.addEventListener("click", () => runConnectionTest("storage", "Quyền ghi thư mục"));
@@ -3647,8 +3664,8 @@
           await loadProjects();
           await loadStats();
           selectProject(data.project);
-          toast("Đang sinh kịch bản AI...");
-          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST" });
+          toast(`Đang sinh kịch bản AI (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"})...`);
+          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
           await loadProjects();
           await loadScenes(state.activeProjectId);
           switchPage("script");
@@ -3817,8 +3834,8 @@
         if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước.");
         $("#regenerateButton").disabled = true;
         try {
-          toast("Đang regenerate kịch bản AI...");
-          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST" });
+          toast(`Đang regenerate kịch bản AI (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"})...`);
+          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
           await loadProjects();
           await loadScenes(state.activeProjectId);
           toast(scriptData.usedFallback

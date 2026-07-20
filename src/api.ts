@@ -729,13 +729,14 @@ function buildLocalProjectScript(project: NonNullable<ReturnType<typeof getProje
   };
 }
 
-async function generateProjectScript(project: NonNullable<ReturnType<typeof getProject>>) {
+async function generateProjectScript(project: NonNullable<ReturnType<typeof getProject>>, aiProvider?: "gemini" | "openai") {
   try {
     const generated = await generateScriptFromPrompt(project.topic, {
       voiceProvider: "edge",
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
       targetDurationSec: project.target_duration_sec,
+      aiProvider,
     });
     return { ...generated, usedFallback: false as const, fallbackReason: null as string | null };
   } catch (error) {
@@ -1161,8 +1162,10 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
     sendJson(res, 404, { error: "Project not found" });
     return;
   }
+  const body = await readJsonBody(req).catch(() => ({}) as Record<string, unknown>);
+  const aiProvider = (body as { aiProvider?: unknown }).aiProvider === "openai" ? "openai" : "gemini";
   updateProject(projectId, { status: "generating_script", error_message: null });
-  const generated = await generateProjectScript(project);
+  const generated = await generateProjectScript(project, aiProvider);
   const scenes = replaceProjectScenes(projectId, generated.script.scenes);
   updateProject(projectId, {
     title: generated.script.metadata.title,
@@ -1522,6 +1525,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         ffmpegBin: FFMPEG_BIN,
         geminiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
         geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+        openaiConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+        openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
         edgeTtsMode: process.env.EDGE_TTS_MODE === "edge-first" ? "edge-first" : "fallback-first",
         r2Configured: isR2Configured(),
         databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
@@ -1531,7 +1536,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
-    const settingsTestMatch = url.pathname.match(/^\/api\/settings\/test\/(ai|tts|ffmpeg|storage)$/);
+    const settingsTestMatch = url.pathname.match(/^\/api\/settings\/test\/(ai|openai|tts|ffmpeg|storage)$/);
     if (req.method === "POST" && settingsTestMatch) {
       const user = requireUser(req, res);
       if (!user) return;
@@ -1548,6 +1553,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
           const started = Date.now();
           await ai.models.generateContent({ model, contents: "Reply with exactly one word: OK" });
           sendJson(res, 200, { ok: true, message: `Gemini (${model}) phản hồi thật sau ${Date.now() - started}ms.` });
+          return;
+        }
+        if (target === "openai") {
+          if (!process.env.OPENAI_API_KEY?.trim()) {
+            sendJson(res, 200, { ok: false, message: "Chưa cấu hình OPENAI_API_KEY trong .env.local — chưa dùng được ChatGPT để viết kịch bản." });
+            return;
+          }
+          const { default: OpenAI } = await import("openai");
+          const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+          const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+          const started = Date.now();
+          await client.chat.completions.create({ model, messages: [{ role: "user", content: "Reply with exactly one word: OK" }] });
+          sendJson(res, 200, { ok: true, message: `ChatGPT (${model}) phản hồi thật sau ${Date.now() - started}ms.` });
           return;
         }
         if (target === "tts") {

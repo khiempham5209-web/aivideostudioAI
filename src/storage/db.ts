@@ -585,13 +585,16 @@ async function initPostgresMirror() {
     { label: "idx_timeline_clips_project_id", sql: `CREATE INDEX IF NOT EXISTS idx_timeline_clips_project_id ON timeline_clips(project_id)` },
   ];
 
+  pgSchemaStepFailures = [];
   for (const step of steps) {
     try {
       await pool.query(step.sql);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      pgSchemaStepFailures.push({ label: step.label, error: message, at: new Date().toISOString() });
       console.warn(
         `Postgres schema step "${step.label}" failed — skipping, other tables are unaffected. ` +
-          `Cause: ${error instanceof Error ? error.message : String(error)}`,
+          `Cause: ${message}`,
       );
     }
   }
@@ -601,6 +604,7 @@ let pgWriteFailureCount = 0;
 let pgWriteSuccessCount = 0;
 let pgLastWriteError: string | null = null;
 let pgLastWriteErrorAt: string | null = null;
+let pgSchemaStepFailures: { label: string; error: string; at: string }[] = [];
 
 export function getPgWriteHealth() {
   return {
@@ -609,6 +613,7 @@ export function getPgWriteHealth() {
     failureCount: pgWriteFailureCount,
     lastError: pgLastWriteError,
     lastErrorAt: pgLastWriteErrorAt,
+    schemaStepFailures: pgSchemaStepFailures,
   };
 }
 

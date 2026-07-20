@@ -14,7 +14,7 @@ const SfxSpec = z.object({
 });
 export type TplSfxSpecType = z.infer<typeof SfxSpec>;
 
-const TemplateScene = z.object({
+export const TemplateScene = z.object({
   id: z.string().min(1),
   type: z.enum(["hook", "body", "outro"]),
   /** Spoken narration (Vietnamese, spelled-out numbers — see skill rules). */
