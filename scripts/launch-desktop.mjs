@@ -2,7 +2,7 @@
 // the app in the default browser once it's ready. Meant to be invoked via
 // scripts/hidden-launch.vbs, which suppresses the console window; running
 // this script directly with `node` will still show a console.
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,6 +72,25 @@ async function main() {
   if (!existsSync(distEntry)) {
     log(`ERROR: ${distEntry} not found — run "npm run build" first`);
     return;
+  }
+
+  // Edge TTS runs through a Python virtualenv (created by
+  // scripts/install-edge-tts.mjs), which isn't portable between machines —
+  // it references an absolute path to whatever Python built it. On a fresh
+  // install, build it against THIS machine's Python the first time the app
+  // runs. Requires Python 3 to already be installed; if it's missing this
+  // fails and TTS falls back to gTTS (see tts-client.ts), logged here since
+  // there's no visible console to show it in.
+  const venvDir = join(ROOT, ".edge-tts-venv");
+  const installTtsScript = join(ROOT, "scripts", "install-edge-tts.mjs");
+  if (!existsSync(venvDir) && existsSync(installTtsScript)) {
+    log("First run: setting up edge-tts (needs Python 3 on this machine)...");
+    try {
+      const output = execFileSync(process.execPath, [installTtsScript], { cwd: ROOT, encoding: "utf8" });
+      log(`edge-tts setup output:\n${output}`);
+    } catch (error) {
+      log(`WARNING: edge-tts setup failed (will fall back to gTTS voice): ${error?.stderr || error?.message || error}`);
+    }
   }
 
   log(`Spawning server: node ${distEntry}`);

@@ -775,6 +775,25 @@
         display: block;
       }
 
+      .desktop-update-banner {
+        display: none;
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border: 1px solid rgba(96, 165, 250, 0.35);
+        border-radius: 9px;
+        background: rgba(96, 165, 250, 0.1);
+        color: #bfdbfe;
+        font-weight: 650;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .desktop-update-banner.show {
+        display: flex;
+      }
+
       .empty {
         padding: 18px;
         border: 1px dashed var(--line-2);
@@ -1180,6 +1199,7 @@
                 <button class="btn" data-page="account" style="width:100%;margin-bottom:6px;">Tài khoản &amp; gói</button>
                 <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;">Cài đặt AI/API</button>
                 <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;">Điều chỉnh thanh công cụ</button>
+                <button class="btn" id="desktopDownloadButton" type="button" style="width:100%;margin-bottom:6px;display:none;">⬇️ Tải app cho Windows</button>
                 <button class="btn" id="logoutButton" style="width:100%;">Đăng xuất</button>
               </div>
             </div>
@@ -1208,6 +1228,11 @@
 
         <div class="file-warning" id="fileWarning">
           Bạn đang mở bằng file://. Hãy chạy server và mở http://127.0.0.1:8787 để upload, render và xem file kết quả.
+        </div>
+
+        <div class="desktop-update-banner" id="desktopUpdateBanner">
+          <span id="desktopUpdateText">Có bản cập nhật mới cho app.</span>
+          <button class="btn primary" id="desktopUpdateButton" type="button">Cập nhật ngay</button>
         </div>
 
         <section class="page active" id="dashboard">
@@ -4334,6 +4359,59 @@
         }
       }));
 
+      function isNewerVersion(a, b) {
+        const pa = String(a || "0").split(".").map((n) => parseInt(n, 10) || 0);
+        const pb = String(b || "0").split(".").map((n) => parseInt(n, 10) || 0);
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+          const diff = (pa[i] || 0) - (pb[i] || 0);
+          if (diff !== 0) return diff > 0;
+        }
+        return false;
+      }
+
+      async function initDesktopDownloadButton() {
+        try {
+          const info = await fetch("/api/desktop/version").then((r) => r.json());
+          if (!info.downloadUrl) return;
+          const button = $("#desktopDownloadButton");
+          if (!button) return;
+          button.style.display = "block";
+          button.addEventListener("click", () => window.open(info.downloadUrl, "_blank"));
+        } catch {
+          // Version endpoint unreachable — leave the button hidden.
+        }
+      }
+
+      async function checkDesktopUpdate() {
+        const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+        if (!isLocal) return;
+        try {
+          const [localInfo, remoteInfo] = await Promise.all([
+            fetch("/api/desktop/version").then((r) => r.json()),
+            fetch("https://aivideostudioaibackend.onrender.com/api/desktop/version").then((r) => r.json()),
+          ]);
+          if (!isNewerVersion(remoteInfo.version, localInfo.version)) return;
+          $("#desktopUpdateText").textContent = `Có bản cập nhật mới: v${remoteInfo.version} (đang dùng v${localInfo.version}).`;
+          $("#desktopUpdateBanner").classList.add("show");
+          $("#desktopUpdateButton").addEventListener("click", async () => {
+            const button = $("#desktopUpdateButton");
+            button.disabled = true;
+            button.textContent = "Đang tải bản cập nhật...";
+            try {
+              await api("/api/desktop/self-update", { method: "POST" });
+              button.textContent = "Đang mở trình cài đặt...";
+              $("#desktopUpdateText").textContent = "App sẽ đóng trong giây lát để cài bản mới — làm theo hướng dẫn cài đặt hiện ra.";
+            } catch (error) {
+              button.disabled = false;
+              button.textContent = "Cập nhật ngay";
+              showError(error);
+            }
+          }, { once: true });
+        } catch {
+          // Can't reach the production version endpoint (offline, etc.) — silently skip.
+        }
+      }
+
       (async function boot() {
         if (location.protocol === "file:") {
           $("#fileWarning").classList.add("show");
@@ -4355,6 +4433,8 @@
           setUser(me.user);
           hideLogin();
           $("#bootLoading")?.remove();
+          checkDesktopUpdate();
+          initDesktopDownloadButton();
           await Promise.all([loadVoices(), loadProjects(), loadStats(), loadSettings(), loadJobs().catch(() => {})]);
         } catch (error) {
           setServer(false, "Server offline");

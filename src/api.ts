@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream } from "node:fs";
+import os from "node:os";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -77,6 +78,10 @@ const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL?.replace(/\/+$/, "") ?? "";
 const STORAGE_QUOTA_BYTES = Number(process.env.STORAGE_QUOTA_BYTES ?? 50 * 1024 * 1024 * 1024);
 const APP_ENV = process.env.APP_ENV ?? process.env.NODE_ENV ?? "development";
 const IS_PRODUCTION = APP_ENV === "production";
+// Fixed, not env-driven: this is always where the real deployed backend
+// lives — the desktop build's self-update check compares against this,
+// not against APP_PUBLIC_URL (which is self-referential per environment).
+const PRODUCTION_BACKEND_URL = "https://aivideostudioaibackend.onrender.com";
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
@@ -1322,12 +1327,80 @@ async function handleDevLogin(req: IncomingMessage, res: ServerResponse) {
   sendJson(res, 200, { ok: true, user });
 }
 
+interface DesktopVersionInfo {
+  version: string;
+  downloadUrl: string;
+  notes?: string;
+}
+
+async function readDesktopVersionFile(): Promise<DesktopVersionInfo> {
+  const text = await readFile(resolve("desktop", "version.json"), "utf8");
+  return JSON.parse(text) as DesktopVersionInfo;
+}
+
+async function handleDesktopVersion(_req: IncomingMessage, res: ServerResponse) {
+  try {
+    const info = await readDesktopVersionFile();
+    sendJson(res, 200, info);
+  } catch {
+    sendJson(res, 200, { version: "0.0.0", downloadUrl: "" });
+  }
+}
+
+/** Local-desktop-only: fetches the installer the live backend currently
+ *  points to and launches it, then exits so the installer can overwrite
+ *  files that are locked while this process is running. Never runs on the
+ *  real deployed backend (IS_PRODUCTION guard) — self-replacing the live
+ *  Render service would make no sense and would be dangerous. */
+async function handleDesktopSelfUpdate(req: IncomingMessage, res: ServerResponse) {
+  if (IS_PRODUCTION) {
+    sendJson(res, 403, { error: "Self-update is only available on the local desktop build" });
+    return;
+  }
+  const user = requireUser(req, res);
+  if (!user) return;
+  try {
+    const latestRes = await fetch(`${PRODUCTION_BACKEND_URL}/api/desktop/version`, { signal: AbortSignal.timeout(10000) });
+    if (!latestRes.ok) throw new Error(`Version check failed: HTTP ${latestRes.status}`);
+    const latest = (await latestRes.json()) as DesktopVersionInfo;
+    if (!latest.downloadUrl) throw new Error("No download URL published yet");
+
+    const installerRes = await fetch(latest.downloadUrl, { signal: AbortSignal.timeout(120000) });
+    if (!installerRes.ok || !installerRes.body) throw new Error(`Download failed: HTTP ${installerRes.status}`);
+    const installerPath = join(os.tmpdir(), `AI-Video-Studio-Setup-${latest.version}.exe`);
+    const fileBuffer = Buffer.from(await installerRes.arrayBuffer());
+    await writeFile(installerPath, fileBuffer);
+
+    sendJson(res, 200, { ok: true, version: latest.version });
+
+    // Give the response time to flush to the browser before this process
+    // exits (needed so the installer can safely overwrite the running node.exe).
+    setTimeout(() => {
+      spawn(installerPath, [], { detached: true, stdio: "ignore" }).unref();
+      process.exit(0);
+    }, 1500);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, 500, { error: message });
+  }
+}
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
     if (req.method === "GET" && url.pathname === "/health") {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/desktop/version") {
+      await handleDesktopVersion(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/desktop/self-update") {
+      await handleDesktopSelfUpdate(req, res);
       return;
     }
 

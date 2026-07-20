@@ -24,3 +24,10 @@ api-smoke-*.*
 
 # Big SFX library (downloaded by `npm run sfx:download` — too large to commit)
 SFX/
+
+# Desktop installer build artifacts — portable Node runtime, staged
+# node_modules copy, and the compiled .exe. Rebuilt locally, not versioned.
+/desktop/node/
+/desktop/staging/
+/desktop/dist-installer/
+logs/
