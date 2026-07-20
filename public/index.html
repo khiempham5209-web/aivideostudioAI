@@ -2751,13 +2751,19 @@
             voiceCursor += duration;
           }
           let subtitleCursor = 0;
+          const SCENE_GAP_SEC = 0.3; // matches the gap the backend bakes between scenes in voice.mp3
           for (const [index, scene] of scenes.entries()) {
             const fullText = scene.voice_text || "";
-            const sceneDuration = Math.max(2, Math.round(fullText.length / 14));
+            // Prefer the real TTS-measured duration (set after "Tạo MP3") over a
+            // char-count guess — the guess is what caused subtitles to drift out
+            // of sync with the actual voice on longer videos.
+            const sceneDuration = scene.voice_duration_sec && scene.voice_duration_sec > 0
+              ? scene.voice_duration_sec
+              : Math.max(2, Math.round(fullText.length / 14));
             const chunks = splitSubtitleText(fullText);
             const totalChars = chunks.reduce((sum, c) => sum + c.length, 0) || 1;
             for (const chunk of chunks) {
-              const chunkDuration = Math.max(1, Math.round((chunk.length / totalChars) * sceneDuration * 10) / 10);
+              const chunkDuration = Math.max(0.5, Math.round((chunk.length / totalChars) * sceneDuration * 10) / 10);
               if (subtitleTrack) {
                 await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
                   method: "POST",
@@ -2767,6 +2773,7 @@
               }
               subtitleCursor += chunkDuration;
             }
+            subtitleCursor += SCENE_GAP_SEC;
           }
           await loadTimeline(state.activeProjectId);
           toast("Đã tự động sắp xếp Video/Voice/Subtitle theo dữ liệu thật của dự án.");

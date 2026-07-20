@@ -787,6 +787,20 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
   return { outputDir, scriptPath };
 }
 
+/** Maps pipeline scene ids (scene_key, or "scene-N" fallback — see writeProjectScriptFromScenes)
+ *  back to real scene DB rows, and stores the TTS-measured duration so the
+ *  timeline's subtitle sync can anchor to real audio instead of guessing. */
+function persistSceneDurations(projectId: string, sceneDurations: Record<string, number>) {
+  const scenes = listScenes(projectId);
+  scenes.forEach((scene, index) => {
+    const pipelineId = scene.scene_key || `scene-${index + 1}`;
+    const duration = sceneDurations[pipelineId];
+    if (duration && duration > 0) {
+      updateScene(scene.id, { voice_duration_sec: duration });
+    }
+  });
+}
+
 async function copyResultToSaveRoot(ownerEmail: string, projectId: string, paths: ReturnType<typeof resultPaths>) {
   const settings = getUserSettings(ownerEmail);
   if (!settings.save_root?.trim()) return paths;
@@ -867,13 +881,18 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string, b
       const backgroundAudioPath = backgroundAudio
         ? await localFileForRender(project.owner_email, projectId, backgroundAudio.file_path, backgroundAudio.file_name)
         : undefined;
-      await runTemplatePipeline(generated.scriptPath, {
+      const pipelineResult = await runTemplatePipeline(generated.scriptPath, {
         footageDir: hasVideoAssets ? resolve(STORAGE_DIR, projectId, "source") : undefined,
         footagePlan,
         backgroundAudioPath,
         burnSubtitles,
+        onProgress: (step, progress) => {
+          if (isCancelled()) return;
+          updateRenderJob(jobId, { current_step: step, progress: Math.min(95, 25 + Math.round((progress / 100) * 70)) });
+        },
       });
       if (isCancelled()) return;
+      if (pipelineResult?.sceneDurations) persistSceneDurations(projectId, pipelineResult.sceneDurations);
 
       const paths = await publishResultPaths(project.owner_email, projectId, resultPaths(generated.outputDir));
       updateProject(projectId, {
@@ -993,10 +1012,15 @@ function startAudioJob(projectId: string, jobId: string) {
         output_dir: resolve(generated.outputDir),
         script_path: resolve(generated.scriptPath),
       });
-      await runTemplatePipeline(generated.scriptPath, {
+      const pipelineResult = await runTemplatePipeline(generated.scriptPath, {
         audioOnly: true,
+        onProgress: (step, progress) => {
+          if (isCancelled()) return;
+          updateRenderJob(jobId, { current_step: step, progress: Math.min(90, 35 + Math.round((progress / 100) * 55)) });
+        },
       });
       if (isCancelled()) return;
+      if (pipelineResult?.sceneDurations) persistSceneDurations(projectId, pipelineResult.sceneDurations);
       const localPaths = await copyResultToSaveRoot(project.owner_email, projectId, resultPaths(generated.outputDir));
       const audioInfo = await stat(localPaths.audio).catch(() => null);
       const paths = await publishResultPaths(project.owner_email, projectId, resultPaths(generated.outputDir));

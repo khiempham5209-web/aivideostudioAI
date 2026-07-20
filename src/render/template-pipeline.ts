@@ -78,12 +78,21 @@ export interface TemplatePipelineOptions {
   backgroundAudioPath?: string;
   audioOnly?: boolean;
   burnSubtitles?: boolean;
+  /** Reports (step label, 0-100 progress within this pipeline) so a crash mid-run
+   *  points at exactly which scene/step it died on, instead of a frozen "25%". */
+  onProgress?: (step: string, progress: number) => void;
 }
 
-export async function runTemplatePipeline(scriptPath: string, options: TemplatePipelineOptions = {}): Promise<void> {
+export interface TemplatePipelineResult {
+  /** Real TTS-measured duration per scene id — lets callers anchor subtitle/UI timing to actual audio. */
+  sceneDurations: Record<string, number>;
+}
+
+export async function runTemplatePipeline(scriptPath: string, options: TemplatePipelineOptions = {}): Promise<TemplatePipelineResult> {
   const cfg = loadConfig();
   const outputDir = dirname(scriptPath);
   log.info(`Output directory: ${outputDir}`);
+  const report = (step: string, progress: number) => options.onProgress?.(step, progress);
 
   // STEP 1 — load + validate
   const fileText = await readFile(scriptPath, "utf8");
@@ -106,6 +115,11 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const limit = pLimit(cfg.ttsConcurrency);
   const voiceDir = join(outputDir, "voice");
   await mkdir(voiceDir, { recursive: true });
+  let ttsDone = 0;
+  const reportTts = () => {
+    ttsDone += 1;
+    report(`Đang tạo giọng đọc: ${ttsDone}/${script.scenes.length} scene`, 5 + Math.round((ttsDone / script.scenes.length) * 15));
+  };
   const sceneAudio = await Promise.all(
     script.scenes.map((scene) =>
       limit(async () => {
@@ -114,12 +128,14 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
         if (existsSync(out)) {
           const dur = await getDurationSec(out);
           log.info(`  scene ${scene.id}: REUSE mp3 (${dur.toFixed(2)}s)`);
+          reportTts();
           return { id: scene.id, path: out, durationSec: dur };
         }
         log.info(`  TTS scene ${scene.id} (${scene.voiceText.length} chars)...`);
         await ttsClient.generate(scene.voiceText, out, srtOut);
         const dur = await getDurationSec(out);
         log.info(`  scene ${scene.id}: ${dur.toFixed(2)}s`);
+        reportTts();
         return { id: scene.id, path: out, durationSec: dur };
       }),
     ),
@@ -187,6 +203,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   }
   const totalAudioSec = await getDurationSec(voiceMp3);
   log.info(`  voice.mp3: ${totalAudioSec.toFixed(2)}s, ${sfxList.length} SFX`);
+  const sceneDurations = Object.fromEntries(sceneAudio.map((a) => [a.id, a.durationSec]));
   if (options.audioOnly) {
     log.step(6, TOTAL_STEPS, "Audio only mode");
     console.log("\n=== Audio Result ===");
@@ -194,7 +211,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
     console.log(`Script: ${join(outputDir, "script.txt")}`);
     console.log(`Subtitle: ${subtitlePath}`);
     console.log(`Tong thoi luong: ${totalAudioSec.toFixed(2)}s`);
-    return;
+    return { sceneDurations };
   }
 
   // STEP 6 — render/cut each scene's visual clip, fit to narration length
@@ -214,6 +231,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   let footageCursor = 0;
   for (let i = 0; i < script.scenes.length; i++) {
     const scene = script.scenes[i];
+    report(`Đang dựng hình scene ${i + 1}/${script.scenes.length}`, 20 + Math.round((i / script.scenes.length) * 65));
     const dur = sceneAudio.find((a) => a.id === scene.id)!.durationSec;
     const visualDur = dur + (i < lastIdx ? SCENE_GAP_SEC : OUTRO_HOLD_SEC);
 
@@ -269,6 +287,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
 
   // STEP 7 — concat clips + mux voice
   log.step(7, TOTAL_STEPS, "Concat clips + mux audio");
+  report("Ghép video + trộn âm thanh", 88);
   const silentVideo = join(outputDir, "video-silent.mp4");
   const videoPath = join(outputDir, "video.mp4");
   await concatVideos(fittedClips, silentVideo);
@@ -282,4 +301,5 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   console.log(`Script: ${join(outputDir, "script.txt")}  (cho CapCut auto-caption)`);
   console.log(`Subtitle: ${subtitlePath}`);
   console.log(`Tong thoi luong: ${totalAudioSec.toFixed(2)}s`);
+  return { sceneDurations };
 }

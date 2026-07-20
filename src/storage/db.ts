@@ -106,6 +106,9 @@ export interface SceneRecord {
   source_asset_id: string | null;
   source_start: number | null;
   source_end: number | null;
+  /** Actual TTS-measured duration in seconds, filled in after "Tạo MP3" — lets
+   *  subtitle timing anchor to real audio instead of a word-count guess. */
+  voice_duration_sec: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -269,6 +272,7 @@ db.exec(`
     source_asset_id TEXT,
     source_start REAL,
     source_end REAL,
+    voice_duration_sec REAL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -342,6 +346,7 @@ for (const statement of [
   "ALTER TABLE timeline_tracks ADD COLUMN sub_color TEXT NOT NULL DEFAULT '#ffffff'",
   "ALTER TABLE timeline_tracks ADD COLUMN sub_bg_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.55)'",
   "ALTER TABLE timeline_tracks ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
+  "ALTER TABLE scenes ADD COLUMN voice_duration_sec REAL",
 ]) {
   try {
     db.exec(statement);
@@ -531,6 +536,7 @@ async function initPostgresMirror() {
         source_asset_id TEXT,
         source_start DOUBLE PRECISION,
         source_end DOUBLE PRECISION,
+        voice_duration_sec DOUBLE PRECISION,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -620,6 +626,7 @@ async function initPostgresMirror() {
     { label: "scenes.source_asset_id", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_asset_id TEXT` },
     { label: "scenes.source_start", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION` },
     { label: "scenes.source_end", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION` },
+    { label: "scenes.voice_duration_sec", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS voice_duration_sec DOUBLE PRECISION` },
     { label: "timeline_clips.sub_font_size", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16` },
     { label: "timeline_clips.sub_color", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_color TEXT NOT NULL DEFAULT '#ffffff'` },
     { label: "timeline_clips.sub_font_family", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'` },
@@ -983,6 +990,7 @@ export function replaceProjectScenes(
       source_asset_id: null,
       source_start: null,
       source_end: null,
+      voice_duration_sec: null,
       created_at: created,
       updated_at: created,
     };
@@ -1020,6 +1028,7 @@ export function addProjectScene(projectId: string, data: { voiceText: string; sc
     source_asset_id: null,
     source_start: null,
     source_end: null,
+    voice_duration_sec: null,
     created_at: created,
     updated_at: created,
   };
@@ -1053,18 +1062,19 @@ export function getScene(sceneId: string): SceneRecord | undefined {
   return db.prepare("SELECT * FROM scenes WHERE id = ?").get(sceneId) as SceneRecord | undefined;
 }
 
-export function updateScene(sceneId: string, data: Partial<Pick<SceneRecord, "voice_text" | "source_asset_id" | "source_start" | "source_end">>): SceneRecord | undefined {
+export function updateScene(sceneId: string, data: Partial<Pick<SceneRecord, "voice_text" | "source_asset_id" | "source_start" | "source_end" | "voice_duration_sec">>): SceneRecord | undefined {
   const current = getScene(sceneId);
   if (!current) return undefined;
   db.prepare(`
     UPDATE scenes
-    SET voice_text = ?, source_asset_id = ?, source_start = ?, source_end = ?, updated_at = ?
+    SET voice_text = ?, source_asset_id = ?, source_start = ?, source_end = ?, voice_duration_sec = ?, updated_at = ?
     WHERE id = ?
   `).run(
     data.voice_text ?? current.voice_text,
     data.source_asset_id ?? current.source_asset_id,
     data.source_start ?? current.source_start,
     data.source_end ?? current.source_end,
+    data.voice_duration_sec ?? current.voice_duration_sec,
     nowIso(),
     sceneId,
   );
