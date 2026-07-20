@@ -409,7 +409,7 @@ async function initPostgresMirror() {
       label: "sessions",
       sql: `CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
-        email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+        email TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         created_at TEXT NOT NULL
       )`,
@@ -417,7 +417,7 @@ async function initPostgresMirror() {
     {
       label: "user_settings",
       sql: `CREATE TABLE IF NOT EXISTS user_settings (
-        email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+        email TEXT PRIMARY KEY,
         storage_quota_bytes BIGINT NOT NULL,
         credits INTEGER NOT NULL,
         default_language TEXT NOT NULL,
@@ -435,7 +435,7 @@ async function initPostgresMirror() {
       label: "render_jobs",
       sql: `CREATE TABLE IF NOT EXISTS render_jobs (
         id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL,
         status TEXT NOT NULL,
         progress INTEGER NOT NULL,
         current_step TEXT NOT NULL,
@@ -454,7 +454,7 @@ async function initPostgresMirror() {
       label: "assets",
       sql: `CREATE TABLE IF NOT EXISTS assets (
         id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL,
         type TEXT NOT NULL,
         file_name TEXT NOT NULL,
         mime_type TEXT NOT NULL,
@@ -468,7 +468,7 @@ async function initPostgresMirror() {
       label: "scenes",
       sql: `CREATE TABLE IF NOT EXISTS scenes (
         id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL,
         scene_key TEXT NOT NULL,
         scene_order INTEGER NOT NULL,
         scene_type TEXT NOT NULL,
@@ -540,6 +540,14 @@ async function initPostgresMirror() {
       )`,
     },
     { label: "projects.owner_email", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device'` },
+    // This deployment's Neon "projects" table predates most of this schema (it
+    // was missing "title" entirely, confirmed via a live write-health error) —
+    // add every "base" column defensively, not just the ones added this session.
+    { label: "projects.title", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT 'Untitled video'` },
+    { label: "projects.topic", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT ''` },
+    { label: "projects.status", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'` },
+    { label: "projects.created_at", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_at TEXT NOT NULL DEFAULT ''` },
+    { label: "projects.updated_at", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT ''` },
     { label: "projects.aspect_ratio", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS aspect_ratio TEXT NOT NULL DEFAULT '9:16'` },
     { label: "projects.target_duration_sec", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS target_duration_sec INTEGER NOT NULL DEFAULT 120` },
     { label: "projects.voice_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_id TEXT NOT NULL DEFAULT 'vi-VN-HoaiMyNeural'` },
