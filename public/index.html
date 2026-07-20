@@ -1097,6 +1097,10 @@
             <input id="devEmail" type="email" placeholder="yourname@gmail.com" />
             <button class="btn" id="devLoginButton" type="button">Đăng nhập local test</button>
           </div>
+          <div class="field-stack" id="desktopConnectBox" style="display:none;margin-top:14px;">
+            <p class="tiny">App này chưa có cấu hình (lần đầu cài đặt). Bấm nút dưới để mở web thật, đăng nhập, rồi xác nhận kết nối máy này — không cần nhập tay key nào.</p>
+            <button class="btn primary" id="desktopConnectButton" type="button">Kết nối với tài khoản trên web</button>
+          </div>
           <p class="tiny" id="loginHint" style="margin-top:14px;"></p>
         </div>
       </div>
@@ -1702,9 +1706,14 @@
         $("#googleLoginButton").href = `${authBase}/api/auth/google/start`;
         $("#googleLoginButton").style.display = me.googleConfigured ? "grid" : "none";
         $("#devLoginBox").style.display = me.devLoginEnabled ? "grid" : "none";
+        const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+        const needsDesktopConnect = isLocal && !me.googleConfigured && !me.devLoginEnabled;
+        $("#desktopConnectBox").style.display = needsDesktopConnect ? "grid" : "none";
         $("#loginHint").textContent = me.googleConfigured
           ? "Google OAuth đã sẵn sàng. Sau khi đăng nhập, dữ liệu sẽ được tách theo email."
-          : "Chưa cấu hình GOOGLE_CLIENT_ID và GOOGLE_CLIENT_SECRET nên chưa đăng nhập Gmail thật được.";
+          : needsDesktopConnect
+            ? ""
+            : "Chưa cấu hình GOOGLE_CLIENT_ID và GOOGLE_CLIENT_SECRET nên chưa đăng nhập Gmail thật được.";
       }
 
       function hideLogin() {
@@ -4369,6 +4378,52 @@
         return false;
       }
 
+      function wireDesktopConnectButton() {
+        const button = $("#desktopConnectButton");
+        if (!button) return;
+        button.addEventListener("click", () => {
+          const port = location.port || "8787";
+          const productionUrl = "https://videostudioai-iota.vercel.app";
+          window.open(`${productionUrl}/?desktopProvision=1&port=${encodeURIComponent(port)}`, "_blank");
+        });
+      }
+
+      // Runs on the REAL web app (production/Vercel), never on the local
+      // desktop build: if this tab was opened from the local app's "Kết nối
+      // với tài khoản trên web" button, show a one-click confirm to push
+      // this account's config to that locally running instance.
+      async function checkDesktopProvisionRequest(me) {
+        const params = new URLSearchParams(location.search);
+        if (params.get("desktopProvision") !== "1") return;
+        const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+        if (isLocal || !me.authenticated) return;
+        const port = params.get("port") || "8787";
+        const localBase = `http://127.0.0.1:${port}`;
+        $("#desktopUpdateText").textContent = `Xác nhận kết nối máy tính đang chờ (${localBase}) với tài khoản ${me.user?.email || ""}?`;
+        $("#desktopUpdateButton").textContent = "Xác nhận kết nối";
+        $("#desktopUpdateBanner").classList.add("show");
+        $("#desktopUpdateButton").addEventListener("click", async () => {
+          const button = $("#desktopUpdateButton");
+          button.disabled = true;
+          button.textContent = "Đang gửi cấu hình...";
+          try {
+            const config = await api("/api/desktop/provision-config");
+            const res = await fetch(`${localBase}/api/desktop/receive-config`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(config),
+            });
+            if (!res.ok) throw new Error(`Local app trả lỗi HTTP ${res.status}`);
+            $("#desktopUpdateText").textContent = "Đã gửi xong. App trên máy đang khởi động lại — quay lại cửa sổ đó sau vài giây.";
+            $("#desktopUpdateButton").style.display = "none";
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = "Xác nhận kết nối";
+            showError(error);
+          }
+        }, { once: true });
+      }
+
       async function initDesktopDownloadButton() {
         try {
           const info = await fetch("/api/desktop/version").then((r) => r.json());
@@ -4425,11 +4480,13 @@
         try {
           const me = await api("/api/me");
           setServer(true, "Server online");
+          wireDesktopConnectButton();
           if (!me.authenticated) {
             showLogin(me);
             $("#bootLoading")?.remove();
             return;
           }
+          checkDesktopProvisionRequest(me);
           setUser(me.user);
           hideLogin();
           $("#bootLoading")?.remove();

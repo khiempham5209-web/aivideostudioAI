@@ -1385,6 +1385,87 @@ async function handleDesktopSelfUpdate(req: IncomingMessage, res: ServerResponse
   }
 }
 
+// Only the frontend origins this app is actually deployed on may call the
+// local receive-config endpoint cross-origin — narrows who can push config
+// into a locally running instance to "pages this app itself serves".
+const DESKTOP_PROVISION_ALLOWED_ORIGINS = new Set([
+  "https://videostudioai-iota.vercel.app",
+  PRODUCTION_BACKEND_URL,
+]);
+
+/** Production-only in practice: returns this deployment's own secrets to
+ *  the currently authenticated (allow-listed) user, so their local desktop
+ *  build can configure itself without them typing anything. Deliberately
+ *  narrow — only what the local instance needs, and notably NOT the Google
+ *  OAuth client secret: the local build uses dev-login instead (bypasses
+ *  Google entirely), since the OAuth redirect URI is registered for the
+ *  production domain only and a localhost redirect would just fail anyway. */
+async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  sendJson(res, 200, {
+    geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+    geminiModel: process.env.GEMINI_MODEL ?? "",
+    openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+    openaiModel: process.env.OPENAI_MODEL ?? "",
+    databaseUrl: process.env.DATABASE_URL ?? "",
+    allowedEmails: process.env.ALLOWED_EMAILS ?? "",
+    ttsVoiceName: process.env.TTS_VOICE_NAME ?? "",
+    ttsSpeed: process.env.TTS_SPEED ?? "",
+    edgeTtsMode: process.env.EDGE_TTS_MODE ?? "edge-first",
+    channelName: process.env.CHANNEL_NAME ?? "",
+  });
+}
+
+/** Local-desktop-only: receives config pushed from an authenticated browser
+ *  tab on the real web app (see DESKTOP_PROVISION_ALLOWED_ORIGINS), writes
+ *  it to .env.local next to this install, then restarts itself so the new
+ *  env actually takes effect. CORS-enabled for exactly those origins since
+ *  the call is a genuine cross-origin request (production page -> localhost). */
+async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerResponse) {
+  const origin = req.headers.origin;
+  if (origin && DESKTOP_PROVISION_ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  if (IS_PRODUCTION) {
+    sendJson(res, 403, { error: "Only available on the local desktop build" });
+    return;
+  }
+  try {
+    const body = (await readJsonBody(req)) as Record<string, unknown>;
+    const str = (key: string) => (typeof body[key] === "string" ? (body[key] as string) : "");
+    const lines = [
+      "APP_ENV=development",
+      "NODE_ENV=development",
+      `API_PORT=${PORT}`,
+      "ALLOW_DEV_LOGIN=true",
+      `ALLOWED_EMAILS=${str("allowedEmails")}`,
+      `APP_PUBLIC_URL=http://127.0.0.1:${PORT}`,
+      `GEMINI_API_KEY=${str("geminiApiKey")}`,
+      `GEMINI_MODEL=${str("geminiModel") || "gemini-2.5-flash"}`,
+      `OPENAI_API_KEY=${str("openaiApiKey")}`,
+      `OPENAI_MODEL=${str("openaiModel") || "gpt-4o-mini"}`,
+      `DATABASE_URL=${str("databaseUrl")}`,
+      `EDGE_TTS_MODE=${str("edgeTtsMode") || "edge-first"}`,
+      `TTS_VOICE_NAME=${str("ttsVoiceName")}`,
+      `TTS_SPEED=${str("ttsSpeed")}`,
+      `CHANNEL_NAME=${str("channelName")}`,
+      "",
+    ].join("\n");
+    await writeFile(resolve(".env.local"), lines, "utf8");
+    sendJson(res, 200, { ok: true });
+
+    setTimeout(() => {
+      const distEntry = resolve("dist", "api.js");
+      spawn(process.execPath, [distEntry], { cwd: resolve("."), detached: true, stdio: "ignore", windowsHide: true }).unref();
+      process.exit(0);
+    }, 1000);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, 500, { error: message });
+  }
+}
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -1402,6 +1483,29 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     if (req.method === "POST" && url.pathname === "/api/desktop/self-update") {
       await handleDesktopSelfUpdate(req, res);
       return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/desktop/provision-config") {
+      await handleDesktopProvisionConfig(req, res);
+      return;
+    }
+
+    if (url.pathname === "/api/desktop/receive-config") {
+      if (req.method === "OPTIONS") {
+        const origin = req.headers.origin;
+        if (origin && DESKTOP_PROVISION_ALLOWED_ORIGINS.has(origin)) {
+          res.setHeader("Access-Control-Allow-Origin", origin);
+          res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+          res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        }
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      if (req.method === "POST") {
+        await handleDesktopReceiveConfig(req, res);
+        return;
+      }
     }
 
     if (req.method === "GET" && url.pathname === "/api/me") {
