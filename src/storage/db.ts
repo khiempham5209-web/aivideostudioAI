@@ -367,6 +367,7 @@ let pgPool = DATABASE_URL
   : null;
 let pgWriteQueue: Promise<void> = Promise.resolve();
 
+// This app's own tables (dropped AND recreated fresh by the steps below).
 const LEGACY_MIRROR_TABLES = [
   "timeline_clips",
   "timeline_tracks",
@@ -378,33 +379,42 @@ const LEGACY_MIRROR_TABLES = [
   "users",
   "projects",
 ];
+// Turned out this Neon database had an entirely different app's schema
+// pasted into it (UUID-keyed users/projects, plus tables this app never
+// uses at all) — these three aren't managed by this app, but their leftover
+// foreign keys pointing at users/projects silently blocked the DROP above
+// on the first reset attempt. Dropped outright (not recreated).
+const UNRELATED_LEGACY_TABLES = ["templates", "timelines", "edit_history"];
 
 /**
- * Runs once, ever: this Postgres database had tables left over from an older
- * version of the app (missing base columns like projects.title,
- * user_settings.email — confirmed live via write-health errors), and patching
- * one missing column at a time just kept surfacing the next one on a
- * different table. Since this is a MIRROR of local SQLite (the source of
- * truth), not the primary store, dropping and letting the normal CREATE
- * TABLE steps rebuild everything fresh is safe and final. Gated by a marker
- * row so it can never run again (and never touches SQLite).
+ * Runs once, ever: this Postgres database had tables left over from a
+ * different app's schema entirely (confirmed live: missing base columns
+ * like projects.title, user_settings.email, users.picture — different
+ * column names/types altogether), and patching one missing column at a
+ * time just kept surfacing the next one on a different table. Since this
+ * is a MIRROR of local SQLite (the source of truth), not the primary
+ * store, dropping and letting the normal CREATE TABLE steps rebuild
+ * everything fresh is safe and final. Gated by a marker row so it can
+ * never run again (and never touches SQLite). CASCADE matters here: the
+ * unrelated legacy tables still reference users/projects, which silently
+ * blocked a plain DROP TABLE without it.
  */
 async function resetLegacyMirrorTablesOnce(pool: Pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS _schema_reset_markers (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`);
-  const existing = await pool.query(`SELECT 1 FROM _schema_reset_markers WHERE name = $1`, ["drop_legacy_tables_v1"]);
+  const existing = await pool.query(`SELECT 1 FROM _schema_reset_markers WHERE name = $1`, ["drop_legacy_tables_v2"]);
   if ((existing.rowCount ?? 0) > 0) return;
-  for (const table of LEGACY_MIRROR_TABLES) {
+  for (const table of [...LEGACY_MIRROR_TABLES, ...UNRELATED_LEGACY_TABLES]) {
     try {
-      await pool.query(`DROP TABLE IF EXISTS ${table}`);
+      await pool.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
     } catch (error) {
       console.warn(`Legacy mirror table reset: failed to drop "${table}": ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   await pool.query(`INSERT INTO _schema_reset_markers (name, applied_at) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`, [
-    "drop_legacy_tables_v1",
+    "drop_legacy_tables_v2",
     new Date().toISOString(),
   ]);
-  console.log("Legacy mirror tables dropped — will be recreated fresh from the current schema.");
+  console.log("Legacy mirror tables dropped (v2, with CASCADE) — will be recreated fresh from the current schema.");
 }
 
 async function initPostgresMirror() {
