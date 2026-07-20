@@ -48,10 +48,11 @@ export const TemplateScriptSchema = z.object({
   }),
   /** Output aspect for every scene (templates render a matching composition). */
   aspect: z.enum(["9:16", "16:9", "1:1"]).default("9:16"),
+  // 60 supports long (~10+ min) narrated videos at ~1 scene per 14s of speech.
   scenes: z
     .array(TemplateScene)
     .min(3)
-    .max(12)
+    .max(60)
     .refine((s) => s[0]?.type === "hook", { message: "scenes[0] must be type=hook" })
     .refine((s) => s[s.length - 1]?.type === "outro", { message: "last scene must be type=outro" }),
 });
