@@ -13,10 +13,21 @@ const pythonBin =
     ? join(venvDir, "Scripts", "python.exe")
     : join(venvDir, "bin", "python");
 
+function quoteIfNeeded(value) {
+  return typeof value === "string" && value.includes(" ") && !value.startsWith('"') ? `"${value}"` : value;
+}
+
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  // shell:true on Windows joins the command + args with plain spaces without
+  // quoting them — any piece containing a space (e.g. an install path like
+  // "Program Files" or "AI Video Studio") silently gets split into two
+  // tokens by cmd.exe. Quote both the command itself and every arg.
+  const isWin = process.platform === "win32";
+  const quotedCommand = isWin ? quoteIfNeeded(command) : command;
+  const quotedArgs = isWin ? args.map(quoteIfNeeded) : args;
+  const result = spawnSync(quotedCommand, quotedArgs, {
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: isWin,
     ...options,
   });
   return result.status === 0;
