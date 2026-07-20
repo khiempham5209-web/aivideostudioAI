@@ -15,6 +15,7 @@ import {
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "../assets/sfx-selector.js";
 import { composeTemplate } from "./template-composer.js";
 import { cutFootageToDuration, fitClipToDuration, imageToKenBurnsClip, concatVideos, muxAudioOntoVideo } from "./video-tools.js";
+import { fetchPexelsMedia, isPexelsConfigured } from "../assets/pexels-client.js";
 import { log } from "../utils/logger.js";
 
 const TOTAL_STEPS = 8;
@@ -224,6 +225,8 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   log.step(6, TOTAL_STEPS, "Render/cut visual clips + fit to narration");
   const clipsDir = join(outputDir, "clips");
   await mkdir(clipsDir, { recursive: true });
+  const pexelsCacheDir = join(outputDir, "..", "..", "assets", "pexels-cache");
+  if (isPexelsConfigured()) await mkdir(pexelsCacheDir, { recursive: true });
   const FOOTAGE_DIR = options.footageDir ?? join(outputDir, "..", "..", "assets", "footage");
   const footageFiles = await listFootageFiles(FOOTAGE_DIR);
   const footageDurations = await Promise.all(footageFiles.map((file) => getDurationSec(file)));
@@ -279,6 +282,29 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
       log.info(`  scene ${scene.id}: footage ${footageIndex + 1} @ ${startSec.toFixed(2)}s → ${visualDur.toFixed(2)}s`);
       footageCursor += visualDur;
       fittedClips.push(fitClip);
+    } else if (isPexelsConfigured() && scene.visualQuery) {
+      const pexels = existsSync(fitClip) ? null : await fetchPexelsMedia(scene.visualQuery, script.aspect, pexelsCacheDir);
+      if (existsSync(fitClip)) {
+        log.info(`  scene ${scene.id}: REUSE Pexels clip`);
+        fittedClips.push(fitClip);
+      } else if (pexels?.type === "video") {
+        await cutFootageToDuration(pexels.path, 0, visualDur, fitClip, script.aspect, RENDER_FPS);
+        log.info(`  scene ${scene.id}: Pexels video "${scene.visualQuery}" -> ${visualDur.toFixed(2)}s`);
+        fittedClips.push(fitClip);
+      } else if (pexels?.type === "image") {
+        await imageToKenBurnsClip(pexels.path, visualDur, fitClip, script.aspect, RENDER_FPS);
+        log.info(`  scene ${scene.id}: Pexels photo "${scene.visualQuery}" (Ken Burns) -> ${visualDur.toFixed(2)}s`);
+        fittedClips.push(fitClip);
+      } else {
+        log.info(`  scene ${scene.id}: no Pexels match for "${scene.visualQuery}", falling back to AI template`);
+        if (existsSync(rawClip)) {
+          log.info(`  scene ${scene.id}: REUSE clip — delete to force re-render`);
+        } else {
+          await composeTemplate({ templateId: scene.templateId, inputs: scene.inputs, aspect: script.aspect, outputPath: rawClip, fps: RENDER_FPS });
+        }
+        await fitClipToDuration(rawClip, visualDur, fitClip, RENDER_FPS);
+        fittedClips.push(fitClip);
+      }
     } else {
       // IDEMPOTENT: reuse an already-rendered clip. Delete it to force a
       // re-render after editing the scene's inputs or template.

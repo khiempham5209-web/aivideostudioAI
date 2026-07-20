@@ -25,6 +25,9 @@ export const TemplateScene = z.object({
   inputs: z.record(z.string(), z.unknown()).default({}),
   /** Optional SFX override (else picked per scene.type + voiceText keywords). */
   sfx: SfxSpec.optional(),
+  /** Short English keyword(s) for stock photo/video search (Pexels) when no
+   *  footage/image is manually assigned to this scene — e.g. "beach sunset". */
+  visualQuery: z.string().optional(),
 });
 export type TemplateSceneType = z.infer<typeof TemplateScene>;
 

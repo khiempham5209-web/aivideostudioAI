@@ -163,6 +163,12 @@ Allowed templateId and required inputs:
 
 Keep all on-screen input text short so it fits a vertical video.
 Use id values like "hook", "body-1", "body-2", "outro".
+
+Also add a "visualQuery" field to every scene: 2-4 English keywords describing
+a stock photo/video that would visually match that scene's narration (used to
+search a stock media library). Concrete and visual, not abstract — e.g.
+"mountain hiking trail" not "adventure feeling". Example: { "id": "body-1", ...,
+"visualQuery": "busy city street night" }.
 `;
 }
 

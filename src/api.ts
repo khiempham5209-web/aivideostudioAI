@@ -778,6 +778,11 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       voiceText: scene.voice_text,
       templateId: fallback.templateId,
       inputs: fallback.inputs,
+      // Manually-edited scenes skip the AI script generator (which supplies a
+      // proper English visualQuery) — fall back to the raw narration text.
+      // Works less well for Pexels search than a real keyword, but scenes on
+      // this path can still be given an image/video assigned by hand instead.
+      visualQuery: scene.voice_text.slice(0, 80),
     };
   });
   const script = {
@@ -1431,6 +1436,7 @@ async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerRes
     ttsSpeed: process.env.TTS_SPEED ?? "",
     edgeTtsMode: process.env.EDGE_TTS_MODE ?? "edge-first",
     channelName: process.env.CHANNEL_NAME ?? "",
+    pexelsApiKey: process.env.PEXELS_API_KEY ?? "",
     // Needed so the desktop instance can actually fetch media that was
     // uploaded/created via the web app (stored in R2, not on this machine) —
     // without these, rendering a project with any web-uploaded asset fails
@@ -1481,6 +1487,7 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       `R2_SECRET_ACCESS_KEY=${str("r2SecretAccessKey")}`,
       `R2_BUCKET=${str("r2Bucket")}`,
       `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
+      `PEXELS_API_KEY=${str("pexelsApiKey")}`,
       "",
     ].join("\n");
     await writeFile(resolve(".env.local"), lines, "utf8");
