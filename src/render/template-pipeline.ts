@@ -14,7 +14,7 @@ import {
 } from "../assets/audio-tools.js";
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "../assets/sfx-selector.js";
 import { composeTemplate } from "./template-composer.js";
-import { cutFootageToDuration, fitClipToDuration, concatVideos, muxAudioOntoVideo } from "./video-tools.js";
+import { cutFootageToDuration, fitClipToDuration, imageToKenBurnsClip, concatVideos, muxAudioOntoVideo } from "./video-tools.js";
 import { log } from "../utils/logger.js";
 
 const TOTAL_STEPS = 8;
@@ -30,6 +30,12 @@ const TYPE_TO_SFX: Record<string, string> = {
 };
 
 const VIDEO_EXT = new Set([".mp4", ".mov", ".mkv", ".webm"]);
+const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
+function isImagePath(path: string): boolean {
+  const dot = path.lastIndexOf(".");
+  return dot >= 0 && IMAGE_EXT.has(path.slice(dot).toLowerCase());
+}
 
 function formatSrtTime(seconds: number): string {
   const totalMillis = Math.max(0, Math.round(seconds * 1000));
@@ -239,7 +245,15 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
     const fitClip = join(clipsDir, `scene-${scene.id}-fit.mp4`);
 
     const plannedFootage = options.footagePlan?.[scene.id];
-    if (plannedFootage?.path) {
+    if (plannedFootage?.path && isImagePath(plannedFootage.path)) {
+      if (existsSync(fitClip)) {
+        log.info(`  scene ${scene.id}: REUSE image Ken Burns clip`);
+      } else {
+        await imageToKenBurnsClip(plannedFootage.path, visualDur, fitClip, script.aspect, RENDER_FPS);
+      }
+      log.info(`  scene ${scene.id}: assigned image (Ken Burns) -> ${visualDur.toFixed(2)}s`);
+      fittedClips.push(fitClip);
+    } else if (plannedFootage?.path) {
       const plannedDur = await getDurationSec(plannedFootage.path);
       const startSec = Math.max(0, Number(plannedFootage.startSec ?? 0));
       const endSec = plannedFootage.endSec == null ? null : Math.max(startSec + 0.1, Number(plannedFootage.endSec));

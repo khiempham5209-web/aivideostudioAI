@@ -876,7 +876,7 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string, b
       const footageEntries = await Promise.all(
         scenes
           .map(async (scene, index) => {
-            const asset = assets.find((item) => item.id === scene.source_asset_id && item.type === "video");
+            const asset = assets.find((item) => item.id === scene.source_asset_id && (item.type === "video" || item.type === "image"));
             if (!asset) return null;
             const sceneId = scene.scene_key || `scene-${index + 1}`;
             const path = await localFileForRender(project.owner_email, projectId, asset.file_path, asset.file_name);

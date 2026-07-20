@@ -85,6 +85,41 @@ export async function cutFootageToDuration(
   ]);
 }
 
+const ASPECT_RESOLUTION: Record<"16:9" | "9:16" | "1:1", [number, number]> = {
+  "16:9": [1920, 1080],
+  "9:16": [1080, 1920],
+  "1:1": [1080, 1080],
+};
+
+/**
+ * Turn a static image into a narration-length clip with a slow Ken Burns
+ * zoom (the same treatment scene visuals get when no real footage/AI-drawn
+ * template is assigned — see the image branch in template-pipeline.ts).
+ */
+export async function imageToKenBurnsClip(
+  inPath: string,
+  targetSec: number,
+  outPath: string,
+  aspect: "16:9" | "9:16" | "1:1" = "9:16",
+  fps = 30,
+): Promise<void> {
+  const target = Math.max(0.1, targetSec);
+  const [w, h] = ASPECT_RESOLUTION[aspect];
+  const frames = Math.max(1, Math.round(target * fps));
+  // Gentle zoom-in (up to ~1.12x by the end) — subtle enough not to feel
+  // like a slideshow gimmick over several seconds of narration.
+  const zoompan = `zoompan=z='min(zoom+0.0008,1.12)':d=${frames}:s=${w}x${h}:fps=${fps}`;
+  await run(FFMPEG_BIN, [
+    "-y",
+    "-loop", "1",
+    "-i", inPath,
+    "-t", target.toFixed(3),
+    "-vf", `${aspectFilter(aspect)},${zoompan}`,
+    ...ENCODE(fps),
+    outPath,
+  ]);
+}
+
 /** Concatenate uniformly-encoded clips into one silent video (stream copy). */
 export async function concatVideos(clipPaths: string[], outPath: string): Promise<void> {
   if (clipPaths.length === 0) throw new Error("concatVideos: empty clipPaths");
