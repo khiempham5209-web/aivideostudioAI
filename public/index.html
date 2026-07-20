@@ -1470,6 +1470,7 @@
                 <button class="btn primary" id="renderButton">Xuất video</button>
                 <button class="btn" id="cancelButton">Hủy render</button>
                 <div class="progress"><div style="display:flex;justify-content:space-between;"><strong>Thanh tiến trình xử lý</strong><span id="exportPct">0%</span></div><div class="bar"><span id="exportBar" style="width:0%;"></span></div></div>
+                <div id="exportErrorMessage" style="display:none;margin-top:8px;padding:10px;border:1px solid rgba(251,113,133,.4);border-radius:8px;background:rgba(251,113,133,.1);color:#fca5a5;font-size:13px;"></div>
                 <div id="resultLinks" class="field-stack"></div>
               </div>
             </div>
@@ -3061,6 +3062,14 @@
         $("#jobBadge").textContent = label(job.status);
         $("#jobBadge").className = `pill ${job.status === "completed" ? "ok" : "warn"}`;
         setProgress(job.progress || 0, job.current_step || label(job.status));
+        if ($("#exportErrorMessage")) {
+          if (job.status === "failed" && job.error_message) {
+            $("#exportErrorMessage").textContent = `Xuất video lỗi: ${job.error_message}`;
+            $("#exportErrorMessage").style.display = "block";
+          } else {
+            $("#exportErrorMessage").style.display = "none";
+          }
+        }
         state.lastVideoPath = job.video_path || state.lastVideoPath || "";
         state.lastAudioPath = job.audio_path || state.lastAudioPath || "";
         if ($("#audioJobStatus")) {

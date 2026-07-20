@@ -1431,6 +1431,15 @@ async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerRes
     ttsSpeed: process.env.TTS_SPEED ?? "",
     edgeTtsMode: process.env.EDGE_TTS_MODE ?? "edge-first",
     channelName: process.env.CHANNEL_NAME ?? "",
+    // Needed so the desktop instance can actually fetch media that was
+    // uploaded/created via the web app (stored in R2, not on this machine) —
+    // without these, rendering a project with any web-uploaded asset fails
+    // with "R2 is not configured" the moment the pipeline tries to download it.
+    r2AccountId: process.env.R2_ACCOUNT_ID ?? "",
+    r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
+    r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
+    r2Bucket: process.env.R2_BUCKET ?? "",
+    r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL ?? "",
   });
 }
 
@@ -1467,6 +1476,11 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       `TTS_VOICE_NAME=${str("ttsVoiceName")}`,
       `TTS_SPEED=${str("ttsSpeed")}`,
       `CHANNEL_NAME=${str("channelName")}`,
+      `R2_ACCOUNT_ID=${str("r2AccountId")}`,
+      `R2_ACCESS_KEY_ID=${str("r2AccessKeyId")}`,
+      `R2_SECRET_ACCESS_KEY=${str("r2SecretAccessKey")}`,
+      `R2_BUCKET=${str("r2Bucket")}`,
+      `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
       "",
     ].join("\n");
     await writeFile(resolve(".env.local"), lines, "utf8");
