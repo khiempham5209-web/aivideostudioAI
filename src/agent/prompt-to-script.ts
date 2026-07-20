@@ -6,7 +6,6 @@ import dotenv from "dotenv";
 import { z } from "zod";
 import {
   TemplateScriptSchema,
-  TemplateScene,
   type TemplateScript,
 } from "../render/template-script-schema.js";
 import { toSlug } from "../utils/slug.js";
@@ -16,20 +15,14 @@ dotenv.config({ path: ".env.local" });
 const CHANNEL_NAME = process.env.CHANNEL_NAME ?? "Khiempham AI";
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
-// TemplateScriptSchema.shape.scenes is already a ZodEffects (it has .refine()
-// chains applied), so calling .max() on it doesn't actually widen the bound —
-// the original .max(12) baked into that chain still wins. Rebuild the array
-// schema from scratch with the same shape/refinements but a real wider cap,
-// so long-duration scripts (many scenes) aren't silently rejected and
-// downgraded to the generic fallback template.
-const GeneratedScriptSchema = TemplateScriptSchema.extend({
-  scenes: z
-    .array(TemplateScene)
-    .min(3)
-    .max(60)
-    .refine((s) => s[0]?.type === "hook", { message: "scenes[0] must be type=hook" })
-    .refine((s) => s[s.length - 1]?.type === "outro", { message: "last scene must be type=outro" }),
-});
+// The scene-count cap lives in one place now: TemplateScriptSchema itself
+// (src/render/template-script-schema.ts). Reuse it as-is rather than
+// rebuilding — a prior version of this file tried to override just the
+// bound via .extend({ scenes: TemplateScriptSchema.shape.scenes.max(N) }),
+// but that schema is already a ZodEffects (it has .refine() chains on it),
+// so calling .max() on it silently did nothing and the old .max(12) kept
+// winning. Don't repeat that mistake here.
+const GeneratedScriptSchema = TemplateScriptSchema;
 
 export interface GenerateScriptOptions {
   outputRoot?: string;
@@ -124,9 +117,11 @@ function buildPrompt(
   const targetWords = Math.round(targetDurationSec * 2.5);
   const minWords = Math.max(60, Math.round(targetWords * 0.85));
   const maxWords = Math.round(targetWords * 1.15);
-  const sceneCount = Math.min(50, Math.max(3, Math.round(targetDurationSec / 14)));
+  // Sized to cover the full duration range the UI allows (up to 1800s/30min
+  // -> ~130 scenes at ~14s/scene) rather than an arbitrary lower ceiling.
+  const sceneCount = Math.min(150, Math.max(3, Math.round(targetDurationSec / 14)));
   const minScenes = Math.max(3, sceneCount - 2);
-  const maxScenes = Math.min(55, sceneCount + 2);
+  const maxScenes = Math.min(155, sceneCount + 2);
   return `
 You create Vietnamese short review videos as JSON for an existing renderer.
 
@@ -216,9 +211,16 @@ export async function generateScriptFromPrompt(
   const voiceSpeed = options.voiceSpeed ?? Number(process.env.TTS_SPEED ?? 1);
   const targetDurationSec = options.targetDurationSec && options.targetDurationSec > 0 ? options.targetDurationSec : 120;
   const aiProvider = options.aiProvider ?? "gemini";
-  // Long requests (many minutes of narration) need headroom in the JSON response
-  // so the model isn't silently cut off mid-script.
-  const maxOutputTokens = Math.min(32768, Math.max(4096, Math.round(targetDurationSec * 40)));
+  // Long requests (many minutes of narration -> many scenes) need headroom in
+  // the JSON response so the model isn't silently cut off mid-script. The
+  // ceiling is provider-specific: OpenAI's gpt-4o-mini hard-rejects
+  // completions above 16384 max_tokens, while Gemini 2.5 Flash supports a
+  // much larger output window — capping both at the lower number would make
+  // very long (25-30 min) scripts truncate on Gemini too, for no reason.
+  const tokensPerSecond = 40;
+  const maxOutputTokens = aiProvider === "openai"
+    ? Math.min(16000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)))
+    : Math.min(60000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)));
   const promptText = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec);
   const responseText = aiProvider === "openai"
     ? await callOpenAI(promptText, options.model ?? DEFAULT_OPENAI_MODEL, maxOutputTokens)
