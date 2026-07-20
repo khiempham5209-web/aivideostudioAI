@@ -39,6 +39,7 @@ import {
   getProject,
   getStats,
   getPgWriteHealth,
+  getUser,
   getUserProject,
   getRenderJob,
   isUserFile,
@@ -1321,7 +1322,16 @@ async function handleDevLogin(req: IncomingMessage, res: ServerResponse) {
     sendJson(res, 403, { error: "This Gmail is not allowed to use this private app", email });
     return;
   }
-  const user = upsertUser({ email, name: email.split("@")[0], picture: null, provider: "dev" });
+  // Preserve a real display name/picture if one is already on record (e.g.
+  // pushed in by the desktop-provisioning handshake) instead of overwriting
+  // it with the email-prefix placeholder on every dev-login.
+  const existing = getUser(email);
+  const user = upsertUser({
+    email,
+    name: existing?.name || email.split("@")[0],
+    picture: existing?.picture ?? null,
+    provider: "dev",
+  });
   const session = createSession(user.email);
   setCookie(res, SESSION_COOKIE, session.id);
   sendJson(res, 200, { ok: true, user });
@@ -1404,6 +1414,9 @@ async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerRes
   const user = requireUser(req, res);
   if (!user) return;
   sendJson(res, 200, {
+    email: user.email,
+    displayName: user.name,
+    picture: user.picture ?? "",
     geminiApiKey: process.env.GEMINI_API_KEY ?? "",
     geminiModel: process.env.GEMINI_MODEL ?? "",
     openaiApiKey: process.env.OPENAI_API_KEY ?? "",
@@ -1453,6 +1466,14 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       "",
     ].join("\n");
     await writeFile(resolve(".env.local"), lines, "utf8");
+
+    // Seed the real display name/picture now, before the restart — otherwise
+    // the first dev-login would fall back to the email-prefix placeholder.
+    const email = str("email");
+    if (email) {
+      upsertUser({ email, name: str("displayName") || email.split("@")[0], picture: str("picture") || null, provider: "dev" });
+    }
+
     sendJson(res, 200, { ok: true });
 
     setTimeout(() => {

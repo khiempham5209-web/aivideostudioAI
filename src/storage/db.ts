@@ -1414,6 +1414,10 @@ export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecor
   if (updated) mirrorUpsert("render_jobs", updated as unknown as DbRow, "id");
 }
 
+export function getUser(email: string): UserRecord | undefined {
+  return db.prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRecord | undefined;
+}
+
 export function upsertUser(data: { email: string; name: string; picture?: string | null; provider: string }): UserRecord {
   const existing = db.prepare("SELECT * FROM users WHERE email = ?").get(data.email) as UserRecord | undefined;
   const timestamp = nowIso();
