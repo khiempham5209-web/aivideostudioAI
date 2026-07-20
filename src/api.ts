@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import os from "node:os";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
@@ -1609,20 +1609,26 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const rawText = typeof (body as { text?: unknown }).text === "string" ? (body as { text: string }).text : "";
       const text = (rawText.trim() || "Xin chào, đây là giọng đọc thử trong AI Video Studio.").slice(0, 220);
       const speed = Math.min(2, Math.max(0.5, Number((body as { speed?: unknown }).speed) || 1));
+      // Cached by (voice, speed, text) — the common case is the same default
+      // demo phrase at speed 1 for a given voice, so after the first request
+      // ever made for that combo, every later preview is instant instead of
+      // re-running TTS from scratch each click.
       const previewDir = resolve("storage", "voice-previews");
       await mkdir(previewDir, { recursive: true });
-      const previewPath = join(previewDir, `${voice.id}-${Date.now()}.mp3`);
+      const textHash = createHash("sha1").update(text).digest("hex").slice(0, 16);
+      const previewPath = join(previewDir, `${voice.id}-${speed}-${textHash}.mp3`);
       try {
-        const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed });
-        await client.generate(text, previewPath);
+        if (!existsSync(previewPath)) {
+          const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed });
+          await client.generate(text, previewPath);
+        }
         const audioBuffer = await readFile(previewPath);
         res.writeHead(200, {
           "Content-Type": "audio/mpeg",
           "Content-Length": String(audioBuffer.length),
-          "Cache-Control": "no-store",
+          "Cache-Control": "private, max-age=86400",
         });
         res.end(audioBuffer);
-        void rm(previewPath, { force: true }).catch(() => undefined);
       } catch (error) {
         sendJson(res, 502, { error: `Tạo preview thất bại: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -2476,9 +2482,33 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+const DEFAULT_VOICE_PREVIEW_TEXT = "Xin chào, đây là giọng đọc thử trong AI Video Studio.";
+
+/** Pre-generates the default demo-phrase preview for every ready voice at
+ *  startup, so the very first "nghe thử giọng" click a user makes is
+ *  already served from cache instead of waiting on a live TTS call. */
+async function warmVoicePreviewCache() {
+  const previewDir = resolve("storage", "voice-previews");
+  await mkdir(previewDir, { recursive: true });
+  const textHash = createHash("sha1").update(DEFAULT_VOICE_PREVIEW_TEXT).digest("hex").slice(0, 16);
+  for (const voice of VOICE_OPTIONS) {
+    if (voice.status !== "ready") continue;
+    const previewPath = join(previewDir, `${voice.id}-1-${textHash}.mp3`);
+    if (existsSync(previewPath)) continue;
+    try {
+      const client = createTtsClient(loadConfig(), { provider: "edge", voiceName: voice.runtimeVoiceName, speed: 1 });
+      await client.generate(DEFAULT_VOICE_PREVIEW_TEXT, previewPath);
+      console.log(`Warmed voice preview cache: ${voice.label}`);
+    } catch (error) {
+      console.log(`Voice preview warmup skipped for ${voice.label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
 createServer((req, res) => {
   void handleRequest(req, res);
 }).listen(PORT, () => {
   console.log(`AI video API listening on http://127.0.0.1:${PORT}`);
   console.log("POST /create-video with JSON body: { \"prompt\": \"...\" }");
+  void warmVoicePreviewCache();
 });
