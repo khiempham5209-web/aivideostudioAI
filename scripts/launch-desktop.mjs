@@ -3,9 +3,11 @@
 // scripts/hidden-launch.vbs, which suppresses the console window; running
 // this script directly with `node` will still show a console.
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, appendFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const PRODUCTION_BACKEND_URL = "https://aivideostudioaibackend.onrender.com";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -33,6 +35,72 @@ function readPort() {
     }
   }
   return 8787;
+}
+
+function readEnvValue(key) {
+  const envPath = join(ROOT, ".env.local");
+  if (!existsSync(envPath)) return "";
+  try {
+    const text = readFileSync(envPath, "utf8");
+    const match = text.match(new RegExp(`^${key}=(.*)$`, "m"));
+    return match ? match[1] : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Silently pulls the latest config from the account this device was
+ *  originally connected to (see /api/desktop/provision-config and
+ *  /api/desktop/receive-config in api.ts) and rewrites .env.local — so
+ *  the user never has to redo the interactive "Kết nối" browser handshake
+ *  just because a new field (e.g. R2 keys) got added later. Best-effort:
+ *  if production is asleep/unreachable, silently keeps the existing config
+ *  instead of blocking startup — Render's free tier can take ~50s to wake
+ *  from a cold start, and the app should still open instantly either way. */
+async function autoSyncConfig() {
+  const token = readEnvValue("DEVICE_SYNC_TOKEN");
+  if (!token) return;
+  try {
+    const res = await fetch(`${PRODUCTION_BACKEND_URL}/api/desktop/sync-config?token=${encodeURIComponent(token)}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      log(`Auto-sync skipped: server responded HTTP ${res.status}`);
+      return;
+    }
+    const config = await res.json();
+    const str = (key) => (typeof config[key] === "string" ? config[key] : "");
+    const port = readPort();
+    const lines = [
+      "APP_ENV=development",
+      "NODE_ENV=development",
+      `API_PORT=${port}`,
+      "ALLOW_DEV_LOGIN=true",
+      `ALLOWED_EMAILS=${str("allowedEmails")}`,
+      `APP_PUBLIC_URL=http://127.0.0.1:${port}`,
+      `GEMINI_API_KEY=${str("geminiApiKey")}`,
+      `GEMINI_MODEL=${str("geminiModel") || "gemini-2.5-flash"}`,
+      `OPENAI_API_KEY=${str("openaiApiKey")}`,
+      `OPENAI_MODEL=${str("openaiModel") || "gpt-4o-mini"}`,
+      `DATABASE_URL=${str("databaseUrl")}`,
+      `EDGE_TTS_MODE=${str("edgeTtsMode") || "edge-first"}`,
+      `TTS_VOICE_NAME=${str("ttsVoiceName")}`,
+      `TTS_SPEED=${str("ttsSpeed")}`,
+      `CHANNEL_NAME=${str("channelName")}`,
+      `R2_ACCOUNT_ID=${str("r2AccountId")}`,
+      `R2_ACCESS_KEY_ID=${str("r2AccessKeyId")}`,
+      `R2_SECRET_ACCESS_KEY=${str("r2SecretAccessKey")}`,
+      `R2_BUCKET=${str("r2Bucket")}`,
+      `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
+      `PEXELS_API_KEY=${str("pexelsApiKey")}`,
+      `DEVICE_SYNC_TOKEN=${token}`,
+      "",
+    ].join("\n");
+    writeFileSync(join(ROOT, ".env.local"), lines, "utf8");
+    log("Auto-sync: .env.local refreshed from account.");
+  } catch (error) {
+    log(`Auto-sync skipped (production unreachable, likely asleep): ${error?.message || error}`);
+  }
 }
 
 async function isServerUp(port) {
@@ -73,6 +141,8 @@ async function main() {
     log(`ERROR: ${distEntry} not found — run "npm run build" first`);
     return;
   }
+
+  await autoSyncConfig();
 
   // Edge TTS runs through a Python virtualenv (created by
   // scripts/install-edge-tts.mjs), which isn't portable between machines —

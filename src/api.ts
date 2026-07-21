@@ -19,6 +19,8 @@ import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, si
 import {
   createProject,
   createSession,
+  createDeviceToken,
+  getDeviceTokenEmail,
   addProjectScene,
   addTrack,
   createAsset,
@@ -1412,17 +1414,15 @@ const DESKTOP_PROVISION_ALLOWED_ORIGINS = new Set([
   PRODUCTION_BACKEND_URL,
 ]);
 
-/** Production-only in practice: returns this deployment's own secrets to
- *  the currently authenticated (allow-listed) user, so their local desktop
- *  build can configure itself without them typing anything. Deliberately
- *  narrow — only what the local instance needs, and notably NOT the Google
- *  OAuth client secret: the local build uses dev-login instead (bypasses
- *  Google entirely), since the OAuth redirect URI is registered for the
- *  production domain only and a localhost redirect would just fail anyway. */
-async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerResponse) {
-  const user = requireUser(req, res);
-  if (!user) return;
-  sendJson(res, 200, {
+/** The full config payload a desktop instance needs — shared by the
+ *  session-authenticated first-connect endpoint and the token-authenticated
+ *  silent-resync endpoint below. Deliberately narrow — only what the local
+ *  instance needs, and notably NOT the Google OAuth client secret: the local
+ *  build uses dev-login instead (bypasses Google entirely), since the OAuth
+ *  redirect URI is registered for the production domain only and a
+ *  localhost redirect would just fail anyway. */
+function buildDesktopConfigPayload(user: { email: string; name: string; picture: string | null }) {
+  return {
     email: user.email,
     displayName: user.name,
     picture: user.picture ?? "",
@@ -1446,7 +1446,40 @@ async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerRes
     r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
     r2Bucket: process.env.R2_BUCKET ?? "",
     r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL ?? "",
+  };
+}
+
+async function handleDesktopProvisionConfig(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  sendJson(res, 200, {
+    ...buildDesktopConfigPayload(user),
+    // Minted once per first-connect — the desktop instance stores this and
+    // uses it (see /api/desktop/sync-config) to silently refresh its own
+    // config on every future launch, instead of repeating this interactive
+    // browser handshake every time.
+    deviceToken: createDeviceToken(user.email),
   });
+}
+
+/** Bearer-token-authenticated (not session-cookie): lets an already-connected
+ *  desktop instance silently pull its latest config on its own, e.g. at
+ *  every startup, with no browser/login interaction. The token is long,
+ *  random, and only ever handed out once via the session-authenticated
+ *  endpoint above — presenting it is equivalent to having completed that
+ *  interactive handshake once already. */
+async function handleDesktopSyncConfig(req: IncomingMessage, res: ServerResponse, token: string) {
+  const email = getDeviceTokenEmail(token);
+  if (!email) {
+    sendJson(res, 401, { error: "Invalid or unknown device token" });
+    return;
+  }
+  const user = getUser(email);
+  if (!user) {
+    sendJson(res, 404, { error: "Account no longer exists" });
+    return;
+  }
+  sendJson(res, 200, buildDesktopConfigPayload(user));
 }
 
 /** Local-desktop-only: receives config pushed from an authenticated browser
@@ -1488,6 +1521,7 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       `R2_BUCKET=${str("r2Bucket")}`,
       `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
       `PEXELS_API_KEY=${str("pexelsApiKey")}`,
+      `DEVICE_SYNC_TOKEN=${str("deviceToken")}`,
       "",
     ].join("\n");
     await writeFile(resolve(".env.local"), lines, "utf8");
@@ -1533,6 +1567,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === "GET" && url.pathname === "/api/desktop/provision-config") {
       await handleDesktopProvisionConfig(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/desktop/sync-config") {
+      const token = url.searchParams.get("token") ?? "";
+      await handleDesktopSyncConfig(req, res, token);
       return;
     }
 

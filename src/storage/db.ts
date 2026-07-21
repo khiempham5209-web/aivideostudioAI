@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { Pool } from "pg";
@@ -210,6 +211,16 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL,
     expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(email) REFERENCES users(email)
+  );
+
+  -- Long-lived, not a session: lets an already-connected desktop install
+  -- silently re-sync its own config (new secrets, updated keys) on every
+  -- launch, without repeating the interactive browser handshake each time.
+  CREATE TABLE IF NOT EXISTS device_tokens (
+    token TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
     created_at TEXT NOT NULL,
     FOREIGN KEY(email) REFERENCES users(email)
   );
@@ -470,6 +481,14 @@ async function initPostgresMirror() {
         id TEXT PRIMARY KEY,
         email TEXT NOT NULL,
         expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "device_tokens",
+      sql: `CREATE TABLE IF NOT EXISTS device_tokens (
+        token TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
         created_at TEXT NOT NULL
       )`,
     },
@@ -1476,6 +1495,22 @@ export function getSession(sessionId: string): (SessionRecord & { name: string; 
 export function deleteSession(sessionId: string) {
   db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
   void pgExec("DELETE FROM sessions WHERE id = $1", [sessionId]);
+}
+
+export function createDeviceToken(email: string): string {
+  // Grants full config/secret access on presentation alone (no session/
+  // password check) — needs real cryptographic strength, unlike the
+  // Date.now()+Math.random() id() helper used for ordinary record ids.
+  const token = randomBytes(32).toString("hex");
+  const created = nowIso();
+  db.prepare("INSERT INTO device_tokens (token, email, created_at) VALUES (?, ?, ?)").run(token, email, created);
+  mirrorUpsert("device_tokens", { token, email, created_at: created } as unknown as DbRow, "token");
+  return token;
+}
+
+export function getDeviceTokenEmail(token: string): string | undefined {
+  const row = db.prepare("SELECT email FROM device_tokens WHERE token = ?").get(token) as { email: string } | undefined;
+  return row?.email;
 }
 
 export function getStats(ownerEmail: string) {
