@@ -10,7 +10,7 @@ export interface SupertonicOpts {
 
 function run(command: string, args: string[], stdin?: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn(command, args);
+    const proc = spawn(command, args, { windowsHide: true });
     let stderr = "";
     proc.stderr.on("data", (d) => (stderr += d.toString()));
     proc.on("close", (code) => (code === 0 ? resolvePromise() : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-800)}`))));

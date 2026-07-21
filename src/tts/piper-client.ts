@@ -35,7 +35,7 @@ function ensureEspeakDataDir(): string | undefined {
 
 function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv; stdin?: string } = {}): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn(command, args, { env: options.env });
+    const proc = spawn(command, args, { env: options.env, windowsHide: true });
     let stderr = "";
     proc.stderr.on("data", (d) => (stderr += d.toString()));
     proc.on("close", (code) => (code === 0 ? resolvePromise() : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-800)}`))));

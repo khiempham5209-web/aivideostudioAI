@@ -90,6 +90,7 @@ export async function composeTemplate(args: ComposeArgs): Promise<string> {
         const proc = spawn("npx", spawnArgs, {
             stdio: ["ignore", "inherit", "inherit"],
             shell: true,
+            windowsHide: true,
         });
         proc.on("close", (code) =>
             code === 0

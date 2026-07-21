@@ -587,6 +587,46 @@
         background: var(--art, linear-gradient(135deg, #1e293b, #7c3aed));
       }
 
+      /* Compact horizontal scene filmstrip used only in Edit video's
+         "Media & track chỉnh sửa" panel — drag/scroll sideways to pick
+         a scene instead of a tall vertical list pushing the editor down. */
+      #timelineSceneList {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 8px;
+        padding: 2px 2px 8px;
+        cursor: grab;
+        scroll-snap-type: x proximity;
+      }
+      #timelineSceneList.dragging {
+        cursor: grabbing;
+        scroll-snap-type: none;
+        user-select: none;
+      }
+      #timelineSceneList .scene {
+        flex: 0 0 92px;
+        width: 92px;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+        padding: 6px;
+        scroll-snap-align: start;
+      }
+      #timelineSceneList .scene .mini {
+        min-height: 44px;
+      }
+      #timelineSceneList .scene strong {
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #timelineSceneList .scene p.tiny {
+        display: none;
+      }
+
       .voice {
         display: grid;
         gap: 9px;
@@ -1060,8 +1100,14 @@
       .playhead-v3:before { content:""; position:absolute; top:-7px; left:-6px; width:14px; height:14px; transform:rotate(45deg); background:#fb7185; border-radius:2px; }
       .inspector-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
       .inspector-tabs button.active { border-color:rgba(168,85,247,.7); background:rgba(124,58,237,.2); color:#fff; }
-      .ai-check-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
-      .ai-check { display:flex; align-items:center; gap:8px; min-height:36px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:rgba(7,10,16,.35); color:var(--muted); }
+      .ai-check-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:12px; }
+      .ai-check { display:flex; align-items:center; gap:9px; min-height:44px; padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:rgba(7,10,16,.35); color:var(--muted); font-size:13px; cursor:pointer; transition:border-color .15s ease,background .15s ease,color .15s ease; }
+      .ai-check:hover { border-color:rgba(168,85,247,.4); }
+      .ai-check:has(input:checked) { border-color:rgba(168,85,247,.6); background:linear-gradient(135deg,rgba(124,58,237,.18),rgba(34,211,238,.08)); color:var(--text); }
+      .ai-check input[type="checkbox"] { width:16px; height:16px; flex:0 0 16px; accent-color:#a855f7; }
+      .ai-check .ai-check-icon { font-size:15px; flex:0 0 auto; }
+      .ai-edit-head { display:flex; justify-content:space-between; gap:14px; align-items:center; flex-wrap:wrap; }
+      .ai-edit-head h4 { margin:0; font-size:15px; }
       .source-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
       .source-card { min-height:150px; padding:15px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(180deg,rgba(21,28,41,.96),rgba(9,14,22,.96)); }
       .source-card strong { display:block; margin:10px 0 6px; }
@@ -1194,7 +1240,10 @@
             <div id="headerSearchResults" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);max-height:360px;overflow:auto;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:6px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);"></div>
           </div>
           <div class="top-actions">
-            <span class="chip" id="serverChip">Đang kiểm tra server</span>
+            <div style="position:relative;display:inline-block;">
+              <span class="chip" id="serverChip" style="cursor:default;">Đang kiểm tra server</span>
+              <div id="serverErrorDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-height:320px;overflow:auto;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:10px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);text-align:left;"></div>
+            </div>
             <div style="position:relative;display:inline-block;">
               <button class="btn" id="notifBellButton" type="button" title="Thông báo">🔔<span id="notifBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#fb7185;color:#000;font-size:11px;font-weight:700;border-radius:999px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;"></span></button>
               <div id="notifDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-height:380px;overflow:auto;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);"></div>
@@ -1204,6 +1253,14 @@
               <button class="btn" id="profileButton" type="button" title="Tài khoản">👤</button>
               <div id="profileDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:200px;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);">
                 <div id="userButton" class="tiny" data-page="account" title="Xem Tài khoản & gói" style="padding:8px;margin-bottom:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:center;font-weight:700;color:var(--text);cursor:pointer;border-radius:6px;">Chưa đăng nhập</div>
+                <div style="padding:2px 8px 10px;margin-bottom:6px;border-bottom:1px solid rgba(148,163,184,.25);">
+                  <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><span class="muted tiny">Dung lượng server</span><strong id="storageUsed" style="font-size:13px;">0 B</strong></div>
+                  <div class="trend tiny" id="storageQuota" style="display:block;margin-top:2px;">Đang đo quota</div>
+                  <div id="localDiskCard" style="display:none;margin-top:8px;">
+                    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><span class="muted tiny">Dung lượng máy này</span><strong id="localDiskUsed" style="font-size:13px;">0 B</strong></div>
+                    <div class="trend tiny" id="localDiskFree" style="display:block;margin-top:2px;">Đang đo ổ đĩa</div>
+                  </div>
+                </div>
                 <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;">Cài đặt AI/API</button>
                 <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;">Điều chỉnh thanh công cụ</button>
                 <button class="btn" id="desktopDownloadButton" type="button" style="width:100%;margin-bottom:6px;display:none;">⬇️ Tải app cho Windows</button>
@@ -1254,8 +1311,6 @@
 
           <div class="grid metrics">
             <div class="card"><span class="muted">Tổng video đã tạo</span><strong id="totalVideos">0</strong><span class="trend" id="totalVideosTrend">Tuần này: -</span></div>
-            <div class="card"><span class="muted">Dung lượng trên server</span><strong id="storageUsed">0 B</strong><span class="trend" id="storageQuota">Đang đo quota</span></div>
-            <div class="card" id="localDiskCard" style="display:none;"><span class="muted">Dung lượng trên máy này</span><strong id="localDiskUsed">0 B</strong><span class="trend" id="localDiskFree">Đang đo ổ đĩa</span></div>
             <div class="card"><span class="muted">Credits AI</span><strong id="creditsAi">-</strong><span class="trend">Chưa nối hệ thống billing</span></div>
             <div class="card"><span class="muted">Video đang render</span><strong id="renderingVideos">0</strong><span class="trend">Realtime job queue</span></div>
             <div class="card"><span class="muted">Video hoàn thành</span><strong id="doneVideos">0</strong><span class="trend">Sẵn sàng tải xuống</span></div>
@@ -1389,8 +1444,18 @@
           </div>
           <div class="panel ai-edit-card" style="margin-bottom:12px;">
             <div class="panel-body">
-              <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;"><div><strong>AI Auto Edit</strong><p class="tiny" style="margin-top:5px;">Tự chia scene, khớp voice, xóa khoảng lặng, crop đúng tỷ lệ, sinh subtitle, thêm transition và ducking nhạc nền.</p></div><span class="pill ok">Project ready</span></div>
-              <div class="ai-check-grid"><label class="ai-check"><input type="checkbox" checked> Sync subtitle</label><label class="ai-check"><input type="checkbox" checked> Auto cut</label><label class="ai-check"><input type="checkbox" checked> Remove silence</label><label class="ai-check"><input type="checkbox" checked> Match voice</label><label class="ai-check"><input type="checkbox" checked> Auto transition</label><label class="ai-check"><input type="checkbox" checked> Music ducking</label></div>
+              <div class="ai-edit-head">
+                <div><h4>✨ AI Auto Edit</h4><p class="tiny" style="margin-top:5px;">Tự chia scene, khớp voice, xóa khoảng lặng, crop đúng tỷ lệ, sinh subtitle, thêm transition và ducking nhạc nền.</p></div>
+                <span class="pill ok">Project ready</span>
+              </div>
+              <div class="ai-check-grid">
+                <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">📝</span> Sync subtitle</label>
+                <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">✂️</span> Auto cut</label>
+                <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">🔇</span> Remove silence</label>
+                <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">🎙</span> Match voice</label>
+                <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">🔀</span> Auto transition</label>
+                <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">🎚</span> Music ducking</label>
+              </div>
             </div>
           </div>
           <div class="editor-shell">
@@ -1573,6 +1638,7 @@
             </div>
           `);
           $("#timelineAssetStatus")?.insertAdjacentHTML("beforebegin", `<label style="display:flex;gap:10px;align-items:center;margin:0;"><input id="editBurnSubtitles" type="checkbox" checked /> Phu de: bat/tat tai man Edit va dung khi xuat MP4</label>`);
+          setupSceneStripDragScroll($("#timelineSceneList"));
         }
         if (!$("#sfxPresetBar")) {
           document.querySelector("#media .panel .panel-body")?.insertAdjacentHTML("afterbegin", `
@@ -1695,6 +1761,24 @@
       function setServer(ok, text) {
         $("#serverChip").textContent = text;
         $("#serverChip").className = `chip ${ok ? "ok" : "warn"}`;
+        $("#serverChip").style.cursor = ok ? "default" : "pointer";
+      }
+
+      let lastErrorDetail = null;
+
+      function renderServerErrorDropdown() {
+        const box = $("#serverErrorDropdown");
+        if (!box) return;
+        if (!lastErrorDetail) { box.style.display = "none"; return; }
+        const pageLabel = DEFAULT_NAV_ITEMS.find((it) => it.page === lastErrorDetail.page)?.label || lastErrorDetail.page || "Không rõ màn";
+        const timeText = lastErrorDetail.time.toLocaleTimeString("vi-VN");
+        box.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;"><strong class="tiny">Chi tiết lỗi gần nhất</strong><button class="btn" id="serverErrorCloseButton" type="button" style="padding:2px 8px;min-height:auto;">Đóng</button></div>
+          <p class="tiny"><strong>Màn hình:</strong> ${pageLabel}</p>
+          <p class="tiny" style="margin-top:4px;"><strong>Thời gian:</strong> ${timeText}</p>
+          <p class="tiny" style="margin-top:4px;word-break:break-word;"><strong>Nội dung lỗi:</strong> ${lastErrorDetail.message}</p>
+        `;
+        $("#serverErrorCloseButton")?.addEventListener("click", (e) => { e.stopPropagation(); box.style.display = "none"; });
       }
 
       function applyUiSettings(settings) {
@@ -3059,6 +3143,31 @@
         $$("#timelineSceneList .scene").forEach((el) => el.classList.toggle("selected", el.dataset.id === scene.id));
       }
 
+      function setupSceneStripDragScroll(list) {
+        if (!list) return;
+        let isDown = false, startX = 0, startScroll = 0, moved = false;
+        list.addEventListener("mousedown", (e) => {
+          isDown = true; moved = false;
+          startX = e.pageX;
+          startScroll = list.scrollLeft;
+          list.classList.add("dragging");
+        });
+        window.addEventListener("mouseup", () => {
+          if (!isDown) return;
+          isDown = false;
+          list.classList.remove("dragging");
+          // Let the click handler on the button check this flag before it clears,
+          // otherwise a drag-release would also fire a scene selection.
+          if (moved) { list.dataset.wasDragged = "1"; setTimeout(() => delete list.dataset.wasDragged, 0); }
+        });
+        window.addEventListener("mousemove", (e) => {
+          if (!isDown) return;
+          const dx = e.pageX - startX;
+          if (Math.abs(dx) > 4) moved = true;
+          list.scrollLeft = startScroll - dx;
+        });
+      }
+
       function renderTimelineScenes(rows) {
         const list = $("#timelineSceneList");
         if (!list) return;
@@ -3069,15 +3178,16 @@
           renderEditorWorkspace();
           return;
         }
-        list.style.display = "grid";
+        list.style.display = "flex";
         list.innerHTML = "";
         rows.forEach((row, index) => {
           const item = document.createElement("button");
           item.type = "button";
           item.className = `scene${row.id === state.selectedTimelineSceneId ? " selected" : ""}`;
           item.dataset.id = row.id;
-          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><strong>${row.label}</strong><p class="tiny" style="margin-top:4px;">${(row.voice_text || "").slice(0, 90)}</p></div>`;
-          item.addEventListener("click", () => selectTimelineScene(row));
+          item.title = (row.voice_text || "").slice(0, 160);
+          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><strong>${row.label}</strong>`;
+          item.addEventListener("click", () => { if (!list.dataset.wasDragged) selectTimelineScene(row); });
           list.appendChild(item);
         });
         // Keep whatever was already selected if it still exists, else default to the first scene.
@@ -3510,6 +3620,20 @@
           if (box) box.style.display = "none";
         }
       });
+      $("#serverChip")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!lastErrorDetail) return;
+        const box = $("#serverErrorDropdown");
+        if (!box) return;
+        renderServerErrorDropdown();
+        box.style.display = box.style.display === "none" ? "block" : "none";
+      });
+      document.addEventListener("click", (event) => {
+        const box = $("#serverErrorDropdown");
+        if (box && box.style.display === "block" && !box.contains(event.target) && event.target.id !== "serverChip") {
+          box.style.display = "none";
+        }
+      });
       $("#notifBellButton")?.addEventListener("click", (event) => {
         event.stopPropagation();
         toggleNotifDropdown();
@@ -3551,9 +3675,12 @@
         if (error && error.error === "Authentication required") {
           showLogin({ googleConfigured: true, devLoginEnabled: false });
         } else {
+          const message = error?.error || error?.message || "Có lỗi khi xử lý.";
           $("#serverChip").textContent = "Có lỗi";
           $("#serverChip").className = "chip warn";
-          const message = error?.error || error?.message || "Có lỗi khi xử lý.";
+          $("#serverChip").style.cursor = "pointer";
+          lastErrorDetail = { message, page: document.querySelector(".page.active")?.id || "", time: new Date() };
+          renderServerErrorDropdown();
           if (/request entity too large|request body is too large|payload too large/i.test(message)) {
             toast("File upload quá lớn khi đi qua Vercel. Cần cắm R2 direct upload để upload MP4 lớn ổn định.");
           } else {

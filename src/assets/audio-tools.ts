@@ -6,7 +6,7 @@ import { FFMPEG_BIN, FFPROBE_BIN } from "../utils/binaries.js";
 
 function run(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args);
+    const proc = spawn(cmd, args, { windowsHide: true });
     let out = "", err = "";
     proc.stdout.on("data", (d) => (out += d.toString()));
     proc.stderr.on("data", (d) => (err += d.toString()));

@@ -52,6 +52,20 @@ function main() {
   console.log("Installing production-only node_modules into staging (npm ci --omit=dev)...");
   execFileSync("npm", ["ci", "--omit=dev", "--ignore-scripts"], { cwd: STAGING, stdio: "inherit", shell: true });
 
+  // ffmpeg-static's own binary download runs as its "install" script, which
+  // --ignore-scripts above skips — without this, node_modules/ffmpeg-static
+  // has no ffmpeg.exe and every render/voice-preview fails with "spawn ffmpeg
+  // ENOENT". Copy the binary already downloaded on THIS dev machine instead
+  // of re-running the installer (avoids a network fetch during packaging).
+  const ffmpegSrc = join(ROOT, "node_modules", "ffmpeg-static", "ffmpeg.exe");
+  const ffmpegDest = join(STAGING, "node_modules", "ffmpeg-static", "ffmpeg.exe");
+  if (existsSync(ffmpegSrc) && existsSync(dirname(ffmpegDest))) {
+    cpSync(ffmpegSrc, ffmpegDest);
+    console.log(`  copied ffmpeg binary: ${ffmpegSrc} -> ${ffmpegDest}`);
+  } else {
+    console.warn("  WARNING: could not find ffmpeg-static's ffmpeg.exe to copy — run `npm install` at the repo root first, or renders will fail with ENOENT.");
+  }
+
   console.log("\nStaging ready at:", STAGING);
   console.log("Next: run Inno Setup on desktop/installer.iss");
 }

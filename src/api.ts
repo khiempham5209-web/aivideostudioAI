@@ -1917,7 +1917,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         if (target === "ffmpeg") {
           try {
             const version = await new Promise<string>((resolveVersion, rejectVersion) => {
-              const proc = spawn(FFMPEG_BIN, ["-version"]);
+              const proc = spawn(FFMPEG_BIN, ["-version"], { windowsHide: true });
               let out = "";
               proc.stdout.on("data", (d) => (out += d.toString()));
               proc.on("error", rejectVersion);
