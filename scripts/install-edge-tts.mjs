@@ -93,6 +93,29 @@ function installPiperVoices() {
   }
 }
 
+function installSupertonic() {
+  // Same reasoning as installPiperVoices() — desktop-only, skip on the server.
+  if (process.env.RENDER || process.env.APP_ENV === "production") {
+    console.log("Skipping Supertonic voice setup (server/production environment — desktop-only feature).");
+    return;
+  }
+  console.log("Ensuring supertonic is installed");
+  if (!run(pythonBin, ["-m", "pip", "install", "supertonic"])) {
+    console.error("Failed to install supertonic — those local voices will be unavailable.");
+    return;
+  }
+  const supertonicDir = join(venvDir, "Lib", "site-packages", "supertonic");
+  const cacheMarker = join(process.env.USERPROFILE || process.env.HOME || ".", ".cache", "supertonic3");
+  if (existsSync(supertonicDir) && existsSync(cacheMarker)) {
+    console.log("Supertonic model already downloaded.");
+    return;
+  }
+  console.log("Downloading Supertonic model (~400MB, first run only)...");
+  if (!run(pythonBin, ["-c", "from supertonic import TTS; TTS(auto_download=True)"])) {
+    console.error("Failed to download the Supertonic model — it will download lazily on first real use instead.");
+  }
+}
+
 if (existsSync(edgeTtsBin) && existsSync(pythonBin)) {
   console.log(`edge-tts virtualenv already exists: ${edgeTtsBin}`);
   console.log("Ensuring gTTS fallback is installed");
@@ -101,6 +124,7 @@ if (existsSync(edgeTtsBin) && existsSync(pythonBin)) {
     process.exit(1);
   }
   installPiperVoices();
+  installSupertonic();
   process.exit(0);
 }
 
@@ -129,3 +153,4 @@ if (!existsSync(edgeTtsBin)) {
 
 console.log(`edge-tts installed: ${edgeTtsBin}`);
 installPiperVoices();
+installSupertonic();

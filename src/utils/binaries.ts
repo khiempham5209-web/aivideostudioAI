@@ -51,3 +51,10 @@ export function localPiperEspeakDataDir(): string | undefined {
   if (existsSync(win)) return win;
   return undefined;
 }
+
+/** Whether the supertonic pip package is installed in the local venv — the
+ *  model itself auto-downloads on first real synthesis call, so this is
+ *  just a proxy for "is this instance set up to use it at all". */
+export function isSupertonicInstalled(): boolean {
+  return existsSync(resolve(".edge-tts-venv", "Lib", "site-packages", "supertonic"));
+}

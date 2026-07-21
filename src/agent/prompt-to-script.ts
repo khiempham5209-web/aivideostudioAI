@@ -28,7 +28,7 @@ export interface GenerateScriptOptions {
   outputRoot?: string;
   model?: string;
   channel?: string;
-  voiceProvider?: "edge" | "omnivoice" | "piper";
+  voiceProvider?: "edge" | "omnivoice" | "piper" | "supertonic";
   voiceName?: string;
   voiceSpeed?: number;
   /** Target spoken duration in seconds — shapes requested word count and scene count. */
@@ -108,7 +108,7 @@ function normalizeGeneratedScript(raw: unknown): unknown {
 function buildPrompt(
   userRequest: string,
   channel: string,
-  voiceProvider: "edge" | "omnivoice" | "piper",
+  voiceProvider: "edge" | "omnivoice" | "piper" | "supertonic",
   voiceName: string,
   voiceSpeed: number,
   targetDurationSec: number,

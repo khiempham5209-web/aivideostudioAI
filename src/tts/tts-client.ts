@@ -9,6 +9,7 @@ import type { Config, TtsProvider } from "../config.js";
 import { EdgeTtsClient } from "./edge-client.js";
 import { OmniVoiceClient } from "./omnivoice-client.js";
 import { PiperClient } from "./piper-client.js";
+import { SupertonicClient } from "./supertonic-client.js";
 
 export interface TtsSelection {
   provider?: TtsProvider;
@@ -26,6 +27,9 @@ export function createTtsClient(cfg: Config, selection: TtsSelection = {}): TtsC
   }
   if (provider === "piper") {
     return new PiperClient({ voiceId: selection.voiceName ?? "vi_VN-vivos-x_low" });
+  }
+  if (provider === "supertonic") {
+    return new SupertonicClient({ voiceName: selection.voiceName ?? "F1" });
   }
 
   return new OmniVoiceClient({ endpoint: cfg.omnivoiceEndpoint });

@@ -45,7 +45,7 @@ export const TemplateScriptSchema = z.object({
     channel: z.string().min(1),
   }),
   voice: z.object({
-    provider: z.enum(["omnivoice", "edge", "piper"]).default("edge"),
+    provider: z.enum(["omnivoice", "edge", "piper", "supertonic"]).default("edge"),
     name: z.string().min(1).default("vi-VN-HoaiMyNeural"),
     speed: z.number().min(0.5).max(2.0).default(1),
   }),
