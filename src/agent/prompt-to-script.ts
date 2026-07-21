@@ -56,6 +56,61 @@ function timestampForPath(date = new Date()): string {
   ].join("");
 }
 
+/**
+ * The model occasionally echoes a multi-line input (e.g. a topic the user
+ * typed with a literal line break in it) back into a JSON string value
+ * without escaping the newline, producing invalid JSON like
+ * `"...text\n  more text..."` — a bare newline inside a string, which
+ * JSON.parse rejects with "Expected ',' or '}' after property value".
+ * Walk the text tracking whether we're inside a quoted string and escape
+ * any bare control character we find there before re-parsing.
+ */
+function sanitizeJsonControlChars(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (!inString) {
+      if (ch === '"') inString = true;
+      out += ch;
+      continue;
+    }
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = false;
+      out += ch;
+      continue;
+    }
+    if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else out += ch;
+  }
+  return out;
+}
+
+function parseJsonLoose(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    try {
+      return JSON.parse(sanitizeJsonControlChars(text));
+    } catch {
+      throw error;
+    }
+  }
+}
+
 function extractJson(text: string): unknown {
   const cleaned = text
     .replace(/```json/gi, "")
@@ -65,7 +120,7 @@ function extractJson(text: string): unknown {
   // With responseMimeType "application/json" this should already be pure JSON;
   // try it directly first before falling back to a lenient substring extraction.
   try {
-    return JSON.parse(cleaned);
+    return parseJsonLoose(cleaned);
   } catch {
     // fall through
   }
@@ -76,7 +131,7 @@ function extractJson(text: string): unknown {
     throw new Error("Gemini did not return a JSON object");
   }
 
-  return JSON.parse(cleaned.slice(first, last + 1));
+  return parseJsonLoose(cleaned.slice(first, last + 1));
 }
 
 function normalizeGeneratedScript(raw: unknown): unknown {
@@ -185,8 +240,16 @@ async function callGemini(promptText: string, model: string, maxOutputTokens: nu
     // responseMimeType constrains Gemini to emit syntactically valid JSON at the
     // API level, instead of hoping a free-text completion happens to be parseable
     // (Vietnamese text with embedded quotes was breaking naive JSON parsing).
-    config: { maxOutputTokens, responseMimeType: "application/json" },
+    // thinkingBudget: 0 disables Gemini 2.5's internal "thinking" tokens, which
+    // otherwise silently eat into maxOutputTokens — on short requests (small
+    // token budget) thinking alone could exhaust the whole budget, truncating
+    // the actual JSON to a few dozen characters with no visible error.
+    config: { maxOutputTokens, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
   });
+  const finishReason = result.candidates?.[0]?.finishReason;
+  if (finishReason && finishReason !== "STOP") {
+    throw new Error(`Gemini response cut short (finishReason: ${finishReason}) — response text: ${(result.text ?? "").slice(0, 200)}`);
+  }
   return result.text ?? "";
 }
 

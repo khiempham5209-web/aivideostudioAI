@@ -1760,6 +1760,22 @@
 
       let lastErrorDetail = null;
 
+      // AI script-generation fallback (server silently used a generic 6-scene
+      // skeleton because the real AI call failed) used to only show a toast
+      // that vanished in ~3s with no way to see it again. Route it through the
+      // same persistent error chip as showError() instead.
+      function reportScriptFallbackIfNeeded(scriptData) {
+        if (!scriptData.usedFallback) return false;
+        const message = `AI chưa tạo được kịch bản thật (${scriptData.fallbackReason || "không rõ lỗi"}) — đã dùng kịch bản mẫu dự phòng 6 scene chung chung, không phải nội dung AI viết riêng cho đề tài này. Bấm "Regenerate" để thử lại, hoặc sửa tay lời đọc trước khi tạo MP3.`;
+        $("#serverChip").textContent = "Có lỗi";
+        $("#serverChip").className = "chip warn";
+        $("#serverChip").style.cursor = "pointer";
+        lastErrorDetail = { message, page: document.querySelector(".page.active")?.id || "", time: new Date() };
+        renderServerErrorDropdown();
+        toast(message);
+        return true;
+      }
+
       function renderServerErrorDropdown() {
         const box = $("#serverErrorDropdown");
         if (!box) return;
@@ -3908,9 +3924,9 @@
           await loadProjects();
           await loadScenes(state.activeProjectId);
           switchPage("script");
-          toast(scriptData.usedFallback
-            ? `Gemini chưa dùng được (${scriptData.fallbackReason || "không rõ lỗi"}) — đã tạo kịch bản mẫu dự phòng, không phải AI thật. Sửa tay lại lời đọc trước khi tạo MP3.`
-            : "Đã tạo kịch bản AI thật (Gemini).");
+          if (!reportScriptFallbackIfNeeded(scriptData)) {
+            toast(`Đã tạo kịch bản AI thật (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"}).`);
+          }
         } catch (error) {
           showError(error);
         } finally {
@@ -4077,9 +4093,9 @@
           const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
           await loadProjects();
           await loadScenes(state.activeProjectId);
-          toast(scriptData.usedFallback
-            ? `Gemini chưa dùng được (${scriptData.fallbackReason || "không rõ lỗi"}) — đã tạo kịch bản mẫu dự phòng, không phải AI thật.`
-            : "Đã regenerate kịch bản AI thật (Gemini).");
+          if (!reportScriptFallbackIfNeeded(scriptData)) {
+            toast(`Đã regenerate kịch bản AI thật (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"}).`);
+          }
         } catch (error) {
           showError(error);
         } finally {

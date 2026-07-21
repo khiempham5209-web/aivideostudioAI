@@ -1228,6 +1228,10 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
   updateProject(projectId, {
     title: generated.script.metadata.title,
     status: "draft",
+    // Persist why AI generation fell back to the generic skeleton script so
+    // it's still visible after the one-shot toast disappears (e.g. reload,
+    // or checking the error chip later) instead of being lost immediately.
+    error_message: generated.usedFallback ? `AI script fallback: ${generated.fallbackReason}` : null,
   });
   sendJson(res, 200, {
     ok: true,
