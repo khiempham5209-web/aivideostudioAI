@@ -1207,6 +1207,7 @@
                 <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;">Cài đặt AI/API</button>
                 <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;">Điều chỉnh thanh công cụ</button>
                 <button class="btn" id="desktopDownloadButton" type="button" style="width:100%;margin-bottom:6px;display:none;">⬇️ Tải app cho Windows</button>
+                <button class="btn" id="desktopResyncButton" type="button" style="width:100%;margin-bottom:6px;display:none;">🔄 Đồng bộ lại tài khoản web</button>
                 <button class="btn" id="logoutButton" style="width:100%;">Đăng xuất</button>
               </div>
             </div>
@@ -4390,14 +4391,26 @@
         return false;
       }
 
+      function openDesktopConnectPage() {
+        const port = location.port || "8787";
+        const productionUrl = "https://videostudioai-iota.vercel.app";
+        window.open(`${productionUrl}/?desktopProvision=1&port=${encodeURIComponent(port)}`, "_blank");
+      }
+
       function wireDesktopConnectButton() {
         const button = $("#desktopConnectButton");
-        if (!button) return;
-        button.addEventListener("click", () => {
-          const port = location.port || "8787";
-          const productionUrl = "https://videostudioai-iota.vercel.app";
-          window.open(`${productionUrl}/?desktopProvision=1&port=${encodeURIComponent(port)}`, "_blank");
-        });
+        if (button) button.addEventListener("click", openDesktopConnectPage);
+
+        // Always available in the profile menu when running the desktop
+        // build — not just before first login — so re-syncing (e.g. after a
+        // new field like R2 gets added later) doesn't require logging out
+        // first just to reach the connect screen again.
+        const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname) || location.hostname.endsWith(".videostudioai");
+        const resyncButton = $("#desktopResyncButton");
+        if (isLocal && resyncButton) {
+          resyncButton.style.display = "block";
+          resyncButton.addEventListener("click", openDesktopConnectPage);
+        }
       }
 
       // Runs on the REAL web app (production/Vercel), never on the local
@@ -4411,14 +4424,14 @@
         if (isLocal || !me.authenticated) return;
         const port = params.get("port") || "8787";
         const localBase = `http://127.0.0.1:${port}`;
-        const doneKey = `avs_desktop_provisioned_${port}`;
 
         // The URL keeps ?desktopProvision=1 across reloads/history — without
-        // clearing it, the banner kept re-asking forever even after a
-        // successful connect. Clear the query string right away, and skip
-        // entirely if this port was already provisioned from this browser.
+        // clearing it, the banner kept re-asking forever on every reload.
+        // Clearing here is enough on its own: re-connecting is now something
+        // the user can deliberately trigger anytime (see "Đồng bộ lại tài
+        // khoản web" in the desktop app's profile menu), so it should always
+        // work rather than being silently skipped by a "did this before" flag.
         history.replaceState(null, "", location.pathname + location.hash);
-        if (localStorage.getItem(doneKey) === "1") return;
 
         $("#desktopUpdateText").textContent = `Xác nhận kết nối máy tính đang chờ (${localBase}) với tài khoản ${me.user?.email || ""}?`;
         $("#desktopUpdateButton").textContent = "Xác nhận kết nối";
@@ -4435,7 +4448,6 @@
               body: JSON.stringify(config),
             });
             if (!res.ok) throw new Error(`Local app trả lỗi HTTP ${res.status}`);
-            localStorage.setItem(doneKey, "1");
             $("#desktopUpdateText").textContent = "Đã gửi xong. App trên máy đang khởi động lại — quay lại cửa sổ đó sau vài giây.";
             $("#desktopUpdateButton").style.display = "none";
           } catch (error) {
