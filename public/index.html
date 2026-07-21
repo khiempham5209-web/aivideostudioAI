@@ -1255,6 +1255,7 @@
           <div class="grid metrics">
             <div class="card"><span class="muted">Tổng video đã tạo</span><strong id="totalVideos">0</strong><span class="trend" id="totalVideosTrend">Tuần này: -</span></div>
             <div class="card"><span class="muted">Dung lượng trên server</span><strong id="storageUsed">0 B</strong><span class="trend" id="storageQuota">Đang đo quota</span></div>
+            <div class="card" id="localDiskCard" style="display:none;"><span class="muted">Dung lượng trên máy này</span><strong id="localDiskUsed">0 B</strong><span class="trend" id="localDiskFree">Đang đo ổ đĩa</span></div>
             <div class="card"><span class="muted">Credits AI</span><strong id="creditsAi">-</strong><span class="trend">Chưa nối hệ thống billing</span></div>
             <div class="card"><span class="muted">Video đang render</span><strong id="renderingVideos">0</strong><span class="trend">Realtime job queue</span></div>
             <div class="card"><span class="muted">Video hoàn thành</span><strong id="doneVideos">0</strong><span class="trend">Sẵn sàng tải xuống</span></div>
@@ -1640,7 +1641,7 @@
         });
       }
 
-      function switchPage(page) {
+      function switchPage(page, options = {}) {
         stopAllMedia();
         $$(".page").forEach((el) => el.classList.toggle("active", el.id === page));
         $$("[data-page]").forEach((el) => el.classList.toggle("active", el.dataset.page === page));
@@ -1651,7 +1652,20 @@
         if (page === "music") renderMusicLibrary();
         if (page === "assets") renderAssetLibrary();
         if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
+
+        // Push a real browser-history entry per page switch so Back/Forward
+        // navigate between the app's own screens instead of leaving the app
+        // entirely (previously nothing ever called pushState, so the SPA was
+        // one single history entry the whole session).
+        if (!options.fromHistory && history.state?.page !== page) {
+          history.pushState({ page }, "", `#${page}`);
+        }
       }
+
+      window.addEventListener("popstate", (event) => {
+        const page = event.state?.page || "dashboard";
+        switchPage(page, { fromHistory: true });
+      });
 
       async function api(url, options) {
         const resp = await fetch(url, options);
@@ -1837,6 +1851,12 @@
           $("#storageBar").style.width = `${Math.min(100, storage.percent)}%`;
           if ($("#storageWarning")) $("#storageWarning").style.display = storage.percent >= 80 ? "block" : "none";
         }
+        if (state.stats?.localDisk && $("#localDiskCard")) {
+          const disk = state.stats.localDisk;
+          $("#localDiskCard").style.display = "block";
+          $("#localDiskUsed").textContent = disk.appUsedHuman;
+          $("#localDiskFree").textContent = `Còn trống ${disk.freeHuman} / ${disk.totalHuman} ổ đĩa`;
+        }
         if ($("#statCompletionRate")) {
           const rate = state.stats?.completionRate;
           $("#statCompletionRate").textContent = rate === null || rate === undefined ? "-" : `${rate}%`;
@@ -1857,8 +1877,13 @@
           const item = document.createElement("button");
           item.className = "project-thumb";
           item.style.setProperty("--art", art[index % art.length]);
-          item.innerHTML = `<footer><strong>${project.title || "Untitled video"}</strong><p class="tiny">${project.topic || ""}</p><span class="pill ${project.status === "completed" ? "ok" : "warn"}">${label(project.status)}</span></footer>`;
+          item.style.position = "relative";
+          item.innerHTML = `<button type="button" class="delete-project-btn" title="Xóa dự án" style="position:absolute;top:6px;right:6px;z-index:2;width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.45);color:#fca5a5;font-weight:700;cursor:pointer;">✕</button><footer><strong>${project.title || "Untitled video"}</strong><p class="tiny">${project.topic || ""}</p><span class="pill ${project.status === "completed" ? "ok" : "warn"}">${label(project.status)}</span></footer>`;
           if (project.id) item.addEventListener("click", () => selectProject(project));
+          item.querySelector(".delete-project-btn")?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            deleteProjectRemote(project);
+          });
           $("#recentProjects").appendChild(item);
         });
         $("#statsRows").innerHTML = list.length
@@ -1892,10 +1917,29 @@
         state.projects.forEach((project) => {
           const item = document.createElement("button");
           item.className = "asset-row";
-          item.innerHTML = `<div class="voice-top"><strong>${project.title || "Untitled video"}</strong><span class="pill ${project.status === "completed" ? "ok" : "warn"}">${label(project.status)}</span></div><p class="tiny">${project.topic || ""}</p>`;
+          item.style.position = "relative";
+          item.innerHTML = `<button type="button" class="delete-project-btn" title="Xóa dự án" style="position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);background:rgba(0,0,0,.25);color:#fca5a5;font-weight:700;cursor:pointer;">✕</button><div class="voice-top"><strong>${project.title || "Untitled video"}</strong><span class="pill ${project.status === "completed" ? "ok" : "warn"}">${label(project.status)}</span></div><p class="tiny">${project.topic || ""}</p>`;
           item.addEventListener("click", () => selectProject(project));
+          item.querySelector(".delete-project-btn")?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            deleteProjectRemote(project);
+          });
           $("#projectList").appendChild(item);
         });
+      }
+
+      async function deleteProjectRemote(project) {
+        const ok = confirm(`Xóa hẳn dự án "${project.title || "Untitled video"}"? Toàn bộ kịch bản, media, video đã xuất của dự án này sẽ mất — không thể hoàn tác.`);
+        if (!ok) return;
+        try {
+          await api(`/api/projects/${project.id}`, { method: "DELETE" });
+          if (state.activeProjectId === project.id) state.activeProjectId = "";
+          await loadProjects();
+          await loadStats();
+          toast("Đã xóa dự án.");
+        } catch (error) {
+          showError(error);
+        }
       }
 
       function selectProject(project) {
@@ -4524,6 +4568,16 @@
           setUser(me.user);
           hideLogin();
           $("#bootLoading")?.remove();
+          // Baseline history entry so the very first Back press lands on
+          // dashboard (or whatever page a reload/bookmark hash pointed at)
+          // instead of leaving the app — switchPage() only pushes on top of
+          // this from here on.
+          const hashPage = location.hash.slice(1);
+          const initialPage = /^[a-z0-9-]+$/i.test(hashPage) && document.getElementById(hashPage)?.classList.contains("page")
+            ? hashPage
+            : "dashboard";
+          history.replaceState({ page: initialPage }, "", `#${initialPage}`);
+          if (initialPage !== "dashboard") switchPage(initialPage, { fromHistory: true });
           checkDesktopUpdate();
           initDesktopDownloadButton();
           await Promise.all([loadVoices(), loadProjects(), loadStats(), loadSettings(), loadJobs().catch(() => {})]);

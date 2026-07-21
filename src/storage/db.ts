@@ -1407,6 +1407,30 @@ export function updateProject(projectId: string, data: Partial<Pick<ProjectRecor
   if (updated) mirrorUpsert("projects", updated as unknown as DbRow, "id");
 }
 
+/** Deletes a project and every row that references it. Returns the assets
+ *  that existed (so the caller can best-effort clean up their physical
+ *  files — R2 objects and/or local disk — same as deleteAsset does for a
+ *  single asset, just for the whole project's worth at once). SQLite here
+ *  never runs with PRAGMA foreign_keys on, so child-table order doesn't
+ *  matter for correctness, but deleting children first keeps the mirror
+ *  writes tidy or an error mid-way. */
+export function deleteProject(projectId: string): AssetRecord[] {
+  const assets = listAssets(projectId);
+  db.prepare("DELETE FROM timeline_clips WHERE project_id = ?").run(projectId);
+  db.prepare("DELETE FROM timeline_tracks WHERE project_id = ?").run(projectId);
+  db.prepare("DELETE FROM scenes WHERE project_id = ?").run(projectId);
+  db.prepare("DELETE FROM assets WHERE project_id = ?").run(projectId);
+  db.prepare("DELETE FROM render_jobs WHERE project_id = ?").run(projectId);
+  db.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+  void pgExec("DELETE FROM timeline_clips WHERE project_id = $1", [projectId]);
+  void pgExec("DELETE FROM timeline_tracks WHERE project_id = $1", [projectId]);
+  void pgExec("DELETE FROM scenes WHERE project_id = $1", [projectId]);
+  void pgExec("DELETE FROM assets WHERE project_id = $1", [projectId]);
+  void pgExec("DELETE FROM render_jobs WHERE project_id = $1", [projectId]);
+  void pgExec("DELETE FROM projects WHERE id = $1", [projectId]);
+  return assets;
+}
+
 export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecord, "id" | "project_id" | "created_at" | "updated_at">>) {
   const current = getRenderJob(jobId);
   if (!current) return;

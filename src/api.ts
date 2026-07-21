@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, statfsSync } from "node:fs";
 import os from "node:os";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -29,6 +29,7 @@ import {
   deleteClip,
   deleteSession,
   deleteAsset,
+  deleteProject,
   deleteScene,
   deleteTrack,
   getAsset,
@@ -346,6 +347,18 @@ async function folderSize(pathname: string): Promise<number> {
     return sizes.reduce((sum, size) => sum + size, 0);
   } catch {
     return 0;
+  }
+}
+
+/** Only meaningful for the desktop build — Render's container disk isn't
+ *  something the user owns/can free up, so this is skipped entirely there. */
+function getLocalDiskInfo(): { freeBytes: number; totalBytes: number } | null {
+  if (IS_PRODUCTION) return null;
+  try {
+    const info = statfsSync(resolve("."));
+    return { freeBytes: info.bavail * info.bsize, totalBytes: info.blocks * info.bsize };
+  } catch {
+    return null;
   }
 }
 
@@ -1769,6 +1782,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const settings = getUserSettings(user.email);
       const storagePaths = [...new Set(listUserStoragePaths(user.email).map((pathname) => resolve(pathname)))];
       const storageBytes = (await Promise.all(storagePaths.map((pathname) => folderSize(pathname)))).reduce((sum, bytes) => sum + bytes, 0);
+      const localDisk = getLocalDiskInfo();
       sendJson(res, 200, {
         ...stats,
         credits: settings.credits,
@@ -1779,6 +1793,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
           quotaHuman: humanBytes(settings.storage_quota_bytes || STORAGE_QUOTA_BYTES),
           percent: settings.storage_quota_bytes > 0 ? Math.round((storageBytes / settings.storage_quota_bytes) * 1000) / 10 : 0,
           measuredPaths: storagePaths.length,
+        },
+        // Only present on the desktop build — shows the app's own footprint
+        // against how much free space is actually left on this machine's
+        // drive, distinct from the "storage" field above (which is a
+        // per-account quota, same field either way, just mislabeled "server"
+        // even when it's really measuring local disk on the desktop build).
+        localDisk: localDisk && {
+          appUsedBytes: storageBytes,
+          appUsedHuman: humanBytes(storageBytes),
+          freeBytes: localDisk.freeBytes,
+          freeHuman: humanBytes(localDisk.freeBytes),
+          totalBytes: localDisk.totalBytes,
+          totalHuman: humanBytes(localDisk.totalBytes),
         },
       });
       return;
@@ -2040,6 +2067,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         target_duration_sec: Number.isFinite(durationSecRaw) && durationSecRaw > 0 ? Math.round(durationSecRaw) : undefined,
       });
       sendJson(res, 200, { ok: true, project: getProject(project.id) });
+      return;
+    }
+
+    if (req.method === "DELETE" && projectMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, projectMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const deletedAssets = deleteProject(project.id);
+      await Promise.all(
+        deletedAssets
+          .filter((asset) => asset.file_path.startsWith("r2://"))
+          .map((asset) =>
+            deleteR2Object(asset.file_path).catch((error) =>
+              console.warn(`Failed to delete R2 object for asset ${asset.id}:`, error),
+            ),
+          ),
+      );
+      sendJson(res, 200, { ok: true });
       return;
     }
 
