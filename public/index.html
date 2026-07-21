@@ -3938,7 +3938,7 @@
           toast("Đã đưa video vào Program Preview và Video Track của màn Edit.");
           return;
         }
-        if (!state.selectedTimelineSceneId) return toast("Hãy chọn scene ở màn Kịch bản AI trước khi gán media cho scene.");
+        if (!state.selectedTimelineSceneId) return toast("Hãy chọn scene ở màn Edit video (mục \"Media & track chỉnh sửa\") trước khi gán media cho scene.");
         await api(`/api/scenes/${state.selectedTimelineSceneId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
