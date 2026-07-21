@@ -3060,10 +3060,30 @@
       }
 
       function renderTimelineScenes(rows) {
-        if (!$("#timelineSceneList")) return;
-        $("#timelineSceneList").style.display = "none";
-        state.selectedTimelineSceneId = rows[0]?.id || "";
-        $("#timelineSceneList").innerHTML = "";
+        const list = $("#timelineSceneList");
+        if (!list) return;
+        if (!rows.length) {
+          list.style.display = "none";
+          list.innerHTML = "";
+          state.selectedTimelineSceneId = "";
+          renderEditorWorkspace();
+          return;
+        }
+        list.style.display = "grid";
+        list.innerHTML = "";
+        rows.forEach((row, index) => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = `scene${row.id === state.selectedTimelineSceneId ? " selected" : ""}`;
+          item.dataset.id = row.id;
+          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><strong>${row.label}</strong><p class="tiny" style="margin-top:4px;">${(row.voice_text || "").slice(0, 90)}</p></div>`;
+          item.addEventListener("click", () => selectTimelineScene(row));
+          list.appendChild(item);
+        });
+        // Keep whatever was already selected if it still exists, else default to the first scene.
+        if (!rows.some((row) => row.id === state.selectedTimelineSceneId)) {
+          selectTimelineScene(rows[0]);
+        }
         renderEditorWorkspace();
       }
 
