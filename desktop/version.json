@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Them giong Piper + Supertonic (13 giong local moi), sua loi R2 tren desktop, tu dong dong bo cau hinh, tich hop Pexels."
+  "notes": "Sua loi voice preview/MP3 bao 'spawn ffmpeg ENOENT' (thieu binary ffmpeg khi dong goi), an cua so cmd flash len khi chay ffmpeg/piper/supertonic ngam, thu gon scene picker o Edit video thanh 1 hang vuot ngang, gom dung luong server + may vao menu tai khoan, AI Auto Edit giao dien gon hon, click vao chip 'Co loi' de xem chi tiet loi."
 }
