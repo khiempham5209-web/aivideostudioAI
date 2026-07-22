@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Sản phẩm gợi ý</title>
+<style>
+  :root {
+    --bg: #070a10;
+    --panel: #111722;
+    --line: rgba(148, 163, 184, 0.18);
+    --text: #f8fafc;
+    --muted: #9aa7b8;
+    --purple: #7c3aed;
+    --purple-2: #a855f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 16px 14px 40px;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 4px 0 4px;
+  }
+  p.sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 16px;
+  }
+  #searchBox {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 15px;
+    margin-bottom: 16px;
+  }
+  #list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    padding: 14px;
+  }
+  .card .code {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--purple-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-bottom: 6px;
+  }
+  .card h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+  }
+  .card p {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .card .price {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .card a.btn {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #5b21b6, #7c3aed);
+    color: white;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 10px;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <h1>Sản phẩm gợi ý</h1>
+  <p class="sub">Nhập mã sản phẩm ghi trong video (VD: SP0001) để tìm nhanh, hoặc lướt danh sách bên dưới.</p>
+  <input id="searchBox" type="search" placeholder="Tìm theo mã sản phẩm hoặc tên..." />
+  <div id="list"><div class="empty">Đang tải...</div></div>
+
+  <script>
+    let allProducts = [];
+
+    function render(products) {
+      const list = document.getElementById("list");
+      if (!products.length) {
+        list.innerHTML = '<div class="empty">Không tìm thấy sản phẩm phù hợp.</div>';
+        return;
+      }
+      list.innerHTML = products.map((p) => `
+        <div class="card">
+          <span class="code">${escapeHtml(p.item_id || "")}</span>
+          <h3>${escapeHtml(p.product_name || "")}</h3>
+          ${p.key_points ? `<p>${escapeHtml(p.key_points)}</p>` : ""}
+          ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(p.price_reference)} (giá thật xem trên Shopee, có thể thay đổi)</div>` : ""}
+          <a class="btn" href="#" data-id="${p.id}" data-url="${escapeAttr(p.affiliate_url || "")}">Xem trên Shopee</a>
+        </div>
+      `).join("");
+      list.querySelectorAll("a.btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          const id = btn.dataset.id;
+          const url = btn.dataset.url;
+          fetch(`/api/public/products/${id}/click`, { method: "POST" }).catch(() => {});
+          if (url) window.open(url, "_blank");
+        });
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function escapeAttr(str) {
+      return escapeHtml(str);
+    }
+
+    document.getElementById("searchBox").addEventListener("input", (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      if (!q) { render(allProducts); return; }
+      render(allProducts.filter((p) =>
+        (p.item_id || "").toLowerCase().includes(q) || (p.product_name || "").toLowerCase().includes(q)
+      ));
+    });
+
+    fetch("/api/public/products")
+      .then((r) => r.json())
+      .then((data) => {
+        allProducts = data.products || [];
+        render(allProducts);
+      })
+      .catch(() => {
+        document.getElementById("list").innerHTML = '<div class="empty">Không tải được danh sách, thử lại sau.</div>';
+      });
+  </script>
+</body>
+</html>

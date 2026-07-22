@@ -16,6 +16,7 @@ import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
+import { fetchProductsFromSheet, isProductSheetConfigured, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
 import {
   createProject,
   createSession,
@@ -63,6 +64,14 @@ import {
   updateTrack,
   updateUserSettings,
   upsertUser,
+  listProducts,
+  getProduct,
+  listPublicProducts,
+  incrementProductClicks,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  upsertProductFromSheet,
   type TimelineTrackType,
 } from "./storage/db.js";
 
@@ -1247,6 +1256,134 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
   });
 }
 
+function productToJson(p: ReturnType<typeof getProduct>) {
+  if (!p) return p;
+  return { ...p };
+}
+
+async function handleListProducts(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  sendJson(res, 200, { products: listProducts(user.email) });
+}
+
+async function handleCreateProduct(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+  const itemId = String(body.itemId ?? "").trim();
+  const productName = String(body.productName ?? "").trim();
+  if (!itemId || !productName) {
+    sendJson(res, 400, { error: "itemId và productName là bắt buộc" });
+    return;
+  }
+  const product = createProduct({
+    ownerEmail: user.email,
+    itemId,
+    productName,
+    shopName: body.shopName ? String(body.shopName) : null,
+    originalUrl: body.originalUrl ? String(body.originalUrl) : null,
+    affiliateUrl: body.affiliateUrl ? String(body.affiliateUrl) : null,
+    variation: body.variation ? String(body.variation) : null,
+    priceReference: body.priceReference ? String(body.priceReference) : null,
+    commissionType: body.commissionType ? String(body.commissionType) : null,
+    keyPoints: body.keyPoints ? String(body.keyPoints) : null,
+  });
+  sendJson(res, 201, { ok: true, product });
+}
+
+async function handleUpdateProduct(req: IncomingMessage, res: ServerResponse, productId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const existing = getProduct(user.email, productId);
+  if (!existing) {
+    sendJson(res, 404, { error: "Product not found" });
+    return;
+  }
+  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+  const allowed = [
+    "productName", "shopName", "originalUrl", "affiliateUrl", "variation", "priceReference",
+    "commissionType", "keyPoints", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
+  ] as const;
+  const fieldMap: Record<string, string> = {
+    productName: "product_name", shopName: "shop_name", originalUrl: "original_url", affiliateUrl: "affiliate_url",
+    variation: "variation", priceReference: "price_reference", commissionType: "commission_type", keyPoints: "key_points",
+    status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
+  };
+  const updates: Record<string, string | null> = {};
+  for (const key of allowed) {
+    if (body[key] !== undefined) updates[fieldMap[key]] = body[key] === null ? null : String(body[key]);
+  }
+  const product = updateProduct(productId, updates as never);
+  sendJson(res, 200, { ok: true, product: productToJson(product) });
+}
+
+async function handleDeleteProduct(req: IncomingMessage, res: ServerResponse, productId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const ok = deleteProduct(user.email, productId);
+  if (!ok) {
+    sendJson(res, 404, { error: "Product not found" });
+    return;
+  }
+  sendJson(res, 200, { ok: true });
+}
+
+/** Pull rows from the Google Sheet (input fields only) and push local
+ *  status/result fields back — one button covers both directions, matching
+ *  the "Sheet owns input, app owns output" split so neither side clobbers
+ *  the other's fields. */
+async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!isProductSheetConfigured()) {
+    sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
+    return;
+  }
+  try {
+    const sheetRows = await fetchProductsFromSheet();
+    let pulled = 0;
+    for (const row of sheetRows) {
+      if (!row.item_id) continue;
+      upsertProductFromSheet(user.email, row);
+      pulled++;
+    }
+    const local = listProducts(user.email);
+    const pushUpdates = local
+      .filter((p) => p.status !== "Chưa tạo" || p.video_file || p.tiktok_post_url)
+      .map((p) => ({
+        item_id: p.item_id,
+        status: p.status,
+        video_file: p.video_file ?? undefined,
+        tiktok_post_url: p.tiktok_post_url ?? undefined,
+        views_clicks_orders: p.views_clicks_orders ?? undefined,
+        commission: p.commission ?? undefined,
+      }));
+    const pushed = await pushProductUpdatesToSheet(pushUpdates);
+    sendJson(res, 200, { ok: true, pulled, pushed, products: listProducts(user.email) });
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : "Đồng bộ Google Sheet thất bại" });
+  }
+}
+
+async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) {
+  const products = listPublicProducts().map((p) => ({
+    id: p.id,
+    item_id: p.item_id,
+    product_name: p.product_name,
+    key_points: p.key_points,
+    price_reference: p.price_reference,
+    affiliate_url: p.affiliate_url,
+    created_at: p.created_at,
+  }));
+  sendJson(res, 200, { ok: true, products });
+}
+
+async function handlePublicProductClick(_req: IncomingMessage, res: ServerResponse, productId: string) {
+  incrementProductClicks(productId);
+  sendJson(res, 200, { ok: true });
+}
+
 async function handleGoogleStart(req: IncomingMessage, res: ServerResponse) {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     sendJson(res, 501, {
@@ -1965,6 +2102,37 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/products") {
+      await handleListProducts(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/products") {
+      await handleCreateProduct(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/products/sync") {
+      await handleSyncProducts(req, res);
+      return;
+    }
+    const productMatch = url.pathname.match(/^\/api\/products\/([^/]+)$/);
+    if (req.method === "PUT" && productMatch) {
+      await handleUpdateProduct(req, res, productMatch[1]);
+      return;
+    }
+    if (req.method === "DELETE" && productMatch) {
+      await handleDeleteProduct(req, res, productMatch[1]);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/public/products") {
+      await handlePublicProducts(req, res);
+      return;
+    }
+    const publicClickMatch = url.pathname.match(/^\/api\/public\/products\/([^/]+)\/click$/);
+    if (req.method === "POST" && publicClickMatch) {
+      await handlePublicProductClick(req, res, publicClickMatch[1]);
+      return;
+    }
+
     const renderMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/render$/);
     if (req.method === "POST" && renderMatch) {
       await handleStartProjectRender(req, res, renderMatch[1]);
@@ -2550,6 +2718,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         error_message: "Render cancelled",
       });
       sendJson(res, 200, jobResponse(job.project_id, job.id));
+      return;
+    }
+
+    // hukiai258.com is a separate public landing page for the Shopee affiliate
+    // links (TikTok bio doesn't support Destination Links on this account yet)
+    // — same backend/DB, different static page based on which domain the
+    // request came in on. Everything else (the main app) is unaffected.
+    const host = (req.headers.host ?? "").toLowerCase().replace(/:\d+$/, "");
+    const isLandingDomain = host === "hukiai258.com" || host === "www.hukiai258.com";
+    if (req.method === "GET" && isLandingDomain && !url.pathname.startsWith("/api/")) {
+      await sendStatic(res, "/shop.html");
       return;
     }
 

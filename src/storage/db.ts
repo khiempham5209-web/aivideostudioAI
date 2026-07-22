@@ -36,6 +36,28 @@ export interface ProjectRecord {
   updated_at: string;
 }
 
+export interface ProductRecord {
+  id: string;
+  owner_email: string;
+  item_id: string;
+  product_name: string;
+  shop_name: string | null;
+  original_url: string | null;
+  affiliate_url: string | null;
+  variation: string | null;
+  price_reference: string | null;
+  commission_type: string | null;
+  key_points: string | null;
+  status: string;
+  video_file: string | null;
+  tiktok_post_url: string | null;
+  views_clicks_orders: string | null;
+  commission: string | null;
+  landing_clicks: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserRecord {
   email: string;
   name: string;
@@ -309,6 +331,28 @@ db.exec(`
     FOREIGN KEY(project_id) REFERENCES projects(id)
   );
 
+  CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    owner_email TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    shop_name TEXT,
+    original_url TEXT,
+    affiliate_url TEXT,
+    variation TEXT,
+    price_reference TEXT,
+    commission_type TEXT,
+    key_points TEXT,
+    status TEXT NOT NULL DEFAULT 'Chưa tạo',
+    video_file TEXT,
+    tiktok_post_url TEXT,
+    views_clicks_orders TEXT,
+    commission TEXT,
+    landing_clicks INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS timeline_clips (
     id TEXT PRIMARY KEY,
     track_id TEXT NOT NULL,
@@ -370,6 +414,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_timeline_tracks_project_id_order ON timeline_tracks(project_id, track_order);
   CREATE INDEX IF NOT EXISTS idx_timeline_clips_track_id ON timeline_clips(track_id);
   CREATE INDEX IF NOT EXISTS idx_timeline_clips_project_id ON timeline_clips(project_id);
+  CREATE INDEX IF NOT EXISTS idx_products_owner_email ON products(owner_email);
+  CREATE INDEX IF NOT EXISTS idx_products_item_id ON products(item_id);
 `);
 
 type DbRow = Record<string, string | number | null>;
@@ -618,6 +664,30 @@ async function initPostgresMirror() {
         updated_at TEXT NOT NULL
       )`,
     },
+    {
+      label: "products",
+      sql: `CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        owner_email TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        shop_name TEXT,
+        original_url TEXT,
+        affiliate_url TEXT,
+        variation TEXT,
+        price_reference TEXT,
+        commission_type TEXT,
+        key_points TEXT,
+        status TEXT NOT NULL DEFAULT 'Chưa tạo',
+        video_file TEXT,
+        tiktok_post_url TEXT,
+        views_clicks_orders TEXT,
+        commission TEXT,
+        landing_clicks INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
     { label: "projects.owner_email", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device'` },
     // This deployment's Neon "projects" table predates most of this schema (it
     // was missing "title" entirely, confirmed via a live write-health error) —
@@ -730,7 +800,7 @@ async function loadPostgresIntoSqlite() {
   const pool = pgPool;
   if (!pool) return;
   await initPostgresMirror();
-  const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "timeline_tracks", "timeline_clips", "sessions"] as const;
+  const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "timeline_tracks", "timeline_clips", "sessions", "products"] as const;
   const rows = Object.fromEntries(
     await Promise.all(
       tables.map(async (table) => {
@@ -747,7 +817,7 @@ async function loadPostgresIntoSqlite() {
     ),
   ) as Record<(typeof tables)[number], DbRow[]>;
   db.exec(
-    "DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM timeline_clips; DELETE FROM timeline_tracks; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM projects; DELETE FROM users;",
+    "DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM timeline_clips; DELETE FROM timeline_tracks; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM products; DELETE FROM projects; DELETE FROM users;",
   );
   const insertRows = (table: string, items: DbRow[]) => {
     for (const row of items) {
@@ -765,6 +835,7 @@ async function loadPostgresIntoSqlite() {
   insertRows("timeline_tracks", rows.timeline_tracks);
   insertRows("timeline_clips", rows.timeline_clips);
   insertRows("sessions", rows.sessions);
+  insertRows("products", rows.products);
   console.log(`Postgres metadata mirror enabled (${rows.projects.length} projects loaded).`);
 }
 
@@ -850,6 +921,149 @@ export function createProject(data: {
   );
   mirrorUpsert("projects", project as unknown as DbRow, "id");
   return project;
+}
+
+export function listProducts(ownerEmail: string): ProductRecord[] {
+  return db.prepare("SELECT * FROM products WHERE owner_email = ? ORDER BY created_at DESC").all(ownerEmail) as ProductRecord[];
+}
+
+export function getProduct(ownerEmail: string, id: string): ProductRecord | undefined {
+  return db.prepare("SELECT * FROM products WHERE owner_email = ? AND id = ?").get(ownerEmail, id) as ProductRecord | undefined;
+}
+
+export function listPublicProducts(): ProductRecord[] {
+  // Single-tenant landing page — no auth, so no owner filter. Only products
+  // with a real affiliate link are worth showing (no dead "Xem trên Shopee" buttons).
+  return db.prepare("SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY created_at DESC").all() as ProductRecord[];
+}
+
+export function incrementProductClicks(id: string): void {
+  db.prepare("UPDATE products SET landing_clicks = landing_clicks + 1 WHERE id = ?").run(id);
+  const row = db.prepare("SELECT landing_clicks FROM products WHERE id = ?").get(id) as { landing_clicks: number } | undefined;
+  if (row) void pgExec("UPDATE products SET landing_clicks = $1 WHERE id = $2", [row.landing_clicks, id]);
+}
+
+export function createProduct(data: {
+  ownerEmail: string;
+  itemId: string;
+  productName: string;
+  shopName?: string | null;
+  originalUrl?: string | null;
+  affiliateUrl?: string | null;
+  variation?: string | null;
+  priceReference?: string | null;
+  commissionType?: string | null;
+  keyPoints?: string | null;
+}): ProductRecord {
+  const created = nowIso();
+  const product: ProductRecord = {
+    id: id("prod"),
+    owner_email: data.ownerEmail,
+    item_id: data.itemId,
+    product_name: data.productName,
+    shop_name: data.shopName ?? null,
+    original_url: data.originalUrl ?? null,
+    affiliate_url: data.affiliateUrl ?? null,
+    variation: data.variation ?? null,
+    price_reference: data.priceReference ?? null,
+    commission_type: data.commissionType ?? null,
+    key_points: data.keyPoints ?? null,
+    status: "Chưa tạo",
+    video_file: null,
+    tiktok_post_url: null,
+    views_clicks_orders: null,
+    commission: null,
+    landing_clicks: 0,
+    created_at: created,
+    updated_at: created,
+  };
+  db.prepare(`
+    INSERT INTO products
+    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    product.id, product.owner_email, product.item_id, product.product_name, product.shop_name,
+    product.original_url, product.affiliate_url, product.variation, product.price_reference,
+    product.commission_type, product.key_points, product.status, product.video_file,
+    product.tiktok_post_url, product.views_clicks_orders, product.commission, product.landing_clicks,
+    product.created_at, product.updated_at,
+  );
+  mirrorUpsert("products", product as unknown as DbRow, "id");
+  return product;
+}
+
+export function updateProduct(id: string, updates: Partial<Omit<ProductRecord, "id" | "owner_email" | "created_at">>): ProductRecord | undefined {
+  const existing = db.prepare("SELECT * FROM products WHERE id = ?").get(id) as ProductRecord | undefined;
+  if (!existing) return undefined;
+  const merged: ProductRecord = { ...existing, ...updates, updated_at: nowIso() };
+  db.prepare(`
+    UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?,
+    commission_type=?, key_points=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?, updated_at=?
+    WHERE id=?
+  `).run(
+    merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation,
+    merged.price_reference, merged.commission_type, merged.key_points, merged.status, merged.video_file,
+    merged.tiktok_post_url, merged.views_clicks_orders, merged.commission, merged.updated_at, id,
+  );
+  mirrorUpsert("products", merged as unknown as DbRow, "id");
+  return merged;
+}
+
+export function deleteProduct(ownerEmail: string, id: string): boolean {
+  const result = db.prepare("DELETE FROM products WHERE id = ? AND owner_email = ?").run(id, ownerEmail);
+  if ((result.changes ?? 0) > 0) void pgExec("DELETE FROM products WHERE id = $1", [id]);
+  return (result.changes ?? 0) > 0;
+}
+
+/** Upsert products pulled from the Google Sheet sync — only touches the
+ *  input fields the Sheet owns (link/name/price/etc). Never overwrites
+ *  status/video_file/tiktok_post_url/commission — those are app-owned and
+ *  pushed the other direction, so a sync-in can never clobber render progress. */
+export function upsertProductFromSheet(ownerEmail: string, sheet: {
+  item_id: string;
+  product_name: string;
+  shop_name?: string;
+  original_url?: string;
+  affiliate_url?: string;
+  variation?: string;
+  price_reference?: string;
+  commission_type?: string;
+  key_points?: string;
+}): ProductRecord {
+  const existing = db.prepare("SELECT * FROM products WHERE owner_email = ? AND item_id = ?").get(ownerEmail, sheet.item_id) as ProductRecord | undefined;
+  if (existing) {
+    const updated = nowIso();
+    const merged: ProductRecord = {
+      ...existing,
+      product_name: sheet.product_name,
+      shop_name: sheet.shop_name ?? null,
+      original_url: sheet.original_url ?? null,
+      affiliate_url: sheet.affiliate_url ?? null,
+      variation: sheet.variation ?? null,
+      price_reference: sheet.price_reference ?? null,
+      commission_type: sheet.commission_type ?? null,
+      key_points: sheet.key_points ?? null,
+      updated_at: updated,
+    };
+    db.prepare(`
+      UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?, commission_type=?, key_points=?, updated_at=?
+      WHERE id=?
+    `).run(merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation, merged.price_reference, merged.commission_type, merged.key_points, merged.updated_at, existing.id);
+    mirrorUpsert("products", merged as unknown as DbRow, "id");
+    return merged;
+  }
+  return createProduct({
+    ownerEmail,
+    itemId: sheet.item_id,
+    productName: sheet.product_name,
+    shopName: sheet.shop_name,
+    originalUrl: sheet.original_url,
+    affiliateUrl: sheet.affiliate_url,
+    variation: sheet.variation,
+    priceReference: sheet.price_reference,
+    commissionType: sheet.commission_type,
+    keyPoints: sheet.key_points,
+  });
 }
 
 export function createRenderJob(projectId: string): RenderJobRecord {

@@ -1429,6 +1429,50 @@
 
         <section class="page" id="project-explorer"><div class="page-head"><div><h2>Project Explorer</h2><p class="muted">Cây thành phần thật của dự án đang chọn: scene, media, timeline, export.</p></div><button class="btn primary" data-page="timeline">Mở trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3 id="explorerProjectTitle">Chưa chọn dự án</h3><span class="pill" id="explorerProjectStatus"></span></div><div class="panel-body field-stack" id="explorerTree"><div class="empty">Hãy chọn 1 dự án ở thanh trên.</div></div></div><div class="panel"><div class="panel-head"><h3>Chi tiết</h3></div><div class="panel-body field-stack" id="explorerDetail"><div class="empty">Chọn 1 mục trong cây bên trái để xem chi tiết.</div></div></div></div></section>
 
+        <section class="page" id="products">
+          <div class="page-head">
+            <div><h2>Kho sản phẩm</h2><p class="muted">Link Shopee, mã SKU và trạng thái từng sản phẩm affiliate — đồng bộ 2 chiều với Google Sheet.</p></div>
+            <div class="top-actions"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
+          </div>
+          <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
+          <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+            <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
+          </div>
+        </section>
+
+        <div class="modal-backdrop" id="productEditorModal">
+          <section class="modal">
+            <div class="panel-head">
+              <div><h3 id="productEditorTitle">Thêm sản phẩm</h3><p class="tiny">Lưu vào Kho sản phẩm — dùng "Tạo kịch bản" ở danh sách để đẩy sang AI viết kịch bản.</p></div>
+              <button class="btn" id="closeProductEditorButton" type="button">Đóng</button>
+            </div>
+            <div class="panel-body field-stack">
+              <div><label>Mã sản phẩm (item_id) *</label><input id="productItemId" placeholder="SP0001" /></div>
+              <div><label>Tên sản phẩm *</label><input id="productName" placeholder="Serum dưỡng trắng da..." /></div>
+              <div><label>Tên shop</label><input id="productShopName" /></div>
+              <div><label>Link gốc Shopee</label><input id="productOriginalUrl" placeholder="https://shopee.vn/..." /></div>
+              <div><label>Link Affiliate</label><input id="productAffiliateUrl" placeholder="https://s.shopee.vn/..." /></div>
+              <div><label>Biến thể</label><input id="productVariation" placeholder="50ml/màu đen" /></div>
+              <div><label>Giá tham khảo</label><input id="productPriceReference" placeholder="199.000 đ" /></div>
+              <div><label>Điểm nổi bật (đưa AI viết kịch bản)</label><textarea id="productKeyPoints" placeholder="3-5 ý chính, mỗi ý 1 câu ngắn"></textarea></div>
+              <div><label>Trạng thái</label>
+                <select id="productStatus">
+                  <option>Chưa tạo</option>
+                  <option>Đã tạo</option>
+                  <option>Chờ đăng</option>
+                  <option>Đã đăng</option>
+                  <option>Cần sửa</option>
+                </select>
+              </div>
+              <div><label>Link bài TikTok (nếu đã đăng)</label><input id="productTiktokPostUrl" /></div>
+            </div>
+            <footer>
+              <button class="btn" id="deleteProductEditorButton" type="button" style="display:none;">Xóa sản phẩm</button>
+              <button class="btn primary" id="saveProductEditorButton" type="button">Lưu</button>
+            </footer>
+          </section>
+        </div>
+
         <section class="page" id="timeline">
           <div class="page-head">
             <div><h2>Edit video V3</h2><p class="muted">Editor hoàn chỉnh: asset browser, preview, inspector động, waveform, playhead, nhiều track và AI tối ưu timeline.</p></div>
@@ -1712,6 +1756,7 @@
         if (page === "music") renderMusicLibrary();
         if (page === "assets") renderAssetLibrary();
         if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
+        if (page === "products") loadProducts().catch(showError);
 
         // Push a real browser-history entry per page switch so Back/Forward
         // navigate between the app's own screens instead of leaving the app
@@ -1811,6 +1856,74 @@
       function closeSceneEditor() {
         $("#sceneEditorModal").classList.remove("show");
         state.editingSceneId = "";
+      }
+
+      async function loadProducts() {
+        const data = await api("/api/products");
+        state.products = data.products || [];
+        renderProducts();
+      }
+
+      function renderProducts() {
+        const list = $("#productList");
+        if (!list) return;
+        const products = state.products || [];
+        if (!products.length) {
+          list.innerHTML = '<div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>';
+          return;
+        }
+        const statusClass = (s) => (s === "Đã đăng" ? "ok" : s === "Cần sửa" ? "warn" : "");
+        list.innerHTML = products.map((p) => `
+          <div class="panel">
+            <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span></div>
+            <div class="panel-body field-stack">
+              <strong>${p.product_name}</strong>
+              ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${p.price_reference}</p>` : ""}
+              <div class="top-actions">
+                <button class="btn" data-edit-product="${p.id}" type="button">Sửa</button>
+                <button class="btn primary" data-create-script="${p.id}" type="button">Tạo kịch bản</button>
+              </div>
+            </div>
+          </div>
+        `).join("");
+        list.querySelectorAll("[data-edit-product]").forEach((btn) => {
+          btn.addEventListener("click", () => openProductEditor(products.find((p) => p.id === btn.dataset.editProduct)));
+        });
+        list.querySelectorAll("[data-create-script]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const product = products.find((p) => p.id === btn.dataset.createScript);
+            if (!product) return;
+            switchPage("create");
+            if ($("#projectName")) $("#projectName").value = product.product_name;
+            if ($("#prompt")) {
+              $("#prompt").value = `Tạo video quảng cáo ngắn cho sản phẩm ${product.product_name}${product.key_points ? " — " + product.key_points : ""}. Mở đầu bằng vấn đề người xem hay gặp mà sản phẩm này giải quyết được; nêu 2-3 điểm nổi bật; 1 lưu ý thật để không nói quá công dụng; kết bằng lời mời xem thêm thông tin và giá hiện tại tại link trong mô tả, không ghi giá cụ thể.`;
+            }
+            toast("Đã điền sẵn thông tin sản phẩm — kiểm tra lại rồi bấm Tạo dự án.");
+          });
+        });
+      }
+
+      function openProductEditor(product) {
+        state.editingProductId = product ? product.id : "";
+        $("#productEditorTitle").textContent = product ? "Sửa sản phẩm" : "Thêm sản phẩm";
+        $("#productItemId").value = product?.item_id || "";
+        $("#productItemId").disabled = Boolean(product);
+        $("#productName").value = product?.product_name || "";
+        $("#productShopName").value = product?.shop_name || "";
+        $("#productOriginalUrl").value = product?.original_url || "";
+        $("#productAffiliateUrl").value = product?.affiliate_url || "";
+        $("#productVariation").value = product?.variation || "";
+        $("#productPriceReference").value = product?.price_reference || "";
+        $("#productKeyPoints").value = product?.key_points || "";
+        $("#productStatus").value = product?.status || "Chưa tạo";
+        $("#productTiktokPostUrl").value = product?.tiktok_post_url || "";
+        $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
+        $("#productEditorModal").classList.add("show");
+      }
+
+      function closeProductEditor() {
+        $("#productEditorModal").classList.remove("show");
+        state.editingProductId = "";
       }
 
       function showLogin(me) {
@@ -3776,6 +3889,7 @@
         { page: "media", label: "Thư viện Media" },
         { page: "assets", label: "Kho tài nguyên" },
         { page: "project-explorer", label: "Project Explorer" },
+        { page: "products", label: "Kho sản phẩm" },
         { page: "timeline", label: "Edit video V3" },
         { page: "transitions", label: "Transition" },
         { page: "animations", label: "Animation" },
@@ -4246,6 +4360,68 @@
           }).catch(showError);
         }
       }, true);
+
+      $("#addProductButton")?.addEventListener("click", () => openProductEditor(null));
+      $("#closeProductEditorButton")?.addEventListener("click", closeProductEditor);
+      $("#deleteProductEditorButton")?.addEventListener("click", async () => {
+        if (!state.editingProductId) return;
+        if (!confirm("Xóa sản phẩm này khỏi Kho? Không xóa trên Google Sheet.")) return;
+        await api(`/api/products/${state.editingProductId}`, { method: "DELETE" }).then(async () => {
+          closeProductEditor();
+          await loadProducts();
+          toast("Đã xóa sản phẩm khỏi Kho.");
+        }).catch(showError);
+      });
+      $("#saveProductEditorButton")?.addEventListener("click", async () => {
+        const itemId = $("#productItemId").value.trim();
+        const productName = $("#productName").value.trim();
+        if (!itemId || !productName) return toast("Cần nhập mã sản phẩm và tên sản phẩm.");
+        const payload = {
+          itemId,
+          productName,
+          shopName: $("#productShopName").value.trim(),
+          originalUrl: $("#productOriginalUrl").value.trim(),
+          affiliateUrl: $("#productAffiliateUrl").value.trim(),
+          variation: $("#productVariation").value.trim(),
+          priceReference: $("#productPriceReference").value.trim(),
+          keyPoints: $("#productKeyPoints").value.trim(),
+          status: $("#productStatus").value,
+          tiktokPostUrl: $("#productTiktokPostUrl").value.trim(),
+        };
+        try {
+          if (state.editingProductId) {
+            await api(`/api/products/${state.editingProductId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          } else {
+            await api("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          }
+          closeProductEditor();
+          await loadProducts();
+          toast("Đã lưu sản phẩm.");
+        } catch (error) {
+          showError(error);
+        }
+      });
+      $("#syncProductsButton")?.addEventListener("click", async () => {
+        const button = $("#syncProductsButton");
+        const status = $("#productSyncStatus");
+        button.disabled = true;
+        button.textContent = "Đang đồng bộ...";
+        try {
+          const data = await api("/api/products/sync", { method: "POST" });
+          state.products = data.products || [];
+          renderProducts();
+          if (status) {
+            status.style.display = "block";
+            status.textContent = `Đã lấy ${data.pulled} sản phẩm từ Sheet, đã ghi ngược ${data.pushed} trạng thái.`;
+          }
+          toast("Đồng bộ Google Sheet xong.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🔄 Đồng bộ Google Sheet";
+        }
+      });
 
       $("#closeSceneEditorButton").addEventListener("click", closeSceneEditor);
       $("#cancelSceneEditorButton").addEventListener("click", closeSceneEditor);
