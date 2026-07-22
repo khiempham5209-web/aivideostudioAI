@@ -13,6 +13,7 @@ export interface SheetProductRow {
   price_reference?: string;
   commission_type?: string;
   key_points?: string;
+  image_url?: string;
 }
 
 export interface SheetPushUpdate {

@@ -1455,6 +1455,7 @@
               <div><label>Biến thể</label><input id="productVariation" placeholder="50ml/màu đen" /></div>
               <div><label>Giá tham khảo</label><input id="productPriceReference" placeholder="199.000 đ" /></div>
               <div><label>Điểm nổi bật (đưa AI viết kịch bản)</label><textarea id="productKeyPoints" placeholder="3-5 ý chính, mỗi ý 1 câu ngắn"></textarea></div>
+              <div><label>Link ảnh sản phẩm</label><input id="productImageUrl" placeholder="https://... (link ảnh trực tiếp, đuôi .jpg/.png)" /></div>
               <div><label>Trạng thái</label>
                 <select id="productStatus">
                   <option>Chưa tạo</option>
@@ -1876,6 +1877,7 @@
         list.innerHTML = products.map((p) => `
           <div class="panel">
             <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span></div>
+            ${p.image_url ? `<img src="${p.image_url}" alt="" style="width:100%;height:130px;object-fit:cover;" onerror="this.style.display='none';" />` : ""}
             <div class="panel-body field-stack">
               <strong>${p.product_name}</strong>
               ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${p.price_reference}</p>` : ""}
@@ -1915,6 +1917,7 @@
         $("#productVariation").value = product?.variation || "";
         $("#productPriceReference").value = product?.price_reference || "";
         $("#productKeyPoints").value = product?.key_points || "";
+        $("#productImageUrl").value = product?.image_url || "";
         $("#productStatus").value = product?.status || "Chưa tạo";
         $("#productTiktokPostUrl").value = product?.tiktok_post_url || "";
         $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
@@ -4385,6 +4388,7 @@
           variation: $("#productVariation").value.trim(),
           priceReference: $("#productPriceReference").value.trim(),
           keyPoints: $("#productKeyPoints").value.trim(),
+          imageUrl: $("#productImageUrl").value.trim(),
           status: $("#productStatus").value,
           tiktokPostUrl: $("#productTiktokPostUrl").value.trim(),
         };
