@@ -1344,9 +1344,31 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
   try {
     const sheetRows = await fetchProductsFromSheet();
     let pulled = 0;
+    // Google Sheets cells that look like plain numbers (e.g. a price typed as
+    // 16.901 with VN locale) come back from Apps Script as a JS number, not a
+    // string. Binding a raw number to a SQLite TEXT column triggers SQLite's
+    // own numeric-affinity formatting, which stringifies whole numbers with a
+    // trailing ".0" (16901 -> "16901.0"). Force everything to a clean string
+    // at the sync boundary so that quirk never reaches the database.
+    const asText = (v: unknown): string | undefined => {
+      if (v === undefined || v === null || v === "") return undefined;
+      return typeof v === "number" ? String(v) : String(v).trim();
+    };
     for (const row of sheetRows) {
-      if (!row.item_id) continue;
-      upsertProductFromSheet(user.email, row);
+      const itemId = asText(row.item_id);
+      if (!itemId) continue;
+      upsertProductFromSheet(user.email, {
+        item_id: itemId,
+        product_name: asText(row.product_name) ?? "",
+        shop_name: asText(row.shop_name),
+        original_url: asText(row.original_url),
+        affiliate_url: asText(row.affiliate_url),
+        variation: asText(row.variation),
+        price_reference: asText(row.price_reference),
+        commission_type: asText(row.commission_type),
+        key_points: asText(row.key_points),
+        image_url: asText(row.image_url),
+      });
       pulled++;
     }
     const local = listProducts(user.email);
