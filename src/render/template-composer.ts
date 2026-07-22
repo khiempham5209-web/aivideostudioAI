@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { log } from "../utils/logger.js";
+import { FFMPEG_BIN, FFPROBE_BIN } from "../utils/binaries.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** Repo-root/templates — where vendored HyperFrames templates live. */
@@ -66,31 +67,50 @@ export async function composeTemplate(args: ComposeArgs): Promise<string> {
     );
     writeFileSync(varsFile, JSON.stringify(inputs), "utf8");
 
+    // shell:true (required below to resolve npx.cmd on Windows) does NOT
+    // auto-quote array arguments — Node just joins them with spaces and hands
+    // the string to cmd.exe (this is exactly what its own DEP0190 warning is
+    // about). Any path containing a space (e.g. "...\AI Video Studio\...",
+    // a real install path on this machine) silently truncates at the first
+    // space once cmd.exe re-tokenizes it. Quote every argument defensively.
+    const q = (s: string) => `"${s}"`;
     const spawnArgs = [
         // -y: never prompt to install. Pinned version → deterministic renders.
         "-y",
         "hyperframes@0.6.94",
         "render",
-        templateDir,
+        q(templateDir),
         "--composition",
         entryFile,
         "--output",
-        outputPath,
+        q(outputPath),
         "--fps",
         String(fps),
         "--quality",
         quality,
         "--variables-file",
-        varsFile,
+        q(varsFile),
     ];
 
     log.info(`Compose ${templateId} (${entryFile}) → ${outputPath}`);
+
+    // hyperframes has no way to know about our bundled ffmpeg-static/
+    // ffprobe-static binaries (normally invoked by full path via FFMPEG_BIN/
+    // FFPROBE_BIN, never on PATH) unless explicitly told — it reads these
+    // two exact env vars (confirmed in its own source, src/browser/ffmpeg.ts)
+    // rather than searching PATH by default.
+    const childEnv = {
+        ...process.env,
+        HYPERFRAMES_FFMPEG_PATH: FFMPEG_BIN,
+        HYPERFRAMES_FFPROBE_PATH: FFPROBE_BIN,
+    };
 
     await new Promise<void>((resolve, reject) => {
         const proc = spawn("npx", spawnArgs, {
             stdio: ["ignore", "inherit", "inherit"],
             shell: true,
             windowsHide: true,
+            env: childEnv,
         });
         proc.on("close", (code) =>
             code === 0
