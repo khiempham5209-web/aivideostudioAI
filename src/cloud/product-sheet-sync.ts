@@ -38,7 +38,7 @@ export function isProductSheetConfigured(): boolean {
 export async function fetchProductsFromSheet(): Promise<SheetProductRow[]> {
   const { url, key } = config();
   if (!url || !key) throw new Error("Missing PRODUCT_SHEET_SYNC_URL or PRODUCT_SHEET_SECRET in .env.local");
-  const resp = await fetch(`${url}?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(20000) });
+  const resp = await fetch(`${url}?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(60000) });
   if (!resp.ok) throw new Error(`Sheet sync GET failed: HTTP ${resp.status}`);
   const data = (await resp.json()) as { ok: boolean; error?: string; products?: SheetProductRow[] };
   if (!data.ok) throw new Error(data.error || "Sheet sync GET failed");
@@ -53,7 +53,7 @@ export async function pushProductUpdatesToSheet(updates: SheetPushUpdate[]): Pro
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, updates }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(60000),
   });
   if (!resp.ok) throw new Error(`Sheet sync POST failed: HTTP ${resp.status}`);
   const data = (await resp.json()) as { ok: boolean; error?: string; updated?: number };

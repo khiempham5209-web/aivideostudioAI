@@ -113,7 +113,16 @@ async function isServerUp(port) {
 }
 
 function openBrowser(url) {
-  spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  // Edge's --app= mode strips the address bar/tabs/bookmarks bar, so the
+  // window reads as a standalone desktop app instead of "a browser tab" —
+  // no Electron rewrite needed for that. msedge.exe is registered as a
+  // Windows App Path on virtually every install; fall back to the plain
+  // default-browser open (full browser chrome) if that resolution fails.
+  const edge = spawn("cmd", ["/c", "start", "", "msedge", `--app=${url}`], { detached: true, stdio: "ignore", windowsHide: true });
+  edge.on("error", () => {
+    spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  });
+  edge.unref();
 }
 
 async function waitForServer(port, timeoutMs) {
