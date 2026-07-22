@@ -71,7 +71,7 @@ function installPiperVoices() {
   // build step, which can slow down or outright break a deploy that
   // previously had no such network dependency. Skip it outright in that
   // environment; the desktop build's own first-run setup handles this.
-  if (process.env.RENDER || process.env.APP_ENV === "production") {
+  if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
     console.log("Skipping Piper voice setup (server/production environment — desktop-only feature).");
     return;
   }
@@ -95,7 +95,7 @@ function installPiperVoices() {
 
 function installSupertonic() {
   // Same reasoning as installPiperVoices() — desktop-only, skip on the server.
-  if (process.env.RENDER || process.env.APP_ENV === "production") {
+  if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
     console.log("Skipping Supertonic voice setup (server/production environment — desktop-only feature).");
     return;
   }
