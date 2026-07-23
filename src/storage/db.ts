@@ -963,6 +963,28 @@ export function listPublicProducts(): ProductRecord[] {
   return db.prepare("SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY created_at DESC").all() as ProductRecord[];
 }
 
+/** Same query as listPublicProducts(), but straight against Postgres instead
+ *  of this process's local SQLite mirror. The desktop app and the deployed
+ *  web server are separate processes that each only pull Postgres -> local
+ *  SQLite once at boot, so a product added on one side wouldn't show up on
+ *  the other's public landing page until it restarts. The public shop page
+ *  is what real customers hit, so it prefers this live read; returns null
+ *  (caller falls back to the local mirror) if Postgres isn't configured or
+ *  the query fails. */
+export async function listPublicProductsLive(): Promise<ProductRecord[] | null> {
+  const pool = pgPool;
+  if (!pool) return null;
+  try {
+    const result = await pool.query(
+      "SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY created_at DESC",
+    );
+    return result.rows as ProductRecord[];
+  } catch (error) {
+    console.warn("Live Postgres product read failed, falling back to local mirror:", error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
 export function incrementProductClicks(id: string): void {
   db.prepare("UPDATE products SET landing_clicks = landing_clicks + 1 WHERE id = ?").run(id);
   const row = db.prepare("SELECT landing_clicks FROM products WHERE id = ?").get(id) as { landing_clicks: number } | undefined;

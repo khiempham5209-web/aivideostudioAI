@@ -68,6 +68,7 @@ import {
   listProducts,
   getProduct,
   listPublicProducts,
+  listPublicProductsLive,
   incrementProductClicks,
   createProduct,
   updateProduct,
@@ -1525,7 +1526,7 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
 }
 
 async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) {
-  const products = listPublicProducts().map((p) => ({
+  const products = (await listPublicProductsLive() ?? listPublicProducts()).map((p) => ({
     id: p.id,
     item_id: p.item_id,
     product_name: p.product_name,
@@ -1541,7 +1542,7 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
 
 async function handlePublicProductClick(_req: IncomingMessage, res: ServerResponse, productId: string) {
   incrementProductClicks(productId);
-  const product = listPublicProducts().find((p) => p.id === productId);
+  const product = (await listPublicProductsLive() ?? listPublicProducts()).find((p) => p.id === productId);
   if (product) void logProductClick(product.item_id, product.product_name);
   sendJson(res, 200, { ok: true });
 }
