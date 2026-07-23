@@ -1791,8 +1791,16 @@
           } catch {
             data = { error: text || "Server returned invalid JSON" };
           }
+        } else if ([502, 503, 504].includes(resp.status)) {
+          // A raw HTML/plain-text response on these codes means the request
+          // never reached our own error handling — the backend process itself
+          // crashed or the platform's edge/proxy gave up (most often: the
+          // render pipeline, which needs real RAM for headless-Chrome + ffmpeg,
+          // OOMs on a resource-limited host). Translate to something
+          // actionable instead of dumping the raw gateway error page.
+          data = { error: "Server không phản hồi (có thể do hết tài nguyên khi render video). Vui lòng thử lại sau ít phút, hoặc xuất video trên bản chạy local/desktop để không bị giới hạn tài nguyên máy chủ." };
         } else {
-          data = { error: text || resp.statusText };
+          data = { error: (text || resp.statusText || "").slice(0, 300) };
         }
         if (!resp.ok) throw data;
         return data;
@@ -4488,6 +4496,10 @@
       // page, instead of routing through a separate audio-only preview step.
       async function startFullVideoRender(projectId, options = {}) {
         if (!projectId) return toast("Hãy chọn hoặc tạo project trước.");
+        if (state.webRenderDisabled) {
+          alert(`Xuất video trên bản web đang tạm khoá (máy chủ free tier không đủ RAM để render).\n\nVui lòng dùng bản desktop để xuất video:\n${state.desktopDownloadUrl || "xem link tải trong Cài đặt"}`);
+          return;
+        }
         if (projectId !== state.activeProjectId) {
           const project = state.projects.find((p) => p.id === projectId);
           if (project) {
@@ -4963,6 +4975,8 @@
         try {
           const me = await api("/api/me");
           setServer(true, "Server online");
+          state.webRenderDisabled = Boolean(me.webRenderDisabled);
+          state.desktopDownloadUrl = me.desktopDownloadUrl || "";
           wireDesktopConnectButton();
           if (!me.authenticated) {
             showLogin(me);

@@ -96,6 +96,18 @@ const IS_PRODUCTION = APP_ENV === "production";
 // lives — the desktop build's self-update check compares against this,
 // not against APP_PUBLIC_URL (which is self-referential per environment).
 const PRODUCTION_BACKEND_URL = "https://aivideostudioaibackend.onrender.com";
+// Full video render needs headless Chrome + ffmpeg — real RAM/CPU that the
+// free Render web tier doesn't have (it OOMs mid-render, which surfaces as a
+// raw 502 from the platform's edge, not a normal app error). Set this env
+// var on that deployment to refuse the render endpoints with a clear message
+// instead. Unset (default) on the desktop/local build, which has real
+// machine resources to spend. Toggle back off once the Render plan has
+// enough RAM to run this reliably.
+const DISABLE_WEB_RENDER = process.env.DISABLE_WEB_RENDER === "true";
+const DESKTOP_DOWNLOAD_URL = "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe";
+function webRenderBlockedMessage(): string {
+  return `Xuất video trên bản web đang tạm khoá vì máy chủ free tier không đủ RAM để render (Chrome ẩn + ffmpeg). Vui lòng dùng bản desktop để xuất video: ${DESKTOP_DOWNLOAD_URL}`;
+}
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
@@ -1267,6 +1279,10 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     project.title = body.projectName.trim();
   }
   if (body.render === true) {
+    if (DISABLE_WEB_RENDER) {
+      sendJson(res, 503, { error: webRenderBlockedMessage(), project, job: null });
+      return;
+    }
     const job = createRenderJob(project.id);
     startRenderJob(project.id, job.id);
     sendJson(res, 202, { ok: true, project, job });
@@ -1281,6 +1297,10 @@ async function handleStartProjectRender(req: IncomingMessage, res: ServerRespons
   const project = getUserProject(user.email, projectId);
   if (!project) {
     sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  if (DISABLE_WEB_RENDER) {
+    sendJson(res, 503, { error: webRenderBlockedMessage() });
     return;
   }
   const runningJob = getLatestJobForProject(projectId);
@@ -1894,6 +1914,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         devLoginEnabled: process.env.ALLOW_DEV_LOGIN === "true",
         privateAccessEnabled: ALLOWED_EMAILS.length > 0,
         privateAccessRequired: IS_PRODUCTION,
+        webRenderDisabled: DISABLE_WEB_RENDER,
+        desktopDownloadUrl: DESKTOP_DOWNLOAD_URL,
       });
       return;
     }
@@ -2696,6 +2718,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const project = getUserProject(user.email, timelineRenderMatch[1]);
       if (!project) {
         sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      if (DISABLE_WEB_RENDER) {
+        sendJson(res, 503, { error: webRenderBlockedMessage() });
         return;
       }
       const runningJob = getLatestJobForProject(project.id);
