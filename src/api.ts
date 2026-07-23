@@ -17,7 +17,7 @@ import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
 import { fetchImage } from "./assets/image-fetcher.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
-import { fetchProductsFromSheet, isProductSheetConfigured, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
+import { fetchProductsFromSheet, isProductSheetConfigured, logProductClick, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
 import {
   createProject,
   createSession,
@@ -1541,6 +1541,8 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
 
 async function handlePublicProductClick(_req: IncomingMessage, res: ServerResponse, productId: string) {
   incrementProductClicks(productId);
+  const product = listPublicProducts().find((p) => p.id === productId);
+  if (product) void logProductClick(product.item_id, product.product_name);
   sendJson(res, 200, { ok: true });
 }
 

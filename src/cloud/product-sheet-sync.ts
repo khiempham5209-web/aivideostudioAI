@@ -47,6 +47,25 @@ export async function fetchProductsFromSheet(): Promise<SheetProductRow[]> {
   return data.products ?? [];
 }
 
+/** Best-effort: logs a landing-page click as a new row in a separate
+ *  "BaoCaoClick" tab of the same Sheet (created automatically by the Apps
+ *  Script if it doesn't exist yet) — a running click report the user can
+ *  open directly in Google Sheets, independent of the main product tab. */
+export async function logProductClick(itemId: string, productName: string): Promise<void> {
+  const { url, key } = config();
+  if (!url || !key) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, action: "logClick", item_id: itemId, product_name: productName }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    // Best-effort — a click must never fail because the report log is down.
+  }
+}
+
 export async function pushProductUpdatesToSheet(updates: SheetPushUpdate[]): Promise<number> {
   if (!updates.length) return 0;
   const { url, key } = config();

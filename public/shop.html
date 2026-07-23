@@ -14,6 +14,7 @@
     --muted: #9aa7b8;
     --purple: #7c3aed;
     --purple-2: #a855f7;
+    --green: #16a34a;
   }
   * { box-sizing: border-box; }
   body {
@@ -29,7 +30,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    max-width: 640px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 16px 14px 0;
   }
@@ -74,19 +75,10 @@
     line-height: 1.5;
   }
   main {
-    max-width: 640px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 0 14px;
   }
-  #activeCategoryRow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  #activeCategoryRow strong { color: var(--text); }
   #searchBox {
     width: 100%;
     padding: 13px 16px;
@@ -95,19 +87,50 @@
     background: var(--panel);
     color: var(--text);
     font-size: 15px;
-    margin-bottom: 18px;
+    margin-bottom: 22px;
     outline: none;
   }
   #searchBox:focus { border-color: rgba(168, 85, 247, 0.6); }
-  #list {
+
+  /* Search-result flat grid */
+  #searchResults {
     display: grid;
     grid-template-columns: 1fr;
     gap: 14px;
+    margin-bottom: 24px;
   }
-  @media (min-width: 480px) {
-    #list { grid-template-columns: 1fr 1fr; }
+  @media (min-width: 600px) { #searchResults { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 900px) { #searchResults { grid-template-columns: repeat(4, 1fr); } }
+
+  /* Category sections */
+  .section { margin-bottom: 30px; }
+  .cat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--green);
+    color: #06210f;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+    cursor: default;
+  }
+  .section.disabled { opacity: 0.4; cursor: pointer; }
+  .section.disabled .cat-pill { background: var(--panel-2); color: var(--muted); }
+  .section.disabled .row-hint { color: var(--muted); font-size: 12px; margin: -8px 0 14px 4px; }
+
+  .row {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
   }
   .card {
+    flex: 0 0 160px;
+    scroll-snap-align: start;
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--panel);
@@ -116,6 +139,7 @@
     flex-direction: column;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   }
+  #searchResults .card { flex: initial; }
   .card .thumb {
     width: 100%;
     aspect-ratio: 1 / 1;
@@ -130,48 +154,51 @@
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #1e293b, #581c87);
-    font-size: 34px;
+    font-size: 30px;
   }
   .card .body {
-    padding: 12px 14px 14px;
+    padding: 10px 12px 12px;
     display: flex;
     flex-direction: column;
     flex: 1;
   }
   .card h3 {
     margin: 0 0 6px;
-    font-size: 15px;
+    font-size: 13.5px;
     line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .card p.points {
-    margin: 0 0 10px;
+    margin: 0 0 8px;
     color: var(--muted);
-    font-size: 12.5px;
+    font-size: 12px;
     line-height: 1.5;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
   .card .price {
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--muted);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .card a.btn {
     margin-top: auto;
     display: block;
     text-align: center;
-    padding: 11px;
+    padding: 9px;
     border-radius: 9px;
     background: linear-gradient(135deg, #5b21b6, #7c3aed);
     color: white;
     text-decoration: none;
     font-weight: 600;
-    font-size: 13.5px;
+    font-size: 12.5px;
   }
   .empty {
-    grid-column: 1 / -1;
     text-align: center;
     color: var(--muted);
     padding: 50px 10px;
@@ -184,6 +211,27 @@
     margin-top: 30px;
     opacity: 0.6;
   }
+
+  #toastBox {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.4);
+    opacity: 0;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 40;
+    pointer-events: none;
+    max-width: 90vw;
+    text-align: center;
+  }
+  #toastBox.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* Category drawer */
   #overlay {
@@ -199,7 +247,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: 260px;
+    width: 280px;
     max-width: 78vw;
     background: var(--panel);
     border-right: 1px solid var(--line);
@@ -242,11 +290,8 @@
     cursor: pointer;
     margin-bottom: 2px;
   }
-  #categoryList button.active {
-    background: rgba(124, 58, 237, 0.18);
-    color: var(--purple-2);
-    font-weight: 600;
-  }
+  #categoryList button:hover { background: rgba(148, 163, 184, 0.08); }
+  #categoryList button.disabled { color: var(--muted); opacity: 0.6; }
   #categoryList button .count {
     color: var(--muted);
     font-size: 12px;
@@ -260,16 +305,17 @@
     <header>
       <span class="badge">🛍️ Ưu đãi hôm nay</span>
       <h1>Sản phẩm gợi ý</h1>
-      <p>Bấm ☰ để chọn danh mục, hoặc gõ tên sản phẩm để tìm nhanh.</p>
+      <p>Bấm ☰ để nhảy nhanh tới 1 danh mục, hoặc gõ tên sản phẩm để tìm.</p>
     </header>
   </div>
   <main>
-    <div id="activeCategoryRow">Đang xem: <strong id="activeCategoryLabel">Tất cả</strong></div>
     <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
-    <div id="list"><div class="empty">Đang tải...</div></div>
+    <div id="searchResults" style="display:none;"></div>
+    <div id="sections"><div class="empty">Đang tải...</div></div>
     <footer>Giá và ưu đãi thật vui lòng xem trực tiếp trên Shopee.</footer>
   </main>
 
+  <div id="toastBox"></div>
   <div id="overlay"></div>
   <div id="drawer">
     <div class="drawer-head"><h2>Danh mục</h2><button id="closeDrawerButton" aria-label="Đóng">✕</button></div>
@@ -277,41 +323,118 @@
   </div>
 
   <script>
-    let allProducts = [];
-    let activeCategory = "Tất cả";
+    // Keep in sync with PRODUCT_CATEGORIES in public/index.html's Kho sản phẩm
+    // editor — a product's category only ever matches a real section here if
+    // both lists agree.
+    const PRODUCT_CATEGORIES = [
+      "Thời Trang Nữ", "Thời Trang Nam", "Mẹ & Bé", "Thiết Bị Điện Tử",
+      "Nhà Cửa & Đời Sống", "Sức Khỏe & Sắc Đẹp", "Ô Tô & Xe Máy & Xe Đạp",
+      "Giày Dép Nữ", "Giày Dép Nam", "Túi Ví Nữ", "Túi Ví Nam",
+      "Đồng Hồ", "Trang Sức", "Phụ Kiện Thời Trang", "Bách Hóa Online",
+      "Điện Gia Dụng", "Đồ Gia Dụng", "Máy Tính & Laptop",
+      "Thiết Bị Số & Phụ Kiện Số", "Thể Thao & Du Lịch", "Balo & Vali",
+      "Văn Phòng Phẩm", "Vật Nuôi",
+    ];
 
-    function applyFilters() {
-      const q = document.getElementById("searchBox").value.trim().toLowerCase();
-      let filtered = allProducts;
-      if (activeCategory !== "Tất cả") {
-        filtered = filtered.filter((p) => (p.category || "Khác") === activeCategory);
-      }
-      if (q) {
-        filtered = filtered.filter((p) => (p.product_name || "").toLowerCase().includes(q));
-      }
-      renderList(filtered);
+    let allProducts = [];
+    let toastTimer = 0;
+
+    function toast(message) {
+      const box = document.getElementById("toastBox");
+      box.textContent = message;
+      box.classList.add("show");
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => box.classList.remove("show"), 2600);
     }
 
-    function renderCategoryDrawer() {
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function escapeAttr(str) {
+      return escapeHtml(str);
+    }
+
+    function cardHtml(p) {
+      return `
+        <div class="card">
+          ${p.image_url
+            ? `<img class="thumb" src="${escapeAttr(p.image_url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;thumb-placeholder&quot;>🛍️</div>';" />`
+            : `<div class="thumb-placeholder">🛍️</div>`}
+          <div class="body">
+            <h3>${escapeHtml(p.product_name || "")}</h3>
+            ${p.key_points ? `<p class="points">${escapeHtml(p.key_points)}</p>` : ""}
+            ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(p.price_reference)}</div>` : ""}
+            <a class="btn" href="#" data-id="${p.id}" data-url="${escapeAttr(p.affiliate_url || "")}">Xem trên Shopee</a>
+          </div>
+        </div>
+      `;
+    }
+
+    function bindCardButtons(root) {
+      root.querySelectorAll("a.btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          const id = btn.dataset.id;
+          const url = btn.dataset.url;
+          fetch(`/api/public/products/${id}/click`, { method: "POST" }).catch(() => {});
+          if (url) window.open(url, "_blank");
+        });
+      });
+    }
+
+    function sectionId(cat) {
+      return "cat-" + cat.replace(/[^a-zA-Z0-9]+/g, "-");
+    }
+
+    function renderSections() {
+      const byCategory = new Map();
+      allProducts.forEach((p) => {
+        const cat = p.category && PRODUCT_CATEGORIES.includes(p.category) ? p.category : null;
+        if (!cat) return;
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push(p);
+      });
+
+      const wrap = document.getElementById("sections");
+      wrap.innerHTML = PRODUCT_CATEGORIES.map((cat) => {
+        const items = byCategory.get(cat) || [];
+        const has = items.length > 0;
+        return `
+          <section class="section ${has ? "" : "disabled"}" id="${sectionId(cat)}" data-cat="${escapeAttr(cat)}">
+            <span class="cat-pill">${escapeHtml(cat)}</span>
+            ${has
+              ? `<div class="row">${items.map(cardHtml).join("")}</div>`
+              : `<div class="row-hint">Danh mục này đang chuẩn bị cập nhật sản phẩm.</div>`}
+          </section>
+        `;
+      }).join("");
+
+      bindCardButtons(wrap);
+      wrap.querySelectorAll(".section.disabled").forEach((el) => {
+        el.addEventListener("click", () => toast(`"${el.dataset.cat}" đang chuẩn bị cập nhật, quay lại sau nhé!`));
+      });
+    }
+
+    function renderDrawer() {
       const counts = new Map();
       allProducts.forEach((p) => {
-        const cat = p.category || "Khác";
-        counts.set(cat, (counts.get(cat) || 0) + 1);
+        if (p.category) counts.set(p.category, (counts.get(p.category) || 0) + 1);
       });
-      const cats = ["Tất cả", ...Array.from(counts.keys()).sort()];
       const list = document.getElementById("categoryList");
-      list.innerHTML = cats.map((cat) => `
-        <button data-cat="${escapeAttr(cat)}" class="${cat === activeCategory ? "active" : ""}">
-          ${escapeHtml(cat)}<span class="count">${cat === "Tất cả" ? allProducts.length : counts.get(cat)}</span>
-        </button>
-      `).join("");
+      list.innerHTML = PRODUCT_CATEGORIES.map((cat) => {
+        const count = counts.get(cat) || 0;
+        return `<button data-cat="${escapeAttr(cat)}" class="${count ? "" : "disabled"}">${escapeHtml(cat)}<span class="count">${count}</span></button>`;
+      }).join("");
       list.querySelectorAll("button").forEach((btn) => {
         btn.addEventListener("click", () => {
-          activeCategory = btn.dataset.cat;
-          document.getElementById("activeCategoryLabel").textContent = activeCategory;
+          const cat = btn.dataset.cat;
           closeDrawer();
-          renderCategoryDrawer();
-          applyFilters();
+          if (btn.classList.contains("disabled")) {
+            toast(`"${cat}" đang chuẩn bị cập nhật, quay lại sau nhé!`);
+            return;
+          }
+          const el = document.getElementById(sectionId(cat));
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       });
     }
@@ -328,54 +451,34 @@
     document.getElementById("closeDrawerButton").addEventListener("click", closeDrawer);
     document.getElementById("overlay").addEventListener("click", closeDrawer);
 
-    function renderList(products) {
-      const list = document.getElementById("list");
-      if (!products.length) {
-        list.innerHTML = '<div class="empty">Không tìm thấy sản phẩm phù hợp.</div>';
+    function runSearch() {
+      const q = document.getElementById("searchBox").value.trim().toLowerCase();
+      const sections = document.getElementById("sections");
+      const results = document.getElementById("searchResults");
+      if (!q) {
+        sections.style.display = "";
+        results.style.display = "none";
         return;
       }
-      list.innerHTML = products.map((p) => `
-        <div class="card">
-          ${p.image_url
-            ? `<img class="thumb" src="${escapeAttr(p.image_url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;thumb-placeholder&quot;>🛍️</div>';" />`
-            : `<div class="thumb-placeholder">🛍️</div>`}
-          <div class="body">
-            <h3>${escapeHtml(p.product_name || "")}</h3>
-            ${p.key_points ? `<p class="points">${escapeHtml(p.key_points)}</p>` : ""}
-            ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(p.price_reference)} (xem giá thật trên Shopee)</div>` : ""}
-            <a class="btn" href="#" data-id="${p.id}" data-url="${escapeAttr(p.affiliate_url || "")}">Xem trên Shopee</a>
-          </div>
-        </div>
-      `).join("");
-      list.querySelectorAll("a.btn").forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-          e.preventDefault();
-          const id = btn.dataset.id;
-          const url = btn.dataset.url;
-          fetch(`/api/public/products/${id}/click`, { method: "POST" }).catch(() => {});
-          if (url) window.open(url, "_blank");
-        });
-      });
+      sections.style.display = "none";
+      results.style.display = "grid";
+      const matches = allProducts.filter((p) => (p.product_name || "").toLowerCase().includes(q));
+      results.innerHTML = matches.length
+        ? matches.map(cardHtml).join("")
+        : '<div class="empty" style="grid-column:1/-1;">Không tìm thấy sản phẩm phù hợp.</div>';
+      bindCardButtons(results);
     }
-
-    function escapeHtml(str) {
-      return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    }
-    function escapeAttr(str) {
-      return escapeHtml(str);
-    }
-
-    document.getElementById("searchBox").addEventListener("input", applyFilters);
+    document.getElementById("searchBox").addEventListener("input", runSearch);
 
     fetch("/api/public/products")
       .then((r) => r.json())
       .then((data) => {
         allProducts = data.products || [];
-        renderCategoryDrawer();
-        applyFilters();
+        renderDrawer();
+        renderSections();
       })
       .catch(() => {
-        document.getElementById("list").innerHTML = '<div class="empty">Không tải được danh sách, thử lại sau.</div>';
+        document.getElementById("sections").innerHTML = '<div class="empty">Không tải được danh sách, thử lại sau.</div>';
       });
   </script>
 </body>
