@@ -821,6 +821,23 @@ async function attachProductImageToHookScene(
   }
 }
 
+/** Best-effort: when a project linked to a product finishes rendering, tag
+ *  the product's status/video_file locally and (if Sheet sync is configured)
+ *  push that one update to the Google Sheet right away — otherwise the Sheet
+ *  and the "Kho sản phẩm" status pill never reflect progress until the user
+ *  happens to manually click "Đồng bộ Google Sheet" again. */
+async function syncCompletedVideoToProduct(ownerEmail: string, productId: string, videoPath: string): Promise<void> {
+  try {
+    const product = getProduct(ownerEmail, productId);
+    if (!product) return;
+    const updated = updateProduct(product.id, { status: "Đã tạo", video_file: videoPath });
+    if (!updated || !isProductSheetConfigured()) return;
+    await pushProductUpdatesToSheet([{ item_id: updated.item_id, status: updated.status, video_file: updated.video_file ?? undefined }]);
+  } catch (error) {
+    console.error(`[product-sync] failed to sync completed video for product ${productId}:`, error);
+  }
+}
+
 async function generateProjectScript(project: NonNullable<ReturnType<typeof getProject>>, aiProvider?: "gemini" | "openai") {
   try {
     const product = project.product_id ? getProduct(project.owner_email, project.product_id) : undefined;
@@ -1007,6 +1024,9 @@ function startRenderJob(projectId: string, jobId: string, folderName?: string, b
         status: "completed",
         output_path: paths.video,
       });
+      if (project.product_id) {
+        await syncCompletedVideoToProduct(project.owner_email, project.product_id, paths.video);
+      }
       updateRenderJob(jobId, {
         status: "completed",
         progress: 100,
@@ -1423,9 +1443,9 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
     sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
     return;
   }
+  let pulled = 0;
   try {
     const sheetRows = await fetchProductsFromSheet();
-    let pulled = 0;
     // Google Sheets cells that look like plain numbers (e.g. a price typed as
     // 16.901 with VN locale) come back from Apps Script as a JS number, not a
     // string. Binding a raw number to a SQLite TEXT column triggers SQLite's
@@ -1453,6 +1473,17 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
       });
       pulled++;
     }
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : "Đồng bộ Google Sheet thất bại (lấy dữ liệu)" });
+    return;
+  }
+  // Pulled rows are already committed to the local DB above — a failure in
+  // this best-effort push-back must not hide products the user already has
+  // (previously a single try/catch around both steps threw the whole request
+  // to 502 on push failure, so the frontend never even saw the pulled data).
+  let pushed = 0;
+  let pushError: string | null = null;
+  try {
     const local = listProducts(user.email);
     const pushUpdates = local
       .filter((p) => p.status !== "Chưa tạo" || p.video_file || p.tiktok_post_url)
@@ -1464,11 +1495,11 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
         views_clicks_orders: p.views_clicks_orders ?? undefined,
         commission: p.commission ?? undefined,
       }));
-    const pushed = await pushProductUpdatesToSheet(pushUpdates);
-    sendJson(res, 200, { ok: true, pulled, pushed, products: listProducts(user.email) });
+    pushed = await pushProductUpdatesToSheet(pushUpdates);
   } catch (error) {
-    sendJson(res, 502, { error: error instanceof Error ? error.message : "Đồng bộ Google Sheet thất bại" });
+    pushError = error instanceof Error ? error.message : "Đẩy trạng thái lên Sheet thất bại";
   }
+  sendJson(res, 200, { ok: true, pulled, pushed, pushError, products: listProducts(user.email) });
 }
 
 async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) {

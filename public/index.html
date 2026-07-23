@@ -274,6 +274,13 @@
         color: #fde68a;
       }
 
+      .chip.info,
+      .pill.info {
+        border-color: rgba(96, 165, 250, 0.32);
+        background: rgba(96, 165, 250, 0.1);
+        color: #bfdbfe;
+      }
+
       .btn {
         min-height: 38px;
         border: 1px solid var(--line-2);
@@ -1646,13 +1653,13 @@
           `);
         }
         if (!$("#createAudioButton")) {
-          $("#regenerateButton").insertAdjacentHTML("afterend", `<button class="btn primary" id="createAudioButton" type="button">Tạo MP3 từ kịch bản</button>`);
+          $("#regenerateButton").insertAdjacentHTML("afterend", `<button class="btn primary" id="createAudioButton" type="button">🎬 Xuất video (MP4)</button>`);
         }
         if (!$("#voiceAudioPreview")) {
           $("#previewVoiceButton").insertAdjacentHTML("afterend", `<div class="field-stack"><label>MP3 đã tạo từ kịch bản</label><div class="empty" id="audioJobStatus" style="text-align:left;">Chưa tạo voice MP3 cho dự án này.</div><audio id="voiceAudioPreview" controls style="display:none;width:100%;"></audio><div class="top-actions"><button class="btn primary" id="createVoiceMp3Button" type="button">Tạo voice MP3 từ kịch bản</button><button class="btn" id="openExportFromVoiceButton" type="button">Mở màn Edit video</button></div><div id="voiceOutputList" class="field-stack"></div></div>`);
         }
         if (!$("#workflowStatus")) {
-          $("#sceneList").insertAdjacentHTML("beforebegin", `<div class="empty" id="workflowStatus" style="margin-bottom:12px;text-align:left;">Bước hiện tại: tạo hoặc chọn project, kiểm tra scene, bấm Tạo MP3 để nghe thử, sau đó Xuất video.</div>`);
+          $("#sceneList").insertAdjacentHTML("beforebegin", `<div class="empty" id="workflowStatus" style="margin-bottom:12px;text-align:left;">Bước hiện tại: tạo hoặc chọn project, kiểm tra scene, sau đó bấm 🎬 Xuất video (MP4).</div>`);
         }
         if (!$("#timelineSceneList")) {
           (document.querySelector("#timeline .timeline-v3") || document.querySelector("#timeline .editor-shell"))?.insertAdjacentHTML("beforebegin", `
@@ -1859,8 +1866,15 @@
         state.editingSceneId = "";
       }
 
+      // Guards against a race between a page-enter loadProducts() GET and the
+      // much slower sync POST (which round-trips to Google Apps Script twice)
+      // — without this, whichever response lands last wins even if it's the
+      // stale one, making synced products flash and then disappear.
+      let productsRequestSeq = 0;
       async function loadProducts() {
+        const seq = ++productsRequestSeq;
         const data = await api("/api/products");
+        if (seq !== productsRequestSeq) return;
         state.products = data.products || [];
         renderProducts();
       }
@@ -1873,7 +1887,7 @@
           list.innerHTML = '<div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>';
           return;
         }
-        const statusClass = (s) => (s === "Đã đăng" ? "ok" : s === "Cần sửa" ? "warn" : "");
+        const statusClass = (s) => (s === "Đã đăng" ? "ok" : s === "Cần sửa" ? "warn" : (s === "Đã tạo" || s === "Chờ đăng") ? "info" : "");
         list.innerHTML = products.map((p) => `
           <div class="panel">
             <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span></div>
@@ -3356,8 +3370,8 @@
         renderTimelineScenes(rows);
         if ($("#workflowStatus")) {
           $("#workflowStatus").textContent = rows.length < 3
-            ? `Bước hiện tại: cần ít nhất 3 scene để tạo MP3/MP4. Hiện có ${rows.length} scene.`
-            : "Bước hiện tại: kiểm tra/sửa lời đọc từng scene, sau đó bấm Tạo MP3 từ kịch bản.";
+            ? `Bước hiện tại: cần ít nhất 3 scene để xuất video MP4. Hiện có ${rows.length} scene.`
+            : "Bước hiện tại: kiểm tra/sửa lời đọc từng scene, sau đó bấm 🎬 Xuất video (MP4).";
         }
         if (!rows.length) {
           $("#sceneList").innerHTML = '<div class="empty">Chưa có scene thật. Bấm AI Tạo Kịch Bản hoặc Render để sinh scene.</div>';
@@ -4323,33 +4337,12 @@
         event.stopImmediatePropagation();
         const exportProjectId = $("#exportProjectSelect")?.value || state.activeProjectId;
         if (!exportProjectId) return toast("Hãy chọn dự án cần xuất trước.");
-        if (exportProjectId !== state.activeProjectId) {
-          const project = state.projects.find((p) => p.id === exportProjectId);
-          if (project) {
-            state.activeProjectId = project.id;
-            state.activeJobId = project.latestJob ? project.latestJob.id : "";
-            syncProjectControls();
-            await Promise.all([loadScenes(project.id), loadAssets(project.id)]);
-          }
-        }
-        if ((state.scenes || []).length < 3) {
-          switchPage("script");
-          return toast("Dự án chưa đủ kịch bản: cần ít nhất 3 scene trước khi tạo MP3/MP4.");
-        }
         $("#renderButton").disabled = true;
         try {
-          const data = await api(`/api/projects/${state.activeProjectId}/render`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ folderName: $("#exportFolderName")?.value || "", burnSubtitles: $("#editBurnSubtitles")?.checked !== false }),
+          await startFullVideoRender(exportProjectId, {
+            folderName: $("#exportFolderName")?.value || "",
+            burnSubtitles: $("#editBurnSubtitles")?.checked !== false,
           });
-          state.activeJobId = data.job.id;
-          setJob(data.project, data.job);
-          await loadStats();
-          switchPage("export");
-          toast("Đã bắt đầu xuất video.");
-          if (state.pollTimer) clearInterval(state.pollTimer);
-          state.pollTimer = setInterval(() => pollJob(state.activeJobId).catch(showError), 2500);
         } catch (error) {
           showError(error);
         } finally {
@@ -4441,15 +4434,18 @@
         const status = $("#productSyncStatus");
         button.disabled = true;
         button.textContent = "Đang đồng bộ...";
+        const seq = ++productsRequestSeq;
         try {
           const data = await api("/api/products/sync", { method: "POST" });
-          state.products = data.products || [];
-          renderProducts();
+          if (seq === productsRequestSeq) {
+            state.products = data.products || [];
+            renderProducts();
+          }
           if (status) {
             status.style.display = "block";
             status.textContent = `Đã lấy ${data.pulled} sản phẩm từ Sheet, đã ghi ngược ${data.pushed} trạng thái.`;
           }
-          toast("Đồng bộ Google Sheet xong.");
+          toast(data.pushError ? `Đồng bộ xong (lấy dữ liệu OK) nhưng ghi ngược lên Sheet lỗi: ${data.pushError}` : "Đồng bộ Google Sheet xong.");
         } catch (error) {
           showError(error);
         } finally {
@@ -4486,6 +4482,40 @@
         }).catch(showError);
       });
 
+      // Straight-line "kịch bản -> MP4" path, shared by the script page's
+      // "🎬 Xuất video (MP4)" button and the Export page's "Xuất video" button
+      // — both just trigger a real render job and jump to the export/progress
+      // page, instead of routing through a separate audio-only preview step.
+      async function startFullVideoRender(projectId, options = {}) {
+        if (!projectId) return toast("Hãy chọn hoặc tạo project trước.");
+        if (projectId !== state.activeProjectId) {
+          const project = state.projects.find((p) => p.id === projectId);
+          if (project) {
+            state.activeProjectId = project.id;
+            state.activeJobId = project.latestJob ? project.latestJob.id : "";
+            syncProjectControls();
+            await Promise.all([loadScenes(project.id), loadAssets(project.id)]);
+          }
+        }
+        if ((state.scenes || []).length < 3) {
+          switchPage("script");
+          toast("Dự án chưa đủ kịch bản: cần ít nhất 3 scene trước khi tạo MP4.");
+          return;
+        }
+        const data = await api(`/api/projects/${projectId}/render`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folderName: options.folderName || "", burnSubtitles: options.burnSubtitles !== false }),
+        });
+        state.activeJobId = data.job.id;
+        setJob(data.project, data.job);
+        await loadStats();
+        switchPage("export");
+        toast("Đã bắt đầu xuất video MP4.");
+        if (state.pollTimer) clearInterval(state.pollTimer);
+        state.pollTimer = setInterval(() => pollJob(state.activeJobId).catch(showError), 2500);
+      }
+
       async function startProjectAudioJob() {
         if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo project trước.");
         if ((state.scenes || []).length < 3) {
@@ -4518,7 +4548,14 @@
       }
 
       $("#createAudioButton").addEventListener("click", async () => {
-        await startProjectAudioJob();
+        $("#createAudioButton").disabled = true;
+        try {
+          await startFullVideoRender(state.activeProjectId);
+        } catch (error) {
+          showError(error);
+        } finally {
+          $("#createAudioButton").disabled = false;
+        }
       });
       $("#createVoiceMp3Button").addEventListener("click", async () => {
         await startProjectAudioJob();
