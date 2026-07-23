@@ -138,16 +138,6 @@
     flex-direction: column;
     flex: 1;
   }
-  .card .code {
-    display: inline-block;
-    align-self: flex-start;
-    font-size: 11px;
-    color: var(--purple-2);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 2px 8px;
-    margin-bottom: 8px;
-  }
   .card h3 {
     margin: 0 0 6px;
     font-size: 15px;
@@ -277,7 +267,7 @@
     <div id="activeCategoryRow">Đang xem: <strong id="activeCategoryLabel">Tất cả</strong></div>
     <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
     <div id="list"><div class="empty">Đang tải...</div></div>
-    <footer>Link Affiliate — giá và ưu đãi thật vui lòng xem trực tiếp trên Shopee.</footer>
+    <footer>Giá và ưu đãi thật vui lòng xem trực tiếp trên Shopee.</footer>
   </main>
 
   <div id="overlay"></div>
@@ -350,7 +340,6 @@
             ? `<img class="thumb" src="${escapeAttr(p.image_url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;thumb-placeholder&quot;>🛍️</div>';" />`
             : `<div class="thumb-placeholder">🛍️</div>`}
           <div class="body">
-            <span class="code">${escapeHtml(p.item_id || "")}</span>
             <h3>${escapeHtml(p.product_name || "")}</h3>
             ${p.key_points ? `<p class="points">${escapeHtml(p.key_points)}</p>` : ""}
             ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(p.price_reference)} (xem giá thật trên Shopee)</div>` : ""}
