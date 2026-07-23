@@ -1463,6 +1463,7 @@
               <div><label>Giá tham khảo</label><input id="productPriceReference" placeholder="199.000 đ" /></div>
               <div><label>Điểm nổi bật (đưa AI viết kịch bản)</label><textarea id="productKeyPoints" placeholder="3-5 ý chính, mỗi ý 1 câu ngắn"></textarea></div>
               <div><label>Link ảnh sản phẩm</label><input id="productImageUrl" placeholder="https://... (link ảnh trực tiếp, đuôi .jpg/.png)" /></div>
+              <div><label>Danh mục</label><input id="productCategory" placeholder="VD: Gia dụng, Thời trang, Làm đẹp..." /></div>
               <div><label>Trạng thái</label>
                 <select id="productStatus">
                   <option>Chưa tạo</option>
@@ -1957,6 +1958,7 @@
         $("#productPriceReference").value = product?.price_reference || "";
         $("#productKeyPoints").value = product?.key_points || "";
         $("#productImageUrl").value = product?.image_url || "";
+        $("#productCategory").value = product?.category || "";
         $("#productStatus").value = product?.status || "Chưa tạo";
         $("#productTiktokPostUrl").value = product?.tiktok_post_url || "";
         $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
@@ -4413,6 +4415,7 @@
           priceReference: $("#productPriceReference").value.trim(),
           keyPoints: $("#productKeyPoints").value.trim(),
           imageUrl: $("#productImageUrl").value.trim(),
+          category: $("#productCategory").value.trim(),
           status: $("#productStatus").value,
           tiktokPostUrl: $("#productTiktokPostUrl").value.trim(),
         };

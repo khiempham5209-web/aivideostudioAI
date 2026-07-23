@@ -1391,6 +1391,7 @@ async function handleCreateProduct(req: IncomingMessage, res: ServerResponse) {
     commissionType: body.commissionType ? String(body.commissionType) : null,
     keyPoints: body.keyPoints ? String(body.keyPoints) : null,
     imageUrl: body.imageUrl ? String(body.imageUrl) : null,
+    category: body.category ? String(body.category) : null,
   });
   sendJson(res, 201, { ok: true, product });
 }
@@ -1406,12 +1407,12 @@ async function handleUpdateProduct(req: IncomingMessage, res: ServerResponse, pr
   const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
   const allowed = [
     "productName", "shopName", "originalUrl", "affiliateUrl", "variation", "priceReference",
-    "commissionType", "keyPoints", "imageUrl", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
+    "commissionType", "keyPoints", "imageUrl", "category", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
   ] as const;
   const fieldMap: Record<string, string> = {
     productName: "product_name", shopName: "shop_name", originalUrl: "original_url", affiliateUrl: "affiliate_url",
     variation: "variation", priceReference: "price_reference", commissionType: "commission_type", keyPoints: "key_points",
-    imageUrl: "image_url", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
+    imageUrl: "image_url", category: "category", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
   };
   const updates: Record<string, string | null> = {};
   for (const key of allowed) {
@@ -1470,6 +1471,7 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
         commission_type: asText(row.commission_type),
         key_points: asText(row.key_points),
         image_url: asText(row.image_url),
+        category: asText(row.category),
       });
       pulled++;
     }
@@ -1511,6 +1513,7 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
     price_reference: p.price_reference,
     affiliate_url: p.affiliate_url,
     image_url: p.image_url,
+    category: p.category,
     created_at: p.created_at,
   }));
   sendJson(res, 200, { ok: true, products });

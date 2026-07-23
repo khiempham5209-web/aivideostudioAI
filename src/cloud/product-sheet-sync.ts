@@ -14,6 +14,7 @@ export interface SheetProductRow {
   commission_type?: string;
   key_points?: string;
   image_url?: string;
+  category?: string;
 }
 
 export interface SheetPushUpdate {

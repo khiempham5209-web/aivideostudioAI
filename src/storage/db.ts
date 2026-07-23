@@ -51,6 +51,7 @@ export interface ProductRecord {
   commission_type: string | null;
   key_points: string | null;
   image_url: string | null;
+  category: string | null;
   status: string;
   video_file: string | null;
   tiktok_post_url: string | null;
@@ -352,6 +353,7 @@ db.exec(`
     commission_type TEXT,
     key_points TEXT,
     image_url TEXT,
+    category TEXT,
     status TEXT NOT NULL DEFAULT 'Chưa tạo',
     video_file TEXT,
     tiktok_post_url TEXT,
@@ -412,6 +414,7 @@ for (const statement of [
   "ALTER TABLE timeline_tracks ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
   "ALTER TABLE scenes ADD COLUMN voice_duration_sec REAL",
   "ALTER TABLE products ADD COLUMN image_url TEXT",
+  "ALTER TABLE products ADD COLUMN category TEXT",
   "ALTER TABLE projects ADD COLUMN product_id TEXT",
   "ALTER TABLE scenes ADD COLUMN visual_query TEXT",
 ]) {
@@ -693,6 +696,7 @@ async function initPostgresMirror() {
         commission_type TEXT,
         key_points TEXT,
         image_url TEXT,
+        category TEXT,
         status TEXT NOT NULL DEFAULT 'Chưa tạo',
         video_file TEXT,
         tiktok_post_url TEXT,
@@ -704,6 +708,7 @@ async function initPostgresMirror() {
       )`,
     },
     { label: "products.image_url", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT` },
+    { label: "products.category", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT` },
     { label: "projects.owner_email", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_email TEXT NOT NULL DEFAULT 'local@device'` },
     // This deployment's Neon "projects" table predates most of this schema (it
     // was missing "title" entirely, confirmed via a live write-health error) —
@@ -976,6 +981,7 @@ export function createProduct(data: {
   commissionType?: string | null;
   keyPoints?: string | null;
   imageUrl?: string | null;
+  category?: string | null;
 }): ProductRecord {
   const created = nowIso();
   const product: ProductRecord = {
@@ -991,6 +997,7 @@ export function createProduct(data: {
     commission_type: data.commissionType ?? null,
     key_points: data.keyPoints ?? null,
     image_url: data.imageUrl ?? null,
+    category: data.category ?? null,
     status: "Chưa tạo",
     video_file: null,
     tiktok_post_url: null,
@@ -1002,12 +1009,12 @@ export function createProduct(data: {
   };
   db.prepare(`
     INSERT INTO products
-    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     product.id, product.owner_email, product.item_id, product.product_name, product.shop_name,
     product.original_url, product.affiliate_url, product.variation, product.price_reference,
-    product.commission_type, product.key_points, product.image_url, product.status, product.video_file,
+    product.commission_type, product.key_points, product.image_url, product.category, product.status, product.video_file,
     product.tiktok_post_url, product.views_clicks_orders, product.commission, product.landing_clicks,
     product.created_at, product.updated_at,
   );
@@ -1021,11 +1028,11 @@ export function updateProduct(id: string, updates: Partial<Omit<ProductRecord, "
   const merged: ProductRecord = { ...existing, ...updates, updated_at: nowIso() };
   db.prepare(`
     UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?,
-    commission_type=?, key_points=?, image_url=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?, updated_at=?
+    commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?, updated_at=?
     WHERE id=?
   `).run(
     merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation,
-    merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.status, merged.video_file,
+    merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category, merged.status, merged.video_file,
     merged.tiktok_post_url, merged.views_clicks_orders, merged.commission, merged.updated_at, id,
   );
   mirrorUpsert("products", merged as unknown as DbRow, "id");
@@ -1053,6 +1060,7 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
   commission_type?: string;
   key_points?: string;
   image_url?: string;
+  category?: string;
 }): ProductRecord {
   const existing = db.prepare("SELECT * FROM products WHERE owner_email = ? AND item_id = ?").get(ownerEmail, sheet.item_id) as ProductRecord | undefined;
   if (existing) {
@@ -1068,12 +1076,13 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
       commission_type: sheet.commission_type ?? null,
       key_points: sheet.key_points ?? null,
       image_url: sheet.image_url ?? null,
+      category: sheet.category ?? null,
       updated_at: updated,
     };
     db.prepare(`
-      UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?, commission_type=?, key_points=?, image_url=?, updated_at=?
+      UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?, commission_type=?, key_points=?, image_url=?, category=?, updated_at=?
       WHERE id=?
-    `).run(merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation, merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.updated_at, existing.id);
+    `).run(merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation, merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category, merged.updated_at, existing.id);
     mirrorUpsert("products", merged as unknown as DbRow, "id");
     return merged;
   }
@@ -1089,6 +1098,7 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
     commissionType: sheet.commission_type,
     keyPoints: sheet.key_points,
     imageUrl: sheet.image_url,
+    category: sheet.category,
   });
 }
 
