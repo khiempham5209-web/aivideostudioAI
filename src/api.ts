@@ -1536,6 +1536,7 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
     image_url: p.image_url,
     category: p.category,
     created_at: p.created_at,
+    landing_clicks: p.landing_clicks,
   }));
   sendJson(res, 200, { ok: true, products });
 }
