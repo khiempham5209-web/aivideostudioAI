@@ -354,6 +354,16 @@
       return escapeHtml(str);
     }
 
+    // Nếu giá là số thuần (vd "16901") thì tự thêm dấu phẩy ngăn cách + "VNĐ".
+    // Giá dạng chữ khác (vd "100k - 200k", "Đang cập nhật") giữ nguyên, không cố đoán.
+    function formatPrice(raw) {
+      const trimmed = String(raw || "").trim();
+      if (/^\d+$/.test(trimmed)) {
+        return Number(trimmed).toLocaleString("en-US") + " VNĐ";
+      }
+      return trimmed;
+    }
+
     function cardHtml(p) {
       return `
         <div class="card">
@@ -363,7 +373,7 @@
           <div class="body">
             <h3>${escapeHtml(p.product_name || "")}</h3>
             ${p.key_points ? `<p class="points">${escapeHtml(p.key_points)}</p>` : ""}
-            ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(p.price_reference)}</div>` : ""}
+            ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(formatPrice(p.price_reference))}</div>` : ""}
             <a class="btn" href="#" data-id="${p.id}" data-url="${escapeAttr(p.affiliate_url || "")}">Xem trên Shopee</a>
           </div>
         </div>
@@ -386,6 +396,16 @@
       return "cat-" + cat.replace(/[^a-zA-Z0-9]+/g, "-");
     }
 
+    // Danh mục nhiều sản phẩm hơn đứng trước; danh mục trống rơi xuống cuối,
+    // giữ nguyên thứ tự gốc khi số lượng bằng nhau (Array#sort ổn định).
+    function sortedCategories() {
+      const counts = new Map();
+      allProducts.forEach((p) => {
+        if (p.category) counts.set(p.category, (counts.get(p.category) || 0) + 1);
+      });
+      return PRODUCT_CATEGORIES.slice().sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0));
+    }
+
     function renderSections() {
       const byCategory = new Map();
       allProducts.forEach((p) => {
@@ -396,7 +416,7 @@
       });
 
       const wrap = document.getElementById("sections");
-      wrap.innerHTML = PRODUCT_CATEGORIES.map((cat) => {
+      wrap.innerHTML = sortedCategories().map((cat) => {
         const items = byCategory.get(cat) || [];
         const has = items.length > 0;
         return `
@@ -421,7 +441,7 @@
         if (p.category) counts.set(p.category, (counts.get(p.category) || 0) + 1);
       });
       const list = document.getElementById("categoryList");
-      list.innerHTML = PRODUCT_CATEGORIES.map((cat) => {
+      list.innerHTML = sortedCategories().map((cat) => {
         const count = counts.get(cat) || 0;
         return `<button data-cat="${escapeAttr(cat)}" class="${count ? "" : "disabled"}">${escapeHtml(cat)}<span class="count">${count}</span></button>`;
       }).join("");

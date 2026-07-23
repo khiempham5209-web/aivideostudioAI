@@ -1888,6 +1888,14 @@
         renderProducts();
       }
 
+      // Giá số thuần (vd "16901") tự thêm dấu phẩy ngăn cách + "VNĐ"; giá dạng
+      // chữ khác (vd "100k - 200k") giữ nguyên.
+      function formatPrice(raw) {
+        const trimmed = String(raw || "").trim();
+        if (/^\d+$/.test(trimmed)) return Number(trimmed).toLocaleString("en-US") + " VNĐ";
+        return trimmed;
+      }
+
       function renderProducts() {
         const list = $("#productList");
         if (!list) return;
@@ -1903,7 +1911,7 @@
             ${p.image_url ? `<img src="${p.image_url}" alt="" style="width:100%;height:130px;object-fit:cover;" onerror="this.style.display='none';" />` : ""}
             <div class="panel-body field-stack">
               <strong>${p.product_name}</strong>
-              ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${p.price_reference}</p>` : ""}
+              ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${formatPrice(p.price_reference)}</p>` : ""}
               <div class="top-actions">
                 <button class="btn" data-edit-product="${p.id}" type="button">Sửa</button>
                 <button class="btn primary" data-create-script="${p.id}" type="button">Tạo kịch bản</button>
