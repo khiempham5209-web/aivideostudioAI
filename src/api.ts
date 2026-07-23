@@ -15,6 +15,7 @@ import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
+import { fetchImage } from "./assets/image-fetcher.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import { fetchProductsFromSheet, isProductSheetConfigured, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
 import {
@@ -119,6 +120,7 @@ interface CreateVideoBody {
   folderName?: string;
   ratio?: string;
   durationSec?: number;
+  productId?: string;
 }
 
 interface AuthUser {
@@ -759,14 +761,76 @@ function buildLocalProjectScript(project: NonNullable<ReturnType<typeof getProje
   };
 }
 
+function buildProductFacts(product: NonNullable<ReturnType<typeof getProduct>>): string {
+  return [
+    `- Tên sản phẩm: ${product.product_name}`,
+    product.price_reference ? `- Giá tham khảo: ${product.price_reference}` : null,
+    product.shop_name ? `- Cửa hàng: ${product.shop_name}` : null,
+    product.key_points ? `- Điểm nổi bật: ${product.key_points}` : null,
+  ].filter((line): line is string => Boolean(line)).join("\n");
+}
+
+/** Downloads the product's real photo and assigns it as the hook scene's
+ *  footage — this outranks Pexels/AI-template in template-pipeline.ts's
+ *  visual-resolution priority order, so the intro scene renders with the
+ *  actual product photo instead of stock/placeholder art. Best-effort: any
+ *  failure here must not block script generation, so the scene simply falls
+ *  back to Pexels/AI-template as before. */
+async function attachProductImageToHookScene(
+  ownerEmail: string,
+  projectId: string,
+  product: NonNullable<ReturnType<typeof getProduct>>,
+): Promise<void> {
+  if (!product.image_url) return;
+  try {
+    const targetDir = resolve(STORAGE_DIR, projectId, "image");
+    await mkdir(targetDir, { recursive: true });
+    let ext = ".jpg";
+    try {
+      ext = extname(new URL(product.image_url).pathname) || ".jpg";
+    } catch {
+      // Not a parseable URL — keep the .jpg default; fetchImage below will
+      // still reject it if it's not actually reachable/an image.
+    }
+    const fileName = `product-${Date.now()}${ext}`;
+    const filePath = join(targetDir, fileName);
+    const downloaded = await fetchImage(product.image_url, filePath);
+    if (!downloaded.success || !downloaded.path) {
+      console.error(`[product-image] download failed for project ${projectId}: ${downloaded.reason}`);
+      return;
+    }
+    const fileStat = await stat(downloaded.path);
+    const mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";
+    const storedPath = isR2Configured()
+      ? await uploadFileToR2(downloaded.path, r2Key(ownerEmail, projectId, "image", fileName), mimeType)
+      : downloaded.path;
+    const asset = createAsset({
+      projectId,
+      type: "image",
+      fileName,
+      mimeType,
+      filePath: storedPath,
+      fileSize: fileStat.size,
+    });
+    const hookScene = listScenes(projectId)[0];
+    if (hookScene) {
+      updateScene(hookScene.id, { source_asset_id: asset.id });
+    }
+  } catch (error) {
+    console.error(`[product-image] failed to attach product image for project ${projectId}:`, error);
+  }
+}
+
 async function generateProjectScript(project: NonNullable<ReturnType<typeof getProject>>, aiProvider?: "gemini" | "openai") {
   try {
+    const product = project.product_id ? getProduct(project.owner_email, project.product_id) : undefined;
     const generated = await generateScriptFromPrompt(project.topic, {
       voiceProvider: "edge",
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
       targetDurationSec: project.target_duration_sec,
       aiProvider,
+      productFacts: product ? buildProductFacts(product) : undefined,
     });
     return { ...generated, usedFallback: false as const, fallbackReason: null as string | null };
   } catch (error) {
@@ -802,11 +866,12 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       voiceText: scene.voice_text,
       templateId: fallback.templateId,
       inputs: fallback.inputs,
-      // Manually-edited scenes skip the AI script generator (which supplies a
-      // proper English visualQuery) — fall back to the raw narration text.
-      // Works less well for Pexels search than a real keyword, but scenes on
-      // this path can still be given an image/video assigned by hand instead.
-      visualQuery: scene.voice_text.slice(0, 80),
+      // Prefer the AI-generated English stock-search keywords saved at script
+      // generation time (real Pexels matches). Manually-added scenes have no
+      // visual_query — fall back to the raw narration text, which works less
+      // well for Pexels search but the scene can still be given an
+      // image/video assigned by hand instead.
+      visualQuery: scene.visual_query || scene.voice_text.slice(0, 80),
     };
   });
   const script = {
@@ -1158,6 +1223,15 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
   }
   const ratio = typeof body.ratio === "string" && ["16:9", "9:16", "1:1"].includes(body.ratio) ? body.ratio : undefined;
   const durationSec = Number(body.durationSec);
+  let productId: string | undefined;
+  if (typeof body.productId === "string" && body.productId.trim()) {
+    const product = getProduct(user.email, body.productId.trim());
+    if (!product) {
+      sendJson(res, 404, { error: "Product not found" });
+      return;
+    }
+    productId = product.id;
+  }
   const project = createProject({
     ownerEmail: user.email,
     topic: prompt,
@@ -1166,6 +1240,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     voiceSpeed: body.voiceSpeed ?? 1,
     aspectRatio: ratio,
     targetDurationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
+    productId,
   });
   if (body.projectName?.trim()) {
     updateProject(project.id, { title: body.projectName.trim() });
@@ -1233,7 +1308,14 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
   const aiProvider = (body as { aiProvider?: unknown }).aiProvider === "openai" ? "openai" : "gemini";
   updateProject(projectId, { status: "generating_script", error_message: null });
   const generated = await generateProjectScript(project, aiProvider);
-  const scenes = replaceProjectScenes(projectId, generated.script.scenes);
+  replaceProjectScenes(projectId, generated.script.scenes);
+  if (project.product_id) {
+    const product = getProduct(user.email, project.product_id);
+    if (product?.image_url) {
+      await attachProductImageToHookScene(user.email, projectId, product);
+    }
+  }
+  const scenes = listScenes(projectId);
   updateProject(projectId, {
     title: generated.script.metadata.title,
     status: "draft",

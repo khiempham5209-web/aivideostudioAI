@@ -1884,6 +1884,7 @@
               <div class="top-actions">
                 <button class="btn" data-edit-product="${p.id}" type="button">Sửa</button>
                 <button class="btn primary" data-create-script="${p.id}" type="button">Tạo kịch bản</button>
+                <button class="btn primary" data-make-video="${p.id}" type="button">🎬 Tạo video</button>
               </div>
             </div>
           </div>
@@ -1901,6 +1902,30 @@
               $("#prompt").value = `Tạo video quảng cáo ngắn cho sản phẩm ${product.product_name}${product.key_points ? " — " + product.key_points : ""}. Mở đầu bằng vấn đề người xem hay gặp mà sản phẩm này giải quyết được; nêu 2-3 điểm nổi bật; 1 lưu ý thật để không nói quá công dụng; kết bằng lời mời xem thêm thông tin và giá hiện tại tại link trong mô tả, không ghi giá cụ thể.`;
             }
             toast("Đã điền sẵn thông tin sản phẩm — kiểm tra lại rồi bấm Tạo dự án.");
+          });
+        });
+        list.querySelectorAll("[data-make-video]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const product = products.find((p) => p.id === btn.dataset.makeVideo);
+            if (!product) return;
+            btn.disabled = true;
+            try {
+              toast("Đang tạo video từ sản phẩm...");
+              await createProjectAndGenerateScript({
+                projectName: product.product_name,
+                prompt: `Tạo video quảng cáo ngắn cho sản phẩm ${product.product_name}${product.key_points ? " — " + product.key_points : ""}. Mở đầu bằng vấn đề người xem hay gặp mà sản phẩm này giải quyết được; nêu 2-3 điểm nổi bật; 1 lưu ý thật để không nói quá công dụng; kết bằng lời mời xem thêm thông tin và giá hiện tại tại link trong mô tả, không ghi giá cụ thể.`,
+                productId: product.id,
+                voiceId: state.selectedVoiceId,
+                voiceSpeed: Number($("#speed")?.value) || 1,
+                ratio: "9:16",
+                durationSec: activeDurationSec(),
+              });
+              toast("Đã tạo kịch bản từ sản phẩm — xem lại rồi bấm Xuất video khi ưng ý.");
+            } catch (error) {
+              showError(error);
+            } finally {
+              btn.disabled = false;
+            }
           });
         });
       }
@@ -4023,27 +4048,33 @@
         await Promise.all([loadSettings(), loadStats()]);
         toast("Đã lưu cài đặt.");
       });
+      // Shared by #projectForm submit and the "🎬 Tạo video" product-row
+      // button: create the project, then immediately generate its AI script.
+      async function createProjectAndGenerateScript(payload) {
+        const data = await api("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        await loadProjects();
+        await loadStats();
+        selectProject(data.project);
+        toast(`Đang sinh kịch bản AI (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"})...`);
+        const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
+        await loadProjects();
+        await loadScenes(state.activeProjectId);
+        switchPage("script");
+        if (!reportScriptFallbackIfNeeded(scriptData)) {
+          toast(`Đã tạo kịch bản AI thật (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"}).`);
+        }
+        return data;
+      }
       $("#projectForm").addEventListener("submit", async (event) => {
         event.preventDefault();
         $("#createProjectButton").disabled = true;
         try {
           toast("Đang tạo project...");
-          const data = await api("/api/projects", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ projectName: $("#projectName").value, prompt: $("#prompt").value, voiceId: state.selectedVoiceId, voiceSpeed: Number($("#speed").value), ratio: activeRatio(), durationSec: activeDurationSec() }),
-          });
-          await loadProjects();
-          await loadStats();
-          selectProject(data.project);
-          toast(`Đang sinh kịch bản AI (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"})...`);
-          const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
-          await loadProjects();
-          await loadScenes(state.activeProjectId);
-          switchPage("script");
-          if (!reportScriptFallbackIfNeeded(scriptData)) {
-            toast(`Đã tạo kịch bản AI thật (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"}).`);
-          }
+          await createProjectAndGenerateScript({ projectName: $("#projectName").value, prompt: $("#prompt").value, voiceId: state.selectedVoiceId, voiceSpeed: Number($("#speed").value), ratio: activeRatio(), durationSec: activeDurationSec() });
         } catch (error) {
           showError(error);
         } finally {

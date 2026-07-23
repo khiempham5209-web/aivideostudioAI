@@ -35,6 +35,10 @@ export interface GenerateScriptOptions {
   targetDurationSec?: number;
   /** Which AI writes the script. Defaults to Gemini. */
   aiProvider?: "gemini" | "openai";
+  /** Real product facts (name/price/shop/key points) to ground the script in —
+   *  see buildPrompt: forbids inventing specs and forces the hook scene to
+   *  name the actual product. */
+  productFacts?: string;
 }
 
 export interface GeneratedScriptResult {
@@ -167,6 +171,7 @@ function buildPrompt(
   voiceName: string,
   voiceSpeed: number,
   targetDurationSec: number,
+  productFacts?: string,
 ): string {
   // Vietnamese TTS at normal speed reads roughly 2.4-2.6 words/sec.
   const targetWords = Math.round(targetDurationSec * 2.5);
@@ -182,6 +187,11 @@ You create Vietnamese short review videos as JSON for an existing renderer.
 
 User request:
 ${userRequest}
+${productFacts ? `
+Thông tin sản phẩm THẬT (bắt buộc dùng đúng, không được bịa thêm thông số hay công dụng không có ở đây):
+${productFacts}
+Cảnh đầu tiên (hook) phải giới thiệu đúng tên sản phẩm này. Không được nhắc đến link/URL trong lời thoại.
+` : ""}
 
 Return ONLY valid JSON matching this exact structure:
 {
@@ -290,7 +300,7 @@ export async function generateScriptFromPrompt(
   const maxOutputTokens = aiProvider === "openai"
     ? Math.min(16000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)))
     : Math.min(60000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)));
-  const promptText = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec);
+  const promptText = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts);
   const responseText = aiProvider === "openai"
     ? await callOpenAI(promptText, options.model ?? DEFAULT_OPENAI_MODEL, maxOutputTokens)
     : await callGemini(promptText, options.model ?? DEFAULT_MODEL, maxOutputTokens);

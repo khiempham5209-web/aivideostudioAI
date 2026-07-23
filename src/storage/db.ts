@@ -32,6 +32,8 @@ export interface ProjectRecord {
   target_duration_sec: number;
   output_path: string | null;
   error_message: string | null;
+  /** Product (from Kho sản phẩm) this project was generated from, if any. */
+  product_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -133,6 +135,9 @@ export interface SceneRecord {
   /** Actual TTS-measured duration in seconds, filled in after "Tạo MP3" — lets
    *  subtitle timing anchor to real audio instead of a word-count guess. */
   voice_duration_sec: number | null;
+  /** AI-generated stock search keywords (2-4 English words) for this scene,
+   *  from script generation — reused at render time for real Pexels matches. */
+  visual_query: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -217,6 +222,7 @@ db.exec(`
     target_duration_sec INTEGER NOT NULL DEFAULT 120,
     output_path TEXT,
     error_message TEXT,
+    product_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -307,6 +313,7 @@ db.exec(`
     source_start REAL,
     source_end REAL,
     voice_duration_sec REAL,
+    visual_query TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -405,6 +412,8 @@ for (const statement of [
   "ALTER TABLE timeline_tracks ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
   "ALTER TABLE scenes ADD COLUMN voice_duration_sec REAL",
   "ALTER TABLE products ADD COLUMN image_url TEXT",
+  "ALTER TABLE projects ADD COLUMN product_id TEXT",
+  "ALTER TABLE scenes ADD COLUMN visual_query TEXT",
 ]) {
   try {
     db.exec(statement);
@@ -509,6 +518,7 @@ async function initPostgresMirror() {
         target_duration_sec INTEGER NOT NULL DEFAULT 120,
         output_path TEXT,
         error_message TEXT,
+        product_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -605,6 +615,7 @@ async function initPostgresMirror() {
         source_start DOUBLE PRECISION,
         source_end DOUBLE PRECISION,
         voice_duration_sec DOUBLE PRECISION,
+        visual_query TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -709,6 +720,7 @@ async function initPostgresMirror() {
     { label: "projects.voice_speed", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_speed DOUBLE PRECISION NOT NULL DEFAULT 1` },
     { label: "projects.output_path", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS output_path TEXT` },
     { label: "projects.error_message", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS error_message TEXT` },
+    { label: "projects.product_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS product_id TEXT` },
     { label: "user_settings.theme", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'dark'` },
     { label: "user_settings.ui_scale", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1` },
     { label: "user_settings.storage_mode", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server'` },
@@ -721,6 +733,7 @@ async function initPostgresMirror() {
     { label: "scenes.source_start", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION` },
     { label: "scenes.source_end", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION` },
     { label: "scenes.voice_duration_sec", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS voice_duration_sec DOUBLE PRECISION` },
+    { label: "scenes.visual_query", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS visual_query TEXT` },
     { label: "timeline_clips.sub_font_size", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_size DOUBLE PRECISION NOT NULL DEFAULT 16` },
     { label: "timeline_clips.sub_color", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_color TEXT NOT NULL DEFAULT '#ffffff'` },
     { label: "timeline_clips.sub_font_family", sql: `ALTER TABLE timeline_clips ADD COLUMN IF NOT EXISTS sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'` },
@@ -886,6 +899,7 @@ export function createProject(data: {
   voiceSpeed: number;
   aspectRatio?: string;
   targetDurationSec?: number;
+  productId?: string | null;
 }): ProjectRecord {
   const created = nowIso();
   const project: ProjectRecord = {
@@ -901,13 +915,14 @@ export function createProject(data: {
     target_duration_sec: data.targetDurationSec && data.targetDurationSec > 0 ? Math.round(data.targetDurationSec) : 120,
     output_path: null,
     error_message: null,
+    product_id: data.productId ?? null,
     created_at: created,
     updated_at: created,
   };
   db.prepare(`
     INSERT INTO projects
-    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, product_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -921,6 +936,7 @@ export function createProject(data: {
     project.target_duration_sec,
     project.output_path,
     project.error_message,
+    project.product_id,
     project.created_at,
     project.updated_at,
   );
@@ -1211,15 +1227,15 @@ export function deleteAsset(assetId: string): AssetRecord | undefined {
 
 export function replaceProjectScenes(
   projectId: string,
-  scenes: Array<{ id: string; type: string; voiceText: string; templateId: string }>,
+  scenes: Array<{ id: string; type: string; voiceText: string; templateId: string; visualQuery?: string }>,
 ): SceneRecord[] {
   const created = nowIso();
   db.prepare("DELETE FROM scenes WHERE project_id = ?").run(projectId);
   void pgExec("DELETE FROM scenes WHERE project_id = $1", [projectId]);
   const insert = db.prepare(`
     INSERT INTO scenes
-    (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, visual_query, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const rows = scenes.map((scene, index) => {
     const row: SceneRecord = {
@@ -1234,6 +1250,7 @@ export function replaceProjectScenes(
       source_start: null,
       source_end: null,
       voice_duration_sec: null,
+      visual_query: scene.visualQuery ?? null,
       created_at: created,
       updated_at: created,
     };
@@ -1248,6 +1265,7 @@ export function replaceProjectScenes(
       row.source_asset_id,
       row.source_start,
       row.source_end,
+      row.visual_query,
       row.created_at,
       row.updated_at,
     );
@@ -1272,6 +1290,7 @@ export function addProjectScene(projectId: string, data: { voiceText: string; sc
     source_start: null,
     source_end: null,
     voice_duration_sec: null,
+    visual_query: null,
     created_at: created,
     updated_at: created,
   };
