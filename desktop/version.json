@@ -1,5 +1,5 @@
 {
-  "version": "1.1.4",
+  "version": "1.1.5",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Nut Tao video ngay tren Kho san pham: tu tao kich ban AI theo dung thong tin san pham that va gan anh san pham that vao canh mo dau. Sua loi Pexels bi bo qua khi render khien video hay bi dung hinh. San pham tu gan tag trang thai + day tien do len Google Sheet khi render xong. Gop luong kich ban -> MP4 thanh 1 nut, bo qua duong vong Voice/Timeline. Sua loi dong bo Sheet bi mat san pham do race-condition."
+  "notes": "Sua loi phu de burn-in bi phong to qua khong dung ty le, che het khung hinh. Video san pham gio dung anh that o ca canh mo dau va canh ket, khong chi canh dau."
 }
