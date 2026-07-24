@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Sản phẩm gợi ý</title>
+<title>Danh sách sản phẩm</title>
 <style>
   :root {
     --bg: #0a0d14;
@@ -32,15 +32,6 @@
     border-image: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.55) 25%, rgba(168, 85, 247, 0.55) 75%, transparent) 1;
     margin-bottom: 22px;
   }
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 20px 14px 6px;
-  }
   @keyframes cartBounce {
     0%, 100% { transform: translateY(0) rotate(0deg); }
     20% { transform: translateY(-5px) rotate(-10deg); }
@@ -50,12 +41,14 @@
   }
   .cart-icon {
     display: inline-block;
-    font-size: 26px;
+    font-size: 24px;
     animation: cartBounce 2.6s ease-in-out infinite;
   }
   header {
     text-align: center;
-    padding: 0 16px 6px;
+    padding: 20px 16px 6px;
+    max-width: 960px;
+    margin: 0 auto;
   }
   header .badge {
     display: inline-flex;
@@ -70,6 +63,10 @@
     margin-bottom: 10px;
   }
   header h1 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     font-size: 22px;
     margin: 0 0 6px;
     font-weight: 700;
@@ -90,7 +87,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 22px;
+    margin-bottom: 8px;
   }
   #menuButton {
     flex: 0 0 auto;
@@ -103,37 +100,55 @@
     font-size: 18px;
     cursor: pointer;
   }
-  #searchBox {
+  .search-wrap {
     flex: 1 1 auto;
     min-width: 0;
-    width: 100%;
-    padding: 13px 16px;
+    display: flex;
+    align-items: stretch;
     border-radius: 12px;
     border: 1px solid var(--line);
     background: var(--panel);
+    overflow: hidden;
+  }
+  .search-wrap:focus-within { border-color: rgba(168, 85, 247, 0.6); }
+  #searchBox {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 13px 16px;
+    border: none;
+    background: transparent;
     color: var(--text);
     font-size: 15px;
     outline: none;
   }
-  #searchBox:focus { border-color: rgba(168, 85, 247, 0.6); }
+  .search-divider {
+    flex: 0 0 auto;
+    width: 1px;
+    margin: 8px 0;
+    background: var(--line);
+  }
   #filterSelect {
     flex: 0 0 auto;
-    max-width: 130px;
+    max-width: 150px;
     padding: 13px 10px;
-    border-radius: 12px;
-    border: 1px solid var(--line);
-    background: var(--panel);
+    border: none;
+    background: transparent;
     color: var(--text);
     font-size: 13px;
     outline: none;
     cursor: pointer;
   }
-  #filterSelect:focus { border-color: rgba(168, 85, 247, 0.6); }
+  .toolbar-hint {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.5;
+    margin: 0 0 22px;
+  }
   @media (max-width: 420px) {
     .toolbar { flex-wrap: wrap; }
-    #searchBox { flex: 1 1 100%; order: 1; }
+    .search-wrap { flex: 1 1 100%; order: 1; }
     #menuButton { order: 2; }
-    #filterSelect { order: 3; flex: 1 1 auto; max-width: none; }
   }
 
   /* Search-result flat grid */
@@ -336,36 +351,29 @@
   }
   #categoryList button:hover { background: rgba(148, 163, 184, 0.08); }
   #categoryList button.disabled { color: var(--muted); opacity: 0.6; }
-  #categoryList button .count {
-    color: var(--muted);
-    font-size: 12px;
-    float: right;
-  }
 </style>
 </head>
 <body>
   <div class="header-wrap">
-    <div class="topbar">
-      <span class="cart-icon" aria-hidden="true">🛒</span>
-      <header>
-        <span class="badge">🛍️ Ưu đãi hôm nay</span>
-        <h1>Sản phẩm gợi ý</h1>
-      </header>
-    </div>
     <header>
+      <span class="badge">🛍️ Ưu đãi hôm nay</span>
+      <h1><span class="cart-icon" aria-hidden="true">🛒</span> Danh sách sản phẩm</h1>
       <p class="intro">
         Chào mừng bạn đến với gian hàng gợi ý sản phẩm — tổng hợp những món đáng mua nhất,
-        cập nhật mỗi ngày theo từng danh mục. Gõ tên sản phẩm để tìm nhanh, dùng bộ lọc để
-        xem hàng hot nhất hoặc giá tốt nhất, hoặc bấm ☰ để duyệt theo danh mục.
+        cập nhật mỗi ngày theo từng danh mục.
       </p>
     </header>
   </div>
   <main>
     <div class="toolbar">
       <button id="menuButton" aria-label="Danh mục">☰</button>
-      <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
-      <select id="filterSelect" aria-label="Bộ lọc"></select>
+      <div class="search-wrap">
+        <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
+        <span class="search-divider"></span>
+        <select id="filterSelect" aria-label="Bộ lọc"></select>
+      </div>
     </div>
+    <p class="toolbar-hint">(Gõ tên sản phẩm mong muốn để tìm, dùng bộ lọc để xem hàng hot nhất hoặc giá tốt nhất nha)</p>
     <div id="searchResults" style="display:none;"></div>
     <div id="sections"><div class="empty">Đang tải...</div></div>
     <footer>Giá và ưu đãi thật vui lòng xem trực tiếp trên Shopee.</footer>
@@ -381,7 +389,8 @@
   <script>
     // Keep in sync with PRODUCT_CATEGORIES in public/index.html's Kho sản phẩm
     // editor — a product's category only ever matches a real section here if
-    // both lists agree.
+    // both lists agree. This is the full list used by the filter dropdown
+    // (precise, keeps Nam/Nữ split).
     const PRODUCT_CATEGORIES = [
       "Thời Trang Nữ", "Thời Trang Nam", "Mẹ & Bé", "Thiết Bị Điện Tử",
       "Nhà Cửa & Đời Sống", "Sức Khỏe & Sắc Đẹp", "Ô Tô & Xe Máy & Xe Đạp",
@@ -390,6 +399,32 @@
       "Điện Gia Dụng", "Đồ Gia Dụng", "Máy Tính & Laptop",
       "Thiết Bị Số & Phụ Kiện Số", "Thể Thao & Du Lịch", "Balo & Vali",
       "Văn Phòng Phẩm", "Vật Nuôi",
+    ];
+
+    // Nhóm hiển thị cho phần section/ngăn kéo — gộp các cặp Nam/Nữ lại thành
+    // 1 mục ngắn gọn hơn. Bộ lọc tìm kiếm vẫn dùng PRODUCT_CATEGORIES đầy đủ
+    // ở trên để lọc chính xác theo giới tính.
+    const CATEGORY_GROUPS = [
+      { label: "Thời Trang", categories: ["Thời Trang Nữ", "Thời Trang Nam"] },
+      { label: "Mẹ & Bé", categories: ["Mẹ & Bé"] },
+      { label: "Thiết Bị Điện Tử", categories: ["Thiết Bị Điện Tử"] },
+      { label: "Nhà Cửa & Đời Sống", categories: ["Nhà Cửa & Đời Sống"] },
+      { label: "Sức Khỏe & Sắc Đẹp", categories: ["Sức Khỏe & Sắc Đẹp"] },
+      { label: "Ô Tô & Xe Máy & Xe Đạp", categories: ["Ô Tô & Xe Máy & Xe Đạp"] },
+      { label: "Giày Dép", categories: ["Giày Dép Nữ", "Giày Dép Nam"] },
+      { label: "Túi & Ví", categories: ["Túi Ví Nữ", "Túi Ví Nam"] },
+      { label: "Đồng Hồ", categories: ["Đồng Hồ"] },
+      { label: "Trang Sức", categories: ["Trang Sức"] },
+      { label: "Phụ Kiện Thời Trang", categories: ["Phụ Kiện Thời Trang"] },
+      { label: "Bách Hóa Online", categories: ["Bách Hóa Online"] },
+      { label: "Điện Gia Dụng", categories: ["Điện Gia Dụng"] },
+      { label: "Đồ Gia Dụng", categories: ["Đồ Gia Dụng"] },
+      { label: "Máy Tính & Laptop", categories: ["Máy Tính & Laptop"] },
+      { label: "Thiết Bị Số & Phụ Kiện Số", categories: ["Thiết Bị Số & Phụ Kiện Số"] },
+      { label: "Thể Thao & Du Lịch", categories: ["Thể Thao & Du Lịch"] },
+      { label: "Balo & Vali", categories: ["Balo & Vali"] },
+      { label: "Văn Phòng Phẩm", categories: ["Văn Phòng Phẩm"] },
+      { label: "Vật Nuôi", categories: ["Vật Nuôi"] },
     ];
 
     let allProducts = [];
@@ -448,36 +483,32 @@
       });
     }
 
-    function sectionId(cat) {
-      return "cat-" + cat.replace(/[^a-zA-Z0-9]+/g, "-");
+    function sectionId(label) {
+      return "cat-" + label.replace(/[^a-zA-Z0-9]+/g, "-");
     }
 
-    // Danh mục nhiều sản phẩm hơn đứng trước; danh mục trống rơi xuống cuối,
+    function groupCount(counts, group) {
+      return group.categories.reduce((sum, cat) => sum + (counts.get(cat) || 0), 0);
+    }
+
+    // Nhóm nào nhiều sản phẩm hơn đứng trước; nhóm trống rơi xuống cuối,
     // giữ nguyên thứ tự gốc khi số lượng bằng nhau (Array#sort ổn định).
-    function sortedCategories() {
+    function sortedGroups() {
       const counts = new Map();
       allProducts.forEach((p) => {
         if (p.category) counts.set(p.category, (counts.get(p.category) || 0) + 1);
       });
-      return PRODUCT_CATEGORIES.slice().sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0));
+      return CATEGORY_GROUPS.slice().sort((a, b) => groupCount(counts, b) - groupCount(counts, a));
     }
 
     function renderSections() {
-      const byCategory = new Map();
-      allProducts.forEach((p) => {
-        const cat = p.category && PRODUCT_CATEGORIES.includes(p.category) ? p.category : null;
-        if (!cat) return;
-        if (!byCategory.has(cat)) byCategory.set(cat, []);
-        byCategory.get(cat).push(p);
-      });
-
       const wrap = document.getElementById("sections");
-      wrap.innerHTML = sortedCategories().map((cat) => {
-        const items = byCategory.get(cat) || [];
+      wrap.innerHTML = sortedGroups().map((group) => {
+        const items = allProducts.filter((p) => p.category && group.categories.includes(p.category));
         const has = items.length > 0;
         return `
-          <section class="section ${has ? "" : "disabled"}" id="${sectionId(cat)}" data-cat="${escapeAttr(cat)}">
-            <span class="cat-pill">${escapeHtml(cat)}</span>
+          <section class="section ${has ? "" : "disabled"}" id="${sectionId(group.label)}" data-cat="${escapeAttr(group.label)}">
+            <span class="cat-pill">${escapeHtml(group.label)}</span>
             ${has
               ? `<div class="row">${items.map(cardHtml).join("")}</div>`
               : `<div class="row-hint">Danh mục này đang chuẩn bị cập nhật sản phẩm.</div>`}
@@ -497,9 +528,9 @@
         if (p.category) counts.set(p.category, (counts.get(p.category) || 0) + 1);
       });
       const list = document.getElementById("categoryList");
-      list.innerHTML = sortedCategories().map((cat) => {
-        const count = counts.get(cat) || 0;
-        return `<button data-cat="${escapeAttr(cat)}" class="${count ? "" : "disabled"}">${escapeHtml(cat)}<span class="count">${count}</span></button>`;
+      list.innerHTML = sortedGroups().map((group) => {
+        const count = groupCount(counts, group);
+        return `<button data-cat="${escapeAttr(group.label)}" class="${count ? "" : "disabled"}">${escapeHtml(group.label)}</button>`;
       }).join("");
       list.querySelectorAll("button").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -531,7 +562,7 @@
       const select = document.getElementById("filterSelect");
       const catOptions = PRODUCT_CATEGORIES.map((cat) => `<option value="${escapeAttr(cat)}">${escapeHtml(cat)}</option>`).join("");
       select.innerHTML = `
-        <option value="">Bộ lọc</option>
+        <option value="">⚙️ Chọn bộ lọc</option>
         <option value="hot">🔥 Hot nhất</option>
         <option value="priceAsc">💰 Giá ưu đãi nhất</option>
         <optgroup label="Theo danh mục">${catOptions}</optgroup>
