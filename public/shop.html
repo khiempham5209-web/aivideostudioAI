@@ -127,10 +127,17 @@
     margin: 8px 0;
     background: var(--line);
   }
+  .filter-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    color: var(--muted);
+  }
   #filterSelect {
     flex: 0 0 auto;
     max-width: 150px;
-    padding: 13px 10px;
+    padding: 13px 8px 13px 6px;
     border: none;
     background: transparent;
     color: var(--text);
@@ -378,6 +385,9 @@
       <div class="search-wrap">
         <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
         <span class="search-divider"></span>
+        <span class="filter-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg>
+        </span>
         <select id="filterSelect" aria-label="Bộ lọc"></select>
       </div>
     </div>
@@ -570,7 +580,7 @@
       const select = document.getElementById("filterSelect");
       const catOptions = PRODUCT_CATEGORIES.map((cat) => `<option value="${escapeAttr(cat)}">${escapeHtml(cat)}</option>`).join("");
       select.innerHTML = `
-        <option value="">⚙️ Chọn bộ lọc</option>
+        <option value="">Chọn bộ lọc</option>
         <option value="hot">🔥 Hot nhất</option>
         <option value="priceAsc">💰 Giá ưu đãi nhất</option>
         <optgroup label="Theo danh mục">${catOptions}</optgroup>
