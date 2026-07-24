@@ -152,6 +152,22 @@
     white-space: nowrap;
     overflow: hidden;
   }
+  .clear-filter {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-right: 6px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.16);
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .clear-filter:hover { background: rgba(148, 163, 184, 0.28); }
   /* The dropdown's OWN open list is drawn by the OS/browser, not this page —
      background:transparent above only affects the closed box. Without an
      explicit color here, most browsers render that list on a plain white
@@ -396,6 +412,7 @@
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg>
         </span>
         <select id="filterSelect" aria-label="Bộ lọc"></select>
+        <button id="clearFilterButton" class="clear-filter" type="button" aria-label="Xoá bộ lọc" style="display:none;">✕</button>
       </div>
     </div>
     <p class="toolbar-hint">(Gõ tên sản phẩm mong muốn để tìm, dùng bộ lọc để xem hàng hot nhất hoặc giá tốt nhất nha)</p>
@@ -617,6 +634,7 @@
       const filterValue = document.getElementById("filterSelect").value;
       const sections = document.getElementById("sections");
       const results = document.getElementById("searchResults");
+      document.getElementById("clearFilterButton").style.display = filterValue ? "flex" : "none";
       if (!q && !filterValue) {
         sections.style.display = "";
         results.style.display = "none";
@@ -633,6 +651,10 @@
     }
     document.getElementById("searchBox").addEventListener("input", runSearch);
     document.getElementById("filterSelect").addEventListener("change", runSearch);
+    document.getElementById("clearFilterButton").addEventListener("click", () => {
+      document.getElementById("filterSelect").value = "";
+      runSearch();
+    });
 
     populateFilterSelect();
 
