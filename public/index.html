@@ -1464,6 +1464,8 @@
               <div><label>Điểm nổi bật (đưa AI viết kịch bản)</label><textarea id="productKeyPoints" placeholder="3-5 ý chính, mỗi ý 1 câu ngắn"></textarea></div>
               <div><label>Link ảnh sản phẩm</label><input id="productImageUrl" placeholder="https://... (link ảnh trực tiếp, đuôi .jpg/.png)" /></div>
               <div><label>Danh mục</label><select id="productCategory"><option value="">— Chọn danh mục —</option></select></div>
+              <div><label>Đánh giá (sao, vd 4.8)</label><input id="productRating" placeholder="4.8" /></div>
+              <div><label>Đã bán (vd 1.7k, 350)</label><input id="productSoldCount" placeholder="1.7k" /></div>
               <div><label>Trạng thái</label>
                 <select id="productStatus">
                   <option>Chưa tạo</option>
@@ -1993,6 +1995,8 @@
         $("#productKeyPoints").value = product?.key_points || "";
         $("#productImageUrl").value = product?.image_url || "";
         $("#productCategory").value = product?.category || "";
+        $("#productRating").value = product?.rating || "";
+        $("#productSoldCount").value = product?.sold_count || "";
         $("#productStatus").value = product?.status || "Chưa tạo";
         $("#productTiktokPostUrl").value = product?.tiktok_post_url || "";
         $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
@@ -4450,6 +4454,8 @@
           keyPoints: $("#productKeyPoints").value.trim(),
           imageUrl: $("#productImageUrl").value.trim(),
           category: $("#productCategory").value.trim(),
+          rating: $("#productRating").value.trim(),
+          soldCount: $("#productSoldCount").value.trim(),
           status: $("#productStatus").value,
           tiktokPostUrl: $("#productTiktokPostUrl").value.trim(),
         };

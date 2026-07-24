@@ -1413,6 +1413,8 @@ async function handleCreateProduct(req: IncomingMessage, res: ServerResponse) {
     keyPoints: body.keyPoints ? String(body.keyPoints) : null,
     imageUrl: body.imageUrl ? String(body.imageUrl) : null,
     category: body.category ? String(body.category) : null,
+    rating: body.rating ? String(body.rating) : null,
+    soldCount: body.soldCount ? String(body.soldCount) : null,
   });
   sendJson(res, 201, { ok: true, product });
 }
@@ -1428,12 +1430,12 @@ async function handleUpdateProduct(req: IncomingMessage, res: ServerResponse, pr
   const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
   const allowed = [
     "productName", "shopName", "originalUrl", "affiliateUrl", "variation", "priceReference",
-    "commissionType", "keyPoints", "imageUrl", "category", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
+    "commissionType", "keyPoints", "imageUrl", "category", "rating", "soldCount", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
   ] as const;
   const fieldMap: Record<string, string> = {
     productName: "product_name", shopName: "shop_name", originalUrl: "original_url", affiliateUrl: "affiliate_url",
     variation: "variation", priceReference: "price_reference", commissionType: "commission_type", keyPoints: "key_points",
-    imageUrl: "image_url", category: "category", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
+    imageUrl: "image_url", category: "category", rating: "rating", soldCount: "sold_count", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
   };
   const updates: Record<string, string | null> = {};
   for (const key of allowed) {
@@ -1493,6 +1495,8 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
         key_points: asText(row.key_points),
         image_url: asText(row.image_url),
         category: asText(row.category),
+        rating: asText(row.rating),
+        sold_count: asText(row.sold_count),
       });
       pulled++;
     }
@@ -1535,6 +1539,8 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
     affiliate_url: p.affiliate_url,
     image_url: p.image_url,
     category: p.category,
+    rating: p.rating,
+    sold_count: p.sold_count,
     created_at: p.created_at,
     landing_clicks: p.landing_clicks,
   }));

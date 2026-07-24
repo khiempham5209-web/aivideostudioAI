@@ -4,6 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <title>Danh sách sản phẩm</title>
+<script>
+  // Sáng từ 8h-18h theo giờ máy người xem, tối ngoài khung giờ đó — chạy
+  // trước khi trang vẽ ra để không bị chớp nháy đổi theme.
+  (function () {
+    var hour = new Date().getHours();
+    if (hour >= 8 && hour < 18) document.documentElement.classList.add("light-mode");
+  })();
+</script>
 <style>
   :root {
     --bg: #0a0d14;
@@ -15,6 +23,25 @@
     --purple: #7c3aed;
     --purple-2: #a855f7;
     --green: #16a34a;
+    --cta-1: #5b21b6;
+    --cta-2: #7c3aed;
+    --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+  /* Sáng từ 8h-18h, tối ngoài khung giờ đó — bật/tắt bằng JS (xem cuối file),
+     dựa theo giờ máy người xem, không phải giờ server. */
+  html.light-mode {
+    --bg: #f4f5f9;
+    --panel: #ffffff;
+    --panel-2: #f1f2f7;
+    --line: rgba(15, 23, 42, 0.09);
+    --text: #0f172a;
+    --muted: #64748b;
+    --purple: #7c3aed;
+    --purple-2: #7c3aed;
+    --green: #16a34a;
+    --cta-1: #fb923c;
+    --cta-2: #ea580c;
+    --card-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
   }
   * { box-sizing: border-box; }
   body {
@@ -25,6 +52,12 @@
     color: var(--text);
     font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     padding-bottom: 48px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  html.light-mode body {
+    background:
+      radial-gradient(900px 400px at 50% -80px, rgba(124, 58, 237, 0.08), transparent 70%),
+      var(--bg);
   }
   .header-wrap {
     background: linear-gradient(180deg, rgba(124, 58, 237, 0.08), transparent);
@@ -87,7 +120,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
   #menuButton {
     flex: 0 0 auto;
@@ -121,61 +154,49 @@
     font-size: 15px;
     outline: none;
   }
-  .search-divider {
-    flex: 0 0 auto;
-    width: 1px;
-    margin: 8px 0;
-    background: var(--line);
-  }
-  .filter-icon {
-    flex: 0 0 auto;
+  /* Ba bộ lọc riêng (danh mục / mức giá / sắp xếp) thay vì gộp 1 ô — mỗi ô
+     là 1 pill nhỏ, cuộn ngang được trên màn hình hẹp. */
+  .filter-row {
     display: flex;
     align-items: center;
-    padding-left: 10px;
-    color: var(--muted);
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    margin-bottom: 8px;
   }
-  #filterSelect {
-    /* Fixed width, not just max-width: a plain <select> sizes its closed box
-       to fit its widest OPTION (even ones not currently selected), so the
-       longest category name in the list was stretching this box out and
-       leaving a big empty gap before the arrow. */
+  .filter-pill {
+    /* width theo nội dung + max-width chặn lại: option dài nhất trong danh
+       sách không được kéo giãn cả ô (đã gặp lỗi này với ô lọc gộp trước đó). */
     flex: 0 0 auto;
-    width: 96px;
-    padding: 13px 6px 13px 6px;
-    border: none;
-    background: transparent;
+    max-width: 132px;
+    padding: 9px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--panel);
     color: var(--text);
-    font-size: 13px;
+    font-size: 12.5px;
     outline: none;
     cursor: pointer;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
   }
-  .clear-filter {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    margin-right: 6px;
-    border: none;
-    border-radius: 999px;
-    background: rgba(148, 163, 184, 0.16);
-    color: var(--text);
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .clear-filter:hover { background: rgba(148, 163, 184, 0.28); }
-  /* The dropdown's OWN open list is drawn by the OS/browser, not this page —
-     background:transparent above only affects the closed box. Without an
-     explicit color here, most browsers render that list on a plain white
-     background, making light-on-transparent text unreadable. */
-  #filterSelect option, #filterSelect optgroup {
+  .filter-pill:focus { border-color: rgba(168, 85, 247, 0.6); }
+  .filter-pill option, .filter-pill optgroup {
     background: var(--panel);
     color: var(--text);
   }
+  .clear-filter {
+    flex: 0 0 auto;
+    padding: 9px 12px;
+    border-radius: 999px;
+    border: none;
+    background: rgba(148, 163, 184, 0.16);
+    color: var(--text);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .clear-filter:hover { background: rgba(148, 163, 184, 0.28); }
   .toolbar-hint {
     color: var(--muted);
     font-size: 12px;
@@ -188,6 +209,61 @@
     .search-wrap { flex: 1 1 100%; order: 1; }
     #menuButton { order: 2; }
   }
+
+  /* Nổi bật hôm nay — 3 thẻ tổng hợp nhanh, dữ liệu thật (lượt click, giá,
+     ngày thêm), không phải số liệu bịa. */
+  .highlight-section { margin-bottom: 26px; }
+  .highlight-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 2px;
+  }
+  .highlight-subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 0 0 12px;
+  }
+  .highlight-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  @media (min-width: 640px) { .highlight-grid { grid-template-columns: repeat(3, 1fr); } }
+  .highlight-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font-family: inherit;
+    box-shadow: var(--card-shadow);
+  }
+  .highlight-card:hover { border-color: rgba(168, 85, 247, 0.4); }
+  .highlight-card .htext { min-width: 0; }
+  .highlight-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    margin-bottom: 6px;
+  }
+  .highlight-badge.hot { background: rgba(244, 63, 94, 0.14); color: #f43f5e; }
+  .highlight-badge.cheap { background: rgba(249, 115, 22, 0.14); color: #f97316; }
+  .highlight-badge.new { background: rgba(139, 92, 246, 0.14); color: #8b5cf6; }
+  .highlight-card h4 { margin: 0 0 2px; font-size: 14px; color: var(--text); }
+  .highlight-card p { margin: 0; color: var(--muted); font-size: 11.5px; }
+  .highlight-card .hicon { flex: 0 0 auto; font-size: 26px; }
 
   /* Search-result flat grid */
   #searchResults {
@@ -253,6 +329,9 @@
     background: linear-gradient(135deg, #1e293b, #581c87);
     font-size: 30px;
   }
+  html.light-mode .card .thumb-placeholder {
+    background: linear-gradient(135deg, #e2e8f0, #ddd6fe);
+  }
   .card .body {
     padding: 10px 12px 12px;
     display: flex;
@@ -283,13 +362,22 @@
     color: var(--muted);
     margin-bottom: 8px;
   }
+  .card .meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin: -2px 0 8px;
+  }
+  .card .meta .stars { color: #f59e0b; font-weight: 700; }
   .card a.btn {
     margin-top: auto;
     display: block;
     text-align: center;
     padding: 9px;
     border-radius: 9px;
-    background: linear-gradient(135deg, #5b21b6, #7c3aed);
+    background: linear-gradient(135deg, var(--cta-1), var(--cta-2));
     color: white;
     text-decoration: none;
     font-weight: 600;
@@ -407,18 +495,25 @@
       <button id="menuButton" aria-label="Danh mục">☰</button>
       <div class="search-wrap">
         <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
-        <button id="clearFilterButton" class="clear-filter" type="button" aria-label="Xoá bộ lọc" style="display:none;">✕</button>
-        <span class="search-divider"></span>
-        <span class="filter-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg>
-        </span>
-        <select id="filterSelect" aria-label="Bộ lọc"></select>
       </div>
     </div>
+    <div class="filter-row">
+      <select id="categorySelect" class="filter-pill" aria-label="Danh mục"></select>
+      <select id="priceRangeSelect" class="filter-pill" aria-label="Mức giá"></select>
+      <select id="sortSelect" class="filter-pill" aria-label="Sắp xếp"></select>
+      <button id="clearFilterButton" class="clear-filter" type="button" style="display:none;">✕ Xoá lọc</button>
+    </div>
     <p class="toolbar-hint">(Gõ tên sản phẩm mong muốn để tìm, dùng bộ lọc để xem hàng hot nhất hoặc giá tốt nhất nha)</p>
+
+    <div id="highlightSection" class="highlight-section" style="display:none;">
+      <div class="highlight-title">🔥 Nổi bật hôm nay</div>
+      <p class="highlight-subtitle">Ngắn, dễ quét mắt.</p>
+      <div id="highlightGrid" class="highlight-grid"></div>
+    </div>
+
     <div id="searchResults" style="display:none;"></div>
     <div id="sections"><div class="empty">Đang tải...</div></div>
-    <footer>Giá và ưu đãi thật vui lòng xem trực tiếp trên Shopee.</footer>
+    <footer>Giá và ưu đãi thật có thể thay đổi theo thời gian, quý khách bấm "Xem giá trên Shopee" để chính xác hơn. Cảm ơn quý khách!</footer>
   </main>
 
   <div id="toastBox"></div>
@@ -464,6 +559,18 @@
       { label: "Vật Nuôi", categories: ["Vật Nuôi"] },
     ];
 
+    // Icon gợi ý cho từng danh mục con trong ô lọc "Danh mục".
+    const CATEGORY_ICONS = {
+      "Thời Trang Nữ": "👗", "Thời Trang Nam": "👔", "Mẹ & Bé": "🍼",
+      "Điện Thoại & Phụ Kiện": "📱", "Thiết Bị Điện Tử": "🔌", "Máy Ảnh & Máy Quay Phim": "📷",
+      "Nhà Cửa & Đời Sống": "🏠", "Sức Khỏe & Sắc Đẹp": "💄", "Ô Tô & Xe Máy & Xe Đạp": "🚗",
+      "Giày Dép Nữ": "👠", "Giày Dép Nam": "👞", "Túi Ví Nữ": "👜", "Túi Ví Nam": "💼",
+      "Đồng Hồ": "⌚", "Trang Sức": "💍", "Phụ Kiện Thời Trang": "🕶️", "Bách Hóa Online": "🛒",
+      "Điện Gia Dụng": "🔌", "Đồ Gia Dụng": "🍽️", "Máy Tính & Laptop": "💻",
+      "Thiết Bị Số & Phụ Kiện Số": "🎧", "Thể Thao & Du Lịch": "⚽", "Balo & Vali": "🎒",
+      "Sách": "📚", "Văn Phòng Phẩm": "✏️", "Vật Nuôi": "🐾",
+    };
+
     let allProducts = [];
     let toastTimer = 0;
 
@@ -493,6 +600,13 @@
     }
 
     function cardHtml(p) {
+      // Đánh giá/lượt bán: chỉ hiện khi có dữ liệu thật (nhập tay hoặc đồng bộ
+      // từ Sheet) — không có thì bỏ qua dòng này, không bịa số.
+      const ratingPart = p.rating ? `<span class="stars">★ ${escapeHtml(String(p.rating))}</span>` : "";
+      const soldPart = p.sold_count ? `Đã bán ${escapeHtml(String(p.sold_count))}` : "";
+      const meta = (ratingPart || soldPart)
+        ? `<div class="meta">${ratingPart}${ratingPart && soldPart ? " · " : ""}${soldPart}</div>`
+        : "";
       return `
         <div class="card">
           ${p.image_url
@@ -501,8 +615,9 @@
           <div class="body">
             <h3>${escapeHtml(p.product_name || "")}</h3>
             ${p.key_points ? `<p class="points">${escapeHtml(p.key_points)}</p>` : ""}
+            ${meta}
             ${p.price_reference ? `<div class="price">Giá tham khảo: ${escapeHtml(formatPrice(p.price_reference))}</div>` : ""}
-            <a class="btn" href="#" data-id="${p.id}" data-url="${escapeAttr(p.affiliate_url || "")}">Xem trên Shopee</a>
+            <a class="btn" href="#" data-id="${p.id}" data-url="${escapeAttr(p.affiliate_url || "")}">Xem giá trên Shopee ↗</a>
           </div>
         </div>
       `;
@@ -595,68 +710,162 @@
     document.getElementById("closeDrawerButton").addEventListener("click", closeDrawer);
     document.getElementById("overlay").addEventListener("click", closeDrawer);
 
-    function populateFilterSelect() {
-      const select = document.getElementById("filterSelect");
-      // Sắp A→Z cho dễ tìm trong bộ lọc (phần section/ngăn kéo dùng thứ tự
-      // theo số lượng sản phẩm, không liên quan tới thứ tự A→Z này).
+    function populateCategorySelect() {
+      // Sắp A→Z cho dễ tìm (phần section/ngăn kéo dùng thứ tự theo số lượng
+      // sản phẩm, không liên quan tới thứ tự A→Z này).
       const sortedCats = PRODUCT_CATEGORIES.slice().sort((a, b) => a.localeCompare(b, "vi"));
-      const catOptions = sortedCats.map((cat) => `<option value="${escapeAttr(cat)}">${escapeHtml(cat)}</option>`).join("");
-      select.innerHTML = `
-        <option value="">Chọn bộ lọc</option>
-        <option value="hot">🔥 Hot nhất</option>
-        <option value="priceAsc">💰 Giá ưu đãi nhất</option>
-        <optgroup label="Theo danh mục">${catOptions}</optgroup>
+      const options = sortedCats
+        .map((cat) => `<option value="${escapeAttr(cat)}">${CATEGORY_ICONS[cat] || ""} ${escapeHtml(cat)}</option>`)
+        .join("");
+      document.getElementById("categorySelect").innerHTML = `<option value="">Tất cả danh mục</option>${options}`;
+    }
+
+    function populatePriceRangeSelect() {
+      document.getElementById("priceRangeSelect").innerHTML = `
+        <option value="">Mọi mức giá</option>
+        <option value="under100k">Dưới 100k</option>
+        <option value="100to300k">100k - 300k</option>
+        <option value="300to500k">300k - 500k</option>
+        <option value="over500k">Trên 500k</option>
       `;
     }
 
-    // Giá dạng số thuần mới so sánh được; giá dạng chữ (vd "Đang cập nhật")
-    // bị đẩy xuống cuối danh sách khi sắp theo giá.
+    function populateSortSelect() {
+      document.getElementById("sortSelect").innerHTML = `
+        <option value="">Phổ biến</option>
+        <option value="priceAsc">Giá thấp → cao</option>
+        <option value="priceDesc">Giá cao → thấp</option>
+        <option value="newest">Mới thêm</option>
+      `;
+    }
+
+    // Giá dạng số thuần mới so sánh/lọc theo khoảng được; giá dạng chữ (vd
+    // "Đang cập nhật") bị loại khỏi khoảng giá và đẩy xuống cuối khi sắp giá.
     function numericPrice(p) {
       const trimmed = String(p.price_reference || "").trim();
-      return /^\d+$/.test(trimmed) ? Number(trimmed) : Infinity;
+      return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
     }
 
-    function applyFilter(list, filterValue) {
-      if (filterValue === "hot") {
-        return list.slice().sort((a, b) => (b.landing_clicks || 0) - (a.landing_clicks || 0));
-      }
-      if (filterValue === "priceAsc") {
-        return list.slice().sort((a, b) => numericPrice(a) - numericPrice(b));
-      }
-      if (filterValue && PRODUCT_CATEGORIES.includes(filterValue)) {
-        return list.filter((p) => p.category === filterValue);
-      }
-      return list;
+    function priceInRange(p, range) {
+      const n = numericPrice(p);
+      if (n === null) return false;
+      if (range === "under100k") return n < 100000;
+      if (range === "100to300k") return n >= 100000 && n < 300000;
+      if (range === "300to500k") return n >= 300000 && n < 500000;
+      if (range === "over500k") return n >= 500000;
+      return true;
     }
 
-    function runSearch() {
+    function sortProducts(list, sortValue) {
+      const priceOf = (p) => numericPrice(p) ?? Infinity;
+      if (sortValue === "priceAsc") return list.slice().sort((a, b) => priceOf(a) - priceOf(b));
+      if (sortValue === "priceDesc") return list.slice().sort((a, b) => (numericPrice(b) ?? -Infinity) - (numericPrice(a) ?? -Infinity));
+      if (sortValue === "newest") return list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      // "Phổ biến" (mặc định) — nhiều lượt click nhất trước, dùng đúng số
+      // click thật đã ghi nhận, không hiện số ra nhưng vẫn dùng để sắp.
+      return list.slice().sort((a, b) => (b.landing_clicks || 0) - (a.landing_clicks || 0));
+    }
+
+    function currentFilters() {
+      return {
+        category: document.getElementById("categorySelect").value,
+        priceRange: document.getElementById("priceRangeSelect").value,
+        sort: document.getElementById("sortSelect").value,
+      };
+    }
+
+    function anyFilterActive() {
+      const f = currentFilters();
+      return Boolean(f.category || f.priceRange || f.sort);
+    }
+
+    function getFilteredSortedProducts() {
+      const f = currentFilters();
+      let list = allProducts;
+      if (f.category) list = list.filter((p) => p.category === f.category);
+      if (f.priceRange) list = list.filter((p) => priceInRange(p, f.priceRange));
+      return sortProducts(list, f.sort);
+    }
+
+    function runSearch(force) {
       const q = document.getElementById("searchBox").value.trim().toLowerCase();
-      const filterValue = document.getElementById("filterSelect").value;
       const sections = document.getElementById("sections");
       const results = document.getElementById("searchResults");
-      document.getElementById("clearFilterButton").style.display = filterValue ? "flex" : "none";
-      if (!q && !filterValue) {
+      const highlight = document.getElementById("highlightSection");
+      const active = anyFilterActive();
+      document.getElementById("clearFilterButton").style.display = active ? "inline-block" : "none";
+      if (!q && !active && !force) {
         sections.style.display = "";
+        highlight.style.display = allProducts.length ? "" : "none";
         results.style.display = "none";
         return;
       }
       sections.style.display = "none";
+      highlight.style.display = "none";
       results.style.display = "grid";
-      let list = applyFilter(allProducts, filterValue);
+      let list = getFilteredSortedProducts();
       if (q) list = list.filter((p) => (p.product_name || "").toLowerCase().includes(q));
       results.innerHTML = list.length
         ? list.map(cardHtml).join("")
         : '<div class="empty" style="grid-column:1/-1;">Không tìm thấy sản phẩm phù hợp.</div>';
       bindCardButtons(results);
     }
-    document.getElementById("searchBox").addEventListener("input", runSearch);
-    document.getElementById("filterSelect").addEventListener("change", runSearch);
+    document.getElementById("searchBox").addEventListener("input", () => runSearch());
+    document.getElementById("categorySelect").addEventListener("change", () => runSearch());
+    document.getElementById("priceRangeSelect").addEventListener("change", () => runSearch());
+    document.getElementById("sortSelect").addEventListener("change", () => runSearch());
     document.getElementById("clearFilterButton").addEventListener("click", () => {
-      document.getElementById("filterSelect").value = "";
+      document.getElementById("categorySelect").value = "";
+      document.getElementById("priceRangeSelect").value = "";
+      document.getElementById("sortSelect").value = "";
+      document.getElementById("searchBox").value = "";
       runSearch();
     });
 
-    populateFilterSelect();
+    // "Nổi bật hôm nay" — 3 lối tắt tĩnh (không phải sản phẩm cụ thể), bấm
+    // vào là áp bộ lọc/sắp xếp tương ứng và nhảy tới danh sách kết quả thật.
+    function renderHighlights() {
+      document.getElementById("highlightGrid").innerHTML = `
+        <button type="button" class="highlight-card" data-action="popular">
+          <div class="htext">
+            <span class="highlight-badge hot">TOP QUAN TÂM</span>
+            <h4>Top sản phẩm quan tâm</h4>
+            <p>Lấy theo lượt quan tâm gần đây.</p>
+          </div>
+          <span class="hicon">🔥</span>
+        </button>
+        <button type="button" class="highlight-card" data-action="cheap">
+          <div class="htext">
+            <span class="highlight-badge cheap">DỄ MUA</span>
+            <h4>Dưới 100k</h4>
+            <p>Nhóm giá dễ quyết định.</p>
+          </div>
+          <span class="hicon">🏷️</span>
+        </button>
+        <button type="button" class="highlight-card" data-action="newest">
+          <div class="htext">
+            <span class="highlight-badge new">MỚI THÊM</span>
+            <h4>Sản phẩm mới</h4>
+            <p>Những món vừa được thêm.</p>
+          </div>
+          <span class="hicon">✨</span>
+        </button>
+      `;
+      document.querySelectorAll(".highlight-card").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const action = btn.dataset.action;
+          document.getElementById("categorySelect").value = "";
+          document.getElementById("priceRangeSelect").value = action === "cheap" ? "under100k" : "";
+          document.getElementById("sortSelect").value = action === "newest" ? "newest" : "";
+          runSearch(true);
+          document.getElementById("searchResults").scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }
+
+    populateCategorySelect();
+    populatePriceRangeSelect();
+    populateSortSelect();
 
     fetch("/api/public/products")
       .then((r) => r.json())
@@ -664,6 +873,8 @@
         allProducts = data.products || [];
         renderDrawer();
         renderSections();
+        renderHighlights();
+        document.getElementById("highlightSection").style.display = allProducts.length ? "" : "none";
       })
       .catch(() => {
         document.getElementById("sections").innerHTML = '<div class="empty">Không tải được danh sách, thử lại sau.</div>';
