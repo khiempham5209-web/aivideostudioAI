@@ -427,32 +427,23 @@
       "Sách", "Văn Phòng Phẩm", "Vật Nuôi",
     ];
 
-    // Nhóm hiển thị cho phần section/ngăn kéo — gộp các cặp Nam/Nữ lại thành
-    // 1 mục ngắn gọn hơn. Bộ lọc tìm kiếm vẫn dùng PRODUCT_CATEGORIES đầy đủ
-    // ở trên để lọc chính xác theo giới tính.
+    // Danh mục chính (chuẩn, theo cách Shopee/Tiki/Lazada nhóm ngành hàng) cho
+    // phần section/ngăn kéo — mỗi danh mục chính gồm nhiều danh mục con bên
+    // trên. Bộ lọc tìm kiếm vẫn dùng PRODUCT_CATEGORIES đầy đủ (26 mục con,
+    // sắp A→Z) để lọc chính xác.
     const CATEGORY_GROUPS = [
       { label: "Thời Trang", categories: ["Thời Trang Nữ", "Thời Trang Nam"] },
-      { label: "Mẹ & Bé", categories: ["Mẹ & Bé"] },
-      { label: "Điện Thoại & Phụ Kiện", categories: ["Điện Thoại & Phụ Kiện"] },
-      { label: "Thiết Bị Điện Tử", categories: ["Thiết Bị Điện Tử"] },
-      { label: "Máy Ảnh & Máy Quay Phim", categories: ["Máy Ảnh & Máy Quay Phim"] },
-      { label: "Nhà Cửa & Đời Sống", categories: ["Nhà Cửa & Đời Sống"] },
-      { label: "Sức Khỏe & Sắc Đẹp", categories: ["Sức Khỏe & Sắc Đẹp"] },
-      { label: "Ô Tô & Xe Máy & Xe Đạp", categories: ["Ô Tô & Xe Máy & Xe Đạp"] },
       { label: "Giày Dép", categories: ["Giày Dép Nữ", "Giày Dép Nam"] },
-      { label: "Túi & Ví", categories: ["Túi Ví Nữ", "Túi Ví Nam"] },
-      { label: "Đồng Hồ", categories: ["Đồng Hồ"] },
-      { label: "Trang Sức", categories: ["Trang Sức"] },
-      { label: "Phụ Kiện Thời Trang", categories: ["Phụ Kiện Thời Trang"] },
-      { label: "Bách Hóa Online", categories: ["Bách Hóa Online"] },
-      { label: "Điện Gia Dụng", categories: ["Điện Gia Dụng"] },
-      { label: "Đồ Gia Dụng", categories: ["Đồ Gia Dụng"] },
-      { label: "Máy Tính & Laptop", categories: ["Máy Tính & Laptop"] },
-      { label: "Thiết Bị Số & Phụ Kiện Số", categories: ["Thiết Bị Số & Phụ Kiện Số"] },
+      { label: "Túi Ví & Balo", categories: ["Túi Ví Nữ", "Túi Ví Nam", "Balo & Vali"] },
+      { label: "Phụ Kiện & Trang Sức", categories: ["Phụ Kiện Thời Trang", "Trang Sức", "Đồng Hồ"] },
+      { label: "Sức Khỏe & Sắc Đẹp", categories: ["Sức Khỏe & Sắc Đẹp"] },
+      { label: "Mẹ & Bé", categories: ["Mẹ & Bé"] },
+      { label: "Điện Thoại & Công Nghệ", categories: ["Điện Thoại & Phụ Kiện", "Máy Tính & Laptop", "Máy Ảnh & Máy Quay Phim", "Thiết Bị Điện Tử", "Thiết Bị Số & Phụ Kiện Số"] },
+      { label: "Nhà Cửa & Đời Sống", categories: ["Nhà Cửa & Đời Sống", "Đồ Gia Dụng", "Điện Gia Dụng"] },
+      { label: "Ô Tô, Xe Máy & Xe Đạp", categories: ["Ô Tô & Xe Máy & Xe Đạp"] },
       { label: "Thể Thao & Du Lịch", categories: ["Thể Thao & Du Lịch"] },
-      { label: "Balo & Vali", categories: ["Balo & Vali"] },
-      { label: "Sách", categories: ["Sách"] },
-      { label: "Văn Phòng Phẩm", categories: ["Văn Phòng Phẩm"] },
+      { label: "Bách Hóa Online", categories: ["Bách Hóa Online"] },
+      { label: "Sách & Văn Phòng Phẩm", categories: ["Sách", "Văn Phòng Phẩm"] },
       { label: "Vật Nuôi", categories: ["Vật Nuôi"] },
     ];
 
@@ -589,7 +580,10 @@
 
     function populateFilterSelect() {
       const select = document.getElementById("filterSelect");
-      const catOptions = PRODUCT_CATEGORIES.map((cat) => `<option value="${escapeAttr(cat)}">${escapeHtml(cat)}</option>`).join("");
+      // Sắp A→Z cho dễ tìm trong bộ lọc (phần section/ngăn kéo dùng thứ tự
+      // theo số lượng sản phẩm, không liên quan tới thứ tự A→Z này).
+      const sortedCats = PRODUCT_CATEGORIES.slice().sort((a, b) => a.localeCompare(b, "vi"));
+      const catOptions = sortedCats.map((cat) => `<option value="${escapeAttr(cat)}">${escapeHtml(cat)}</option>`).join("");
       select.innerHTML = `
         <option value="">Chọn bộ lọc</option>
         <option value="hot">🔥 Hot nhất</option>

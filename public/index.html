@@ -1974,7 +1974,7 @@
         "Sách", "Văn Phòng Phẩm", "Vật Nuôi",
       ];
       if ($("#productCategory") && $("#productCategory").options.length <= 1) {
-        PRODUCT_CATEGORIES.forEach((cat) => {
+        PRODUCT_CATEGORIES.slice().sort((a, b) => a.localeCompare(b, "vi")).forEach((cat) => {
           $("#productCategory").insertAdjacentHTML("beforeend", `<option value="${cat}">${cat}</option>`);
         });
       }
