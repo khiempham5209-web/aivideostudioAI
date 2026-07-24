@@ -147,6 +147,7 @@ export async function muxAudioOntoVideo(
   audioPath: string,
   outPath: string,
   subtitlePath?: string,
+  aspect: "16:9" | "9:16" | "1:1" = "9:16",
 ): Promise<void> {
   const args = [
     "-y",
@@ -159,10 +160,17 @@ export async function muxAudioOntoVideo(
   ];
 
   if (subtitlePath) {
+    // Plain .srt carries no resolution info, so libass's SRT->ASS conversion
+    // falls back to an internal default reference size unless told the real
+    // frame size via `original_size` — without it, FontSize is computed
+    // against that (much smaller) default and comes out several times too
+    // large on our actual 1080x1920/1920x1080 output, burying the frame.
+    const [w, h] = ASPECT_RESOLUTION[aspect];
+    const fontSize = Math.round(h * 0.032);
     const escapedSubtitle = resolve(subtitlePath).replace(/\\/g, "/").replace(/:/g, "\\:");
     args.push(
       "-vf",
-      `subtitles='${escapedSubtitle}':force_style='FontName=Arial,FontSize=22,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=60'`,
+      `subtitles='${escapedSubtitle}':original_size=${w}x${h}:force_style='FontName=Arial,FontSize=${fontSize},PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=60'`,
       "-c:v", "libx264",
       "-preset", "veryfast",
       "-crf", "23",

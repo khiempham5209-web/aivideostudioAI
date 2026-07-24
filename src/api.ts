@@ -825,10 +825,15 @@ async function attachProductImageToHookScene(
       filePath: storedPath,
       fileSize: fileStat.size,
     });
-    const hookScene = listScenes(projectId)[0];
-    if (hookScene) {
-      updateScene(hookScene.id, { source_asset_id: asset.id });
-    }
+    // Bookend the video on the real product photo (hook + outro) instead of
+    // just the opening scene — stock footage in between can never actually
+    // depict this specific product, so showing the real thing twice (open
+    // and close) keeps the video feeling authentic rather than generic.
+    const scenes = listScenes(projectId);
+    const hookScene = scenes[0];
+    const outroScene = scenes.length > 1 ? scenes[scenes.length - 1] : undefined;
+    if (hookScene) updateScene(hookScene.id, { source_asset_id: asset.id });
+    if (outroScene && outroScene.id !== hookScene?.id) updateScene(outroScene.id, { source_asset_id: asset.id });
   } catch (error) {
     console.error(`[product-image] failed to attach product image for project ${projectId}:`, error);
   }
