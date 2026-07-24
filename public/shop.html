@@ -116,13 +116,16 @@
     margin: 0 auto;
     padding: 0 14px;
   }
+  /* Menu, trang chủ, ô tìm kiếm và 3 pill lọc đều nằm chung 1 hàng, tự
+     xuống dòng khi màn hình hẹp (flex-wrap) thay vì tách hàng riêng. */
   .toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 10px;
   }
-  #menuButton {
+  #menuButton, #homeButton {
     flex: 0 0 auto;
     width: 44px;
     height: 44px;
@@ -134,7 +137,7 @@
     cursor: pointer;
   }
   .search-wrap {
-    flex: 1 1 auto;
+    flex: 1 1 220px;
     min-width: 0;
     display: flex;
     align-items: stretch;
@@ -153,16 +156,6 @@
     color: var(--text);
     font-size: 15px;
     outline: none;
-  }
-  /* Ba bộ lọc riêng (danh mục / mức giá / sắp xếp) thay vì gộp 1 ô — mỗi ô
-     là 1 pill nhỏ, cuộn ngang được trên màn hình hẹp. */
-  .filter-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    margin-bottom: 8px;
   }
   .filter-pill {
     /* width theo nội dung + max-width chặn lại: option dài nhất trong danh
@@ -203,11 +196,6 @@
     text-align: center;
     line-height: 1.5;
     margin: 0 0 22px;
-  }
-  @media (max-width: 420px) {
-    .toolbar { flex-wrap: wrap; }
-    .search-wrap { flex: 1 1 100%; order: 1; }
-    #menuButton { order: 2; }
   }
 
   /* Nổi bật hôm nay — 3 thẻ tổng hợp nhanh, dữ liệu thật (lượt click, giá,
@@ -281,8 +269,8 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: var(--green);
-    color: #06210f;
+    background: rgba(22, 163, 74, 0.14);
+    color: #16a34a;
     font-weight: 700;
     font-size: 13px;
     padding: 8px 18px;
@@ -493,11 +481,10 @@
   <main>
     <div class="toolbar">
       <button id="menuButton" aria-label="Danh mục">☰</button>
+      <button id="homeButton" aria-label="Về trang chủ">🏠</button>
       <div class="search-wrap">
         <input id="searchBox" type="search" placeholder="🔍 Tìm theo tên sản phẩm..." />
       </div>
-    </div>
-    <div class="filter-row">
       <select id="categorySelect" class="filter-pill" aria-label="Danh mục"></select>
       <select id="priceRangeSelect" class="filter-pill" aria-label="Mức giá"></select>
       <select id="sortSelect" class="filter-pill" aria-label="Sắp xếp"></select>
@@ -507,7 +494,6 @@
 
     <div id="highlightSection" class="highlight-section" style="display:none;">
       <div class="highlight-title">🔥 Nổi bật hôm nay</div>
-      <p class="highlight-subtitle">Ngắn, dễ quét mắt.</p>
       <div id="highlightGrid" class="highlight-grid"></div>
     </div>
 
@@ -814,12 +800,17 @@
     document.getElementById("categorySelect").addEventListener("change", () => runSearch());
     document.getElementById("priceRangeSelect").addEventListener("change", () => runSearch());
     document.getElementById("sortSelect").addEventListener("change", () => runSearch());
-    document.getElementById("clearFilterButton").addEventListener("click", () => {
+    function goHome() {
       document.getElementById("categorySelect").value = "";
       document.getElementById("priceRangeSelect").value = "";
       document.getElementById("sortSelect").value = "";
       document.getElementById("searchBox").value = "";
       runSearch();
+    }
+    document.getElementById("clearFilterButton").addEventListener("click", goHome);
+    document.getElementById("homeButton").addEventListener("click", () => {
+      goHome();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
 
     // "Nổi bật hôm nay" — 3 lối tắt tĩnh (không phải sản phẩm cụ thể), bấm
