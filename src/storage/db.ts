@@ -52,8 +52,6 @@ export interface ProductRecord {
   key_points: string | null;
   image_url: string | null;
   category: string | null;
-  rating: string | null;
-  sold_count: string | null;
   status: string;
   video_file: string | null;
   tiktok_post_url: string | null;
@@ -1014,8 +1012,6 @@ export function createProduct(data: {
   keyPoints?: string | null;
   imageUrl?: string | null;
   category?: string | null;
-  rating?: string | null;
-  soldCount?: string | null;
 }): ProductRecord {
   const created = nowIso();
   const product: ProductRecord = {
@@ -1032,8 +1028,6 @@ export function createProduct(data: {
     key_points: data.keyPoints ?? null,
     image_url: data.imageUrl ?? null,
     category: data.category ?? null,
-    rating: data.rating ?? null,
-    sold_count: data.soldCount ?? null,
     status: "Chưa tạo",
     video_file: null,
     tiktok_post_url: null,
@@ -1045,12 +1039,12 @@ export function createProduct(data: {
   };
   db.prepare(`
     INSERT INTO products
-    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, rating, sold_count, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     product.id, product.owner_email, product.item_id, product.product_name, product.shop_name,
     product.original_url, product.affiliate_url, product.variation, product.price_reference,
-    product.commission_type, product.key_points, product.image_url, product.category, product.rating, product.sold_count,
+    product.commission_type, product.key_points, product.image_url, product.category,
     product.status, product.video_file,
     product.tiktok_post_url, product.views_clicks_orders, product.commission, product.landing_clicks,
     product.created_at, product.updated_at,
@@ -1065,12 +1059,12 @@ export function updateProduct(id: string, updates: Partial<Omit<ProductRecord, "
   const merged: ProductRecord = { ...existing, ...updates, updated_at: nowIso() };
   db.prepare(`
     UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?,
-    commission_type=?, key_points=?, image_url=?, category=?, rating=?, sold_count=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?, updated_at=?
+    commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?, updated_at=?
     WHERE id=?
   `).run(
     merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation,
     merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category,
-    merged.rating, merged.sold_count, merged.status, merged.video_file,
+    merged.status, merged.video_file,
     merged.tiktok_post_url, merged.views_clicks_orders, merged.commission, merged.updated_at, id,
   );
   mirrorUpsert("products", merged as unknown as DbRow, "id");
@@ -1099,8 +1093,6 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
   key_points?: string;
   image_url?: string;
   category?: string;
-  rating?: string;
-  sold_count?: string;
 }): ProductRecord {
   const existing = db.prepare("SELECT * FROM products WHERE owner_email = ? AND item_id = ?").get(ownerEmail, sheet.item_id) as ProductRecord | undefined;
   if (existing) {
@@ -1117,14 +1109,12 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
       key_points: sheet.key_points ?? null,
       image_url: sheet.image_url ?? null,
       category: sheet.category ?? null,
-      rating: sheet.rating ?? null,
-      sold_count: sheet.sold_count ?? null,
       updated_at: updated,
     };
     db.prepare(`
-      UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?, commission_type=?, key_points=?, image_url=?, category=?, rating=?, sold_count=?, updated_at=?
+      UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?, commission_type=?, key_points=?, image_url=?, category=?, updated_at=?
       WHERE id=?
-    `).run(merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation, merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category, merged.rating, merged.sold_count, merged.updated_at, existing.id);
+    `).run(merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation, merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category, merged.updated_at, existing.id);
     mirrorUpsert("products", merged as unknown as DbRow, "id");
     return merged;
   }
@@ -1141,8 +1131,6 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
     keyPoints: sheet.key_points,
     imageUrl: sheet.image_url,
     category: sheet.category,
-    rating: sheet.rating,
-    soldCount: sheet.sold_count,
   });
 }
 

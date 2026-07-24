@@ -15,8 +15,6 @@ export interface SheetProductRow {
   key_points?: string;
   image_url?: string;
   category?: string;
-  rating?: string;
-  sold_count?: string;
 }
 
 export interface SheetPushUpdate {
