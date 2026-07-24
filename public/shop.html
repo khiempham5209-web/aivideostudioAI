@@ -138,6 +138,14 @@
     outline: none;
     cursor: pointer;
   }
+  /* The dropdown's OWN open list is drawn by the OS/browser, not this page —
+     background:transparent above only affects the closed box. Without an
+     explicit color here, most browsers render that list on a plain white
+     background, making light-on-transparent text unreadable. */
+  #filterSelect option, #filterSelect optgroup {
+    background: var(--panel);
+    color: var(--text);
+  }
   .toolbar-hint {
     color: var(--muted);
     font-size: 12px;
