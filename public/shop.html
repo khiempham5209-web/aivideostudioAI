@@ -135,15 +135,22 @@
     color: var(--muted);
   }
   #filterSelect {
+    /* Fixed width, not just max-width: a plain <select> sizes its closed box
+       to fit its widest OPTION (even ones not currently selected), so the
+       longest category name in the list was stretching this box out and
+       leaving a big empty gap before the arrow. */
     flex: 0 0 auto;
-    max-width: 150px;
-    padding: 13px 8px 13px 6px;
+    width: 96px;
+    padding: 13px 6px 13px 6px;
     border: none;
     background: transparent;
     color: var(--text);
     font-size: 13px;
     outline: none;
     cursor: pointer;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
   }
   /* The dropdown's OWN open list is drawn by the OS/browser, not this page —
      background:transparent above only affects the closed box. Without an
@@ -410,13 +417,14 @@
     // both lists agree. This is the full list used by the filter dropdown
     // (precise, keeps Nam/Nữ split).
     const PRODUCT_CATEGORIES = [
-      "Thời Trang Nữ", "Thời Trang Nam", "Mẹ & Bé", "Thiết Bị Điện Tử",
+      "Thời Trang Nữ", "Thời Trang Nam", "Mẹ & Bé", "Điện Thoại & Phụ Kiện",
+      "Thiết Bị Điện Tử", "Máy Ảnh & Máy Quay Phim",
       "Nhà Cửa & Đời Sống", "Sức Khỏe & Sắc Đẹp", "Ô Tô & Xe Máy & Xe Đạp",
       "Giày Dép Nữ", "Giày Dép Nam", "Túi Ví Nữ", "Túi Ví Nam",
       "Đồng Hồ", "Trang Sức", "Phụ Kiện Thời Trang", "Bách Hóa Online",
       "Điện Gia Dụng", "Đồ Gia Dụng", "Máy Tính & Laptop",
       "Thiết Bị Số & Phụ Kiện Số", "Thể Thao & Du Lịch", "Balo & Vali",
-      "Văn Phòng Phẩm", "Vật Nuôi",
+      "Sách", "Văn Phòng Phẩm", "Vật Nuôi",
     ];
 
     // Nhóm hiển thị cho phần section/ngăn kéo — gộp các cặp Nam/Nữ lại thành
@@ -425,7 +433,9 @@
     const CATEGORY_GROUPS = [
       { label: "Thời Trang", categories: ["Thời Trang Nữ", "Thời Trang Nam"] },
       { label: "Mẹ & Bé", categories: ["Mẹ & Bé"] },
+      { label: "Điện Thoại & Phụ Kiện", categories: ["Điện Thoại & Phụ Kiện"] },
       { label: "Thiết Bị Điện Tử", categories: ["Thiết Bị Điện Tử"] },
+      { label: "Máy Ảnh & Máy Quay Phim", categories: ["Máy Ảnh & Máy Quay Phim"] },
       { label: "Nhà Cửa & Đời Sống", categories: ["Nhà Cửa & Đời Sống"] },
       { label: "Sức Khỏe & Sắc Đẹp", categories: ["Sức Khỏe & Sắc Đẹp"] },
       { label: "Ô Tô & Xe Máy & Xe Đạp", categories: ["Ô Tô & Xe Máy & Xe Đạp"] },
@@ -441,6 +451,7 @@
       { label: "Thiết Bị Số & Phụ Kiện Số", categories: ["Thiết Bị Số & Phụ Kiện Số"] },
       { label: "Thể Thao & Du Lịch", categories: ["Thể Thao & Du Lịch"] },
       { label: "Balo & Vali", categories: ["Balo & Vali"] },
+      { label: "Sách", categories: ["Sách"] },
       { label: "Văn Phòng Phẩm", categories: ["Văn Phòng Phẩm"] },
       { label: "Vật Nuôi", categories: ["Vật Nuôi"] },
     ];
