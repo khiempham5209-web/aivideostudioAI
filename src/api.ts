@@ -15,7 +15,7 @@ import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
-import { fetchImage } from "./assets/image-fetcher.js";
+import { fetchMedia } from "./assets/image-fetcher.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import { fetchProductsFromSheet, isProductSheetConfigured, logProductClick, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
 import {
@@ -809,60 +809,87 @@ function buildProductFacts(product: NonNullable<ReturnType<typeof getProduct>>):
   ].filter((line): line is string => Boolean(line)).join("\n");
 }
 
-/** Downloads the product's real photo and assigns it as the hook scene's
- *  footage — this outranks Pexels/AI-template in template-pipeline.ts's
- *  visual-resolution priority order, so the intro scene renders with the
- *  actual product photo instead of stock/placeholder art. Best-effort: any
- *  failure here must not block script generation, so the scene simply falls
- *  back to Pexels/AI-template as before. */
-async function attachProductImageToHookScene(
+/** Downloads every real photo/video the product has (cover image_url +
+ *  Media Pack media_urls) and assigns them across EVERY scene of the
+ *  project, cycling through what's available — this outranks Pexels/
+ *  AI-template in template-pipeline.ts's visual-resolution priority order.
+ *
+ *  Earlier version only bookended the hook+outro on the cover photo and let
+ *  the body scenes fall through to Pexels stock search. That shipped, but
+ *  real testing against a real product showed the problem plainly: a video
+ *  claiming to sell a specific product but showing unrelated stock footage
+ *  for most of its runtime reads as generic and undercuts the ad's own
+ *  credibility — the whole point of an affiliate video is that it's THIS
+ *  product. Reusing a single real photo across every scene (varied Ken
+ *  Burns pan/zoom per scene) is strictly more honest than switching to a
+ *  stranger's stock clip, even with no Media Pack variety at all.
+ *
+ *  Best-effort throughout: any failure here must not block script
+ *  generation — scenes simply fall back to Pexels/AI-template as before. */
+async function attachProductMediaToScenes(
   ownerEmail: string,
   projectId: string,
   product: NonNullable<ReturnType<typeof getProduct>>,
 ): Promise<void> {
-  if (!product.image_url) return;
-  try {
-    const targetDir = resolve(STORAGE_DIR, projectId, "image");
-    await mkdir(targetDir, { recursive: true });
-    let ext = ".jpg";
+  const mediaUrls: string[] = [];
+  if (product.image_url) mediaUrls.push(product.image_url);
+  if (product.media_urls) {
     try {
-      ext = extname(new URL(product.image_url).pathname) || ".jpg";
+      const extra = JSON.parse(product.media_urls) as unknown;
+      if (Array.isArray(extra)) {
+        for (const url of extra) if (typeof url === "string" && url.trim()) mediaUrls.push(url.trim());
+      }
     } catch {
-      // Not a parseable URL — keep the .jpg default; fetchImage below will
-      // still reject it if it's not actually reachable/an image.
+      // Malformed media_urls (shouldn't happen — always written as JSON.stringify(array) — but never let a bad row block rendering).
     }
-    const fileName = `product-${Date.now()}${ext}`;
-    const filePath = join(targetDir, fileName);
-    const downloaded = await fetchImage(product.image_url, filePath);
-    if (!downloaded.success || !downloaded.path) {
-      console.error(`[product-image] download failed for project ${projectId}: ${downloaded.reason}`);
-      return;
-    }
-    const fileStat = await stat(downloaded.path);
-    const mimeType = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";
-    const storedPath = isR2Configured()
-      ? await uploadFileToR2(downloaded.path, r2Key(ownerEmail, projectId, "image", fileName), mimeType)
-      : downloaded.path;
-    const asset = createAsset({
-      projectId,
-      type: "image",
-      fileName,
-      mimeType,
-      filePath: storedPath,
-      fileSize: fileStat.size,
-    });
-    // Bookend the video on the real product photo (hook + outro) instead of
-    // just the opening scene — stock footage in between can never actually
-    // depict this specific product, so showing the real thing twice (open
-    // and close) keeps the video feeling authentic rather than generic.
-    const scenes = listScenes(projectId);
-    const hookScene = scenes[0];
-    const outroScene = scenes.length > 1 ? scenes[scenes.length - 1] : undefined;
-    if (hookScene) updateScene(hookScene.id, { source_asset_id: asset.id });
-    if (outroScene && outroScene.id !== hookScene?.id) updateScene(outroScene.id, { source_asset_id: asset.id });
-  } catch (error) {
-    console.error(`[product-image] failed to attach product image for project ${projectId}:`, error);
   }
+  if (!mediaUrls.length) return;
+
+  const targetDir = resolve(STORAGE_DIR, projectId, "image");
+  await mkdir(targetDir, { recursive: true });
+  const assetIds: string[] = [];
+  for (const url of mediaUrls) {
+    try {
+      let ext = ".jpg";
+      try {
+        ext = extname(new URL(url).pathname) || ".jpg";
+      } catch {
+        // Not a parseable URL — keep the .jpg default; fetchMedia below will
+        // still reject it if it's not actually reachable/an image or video.
+      }
+      const fileName = `product-${Date.now()}-${assetIds.length}${ext}`;
+      const filePath = join(targetDir, fileName);
+      const downloaded = await fetchMedia(url, filePath);
+      if (!downloaded.success || !downloaded.path || !downloaded.type) {
+        console.error(`[product-media] download failed for ${url} (project ${projectId}): ${downloaded.reason}`);
+        continue;
+      }
+      const fileStat = await stat(downloaded.path);
+      const mimeType = downloaded.type === "video"
+        ? "video/mp4"
+        : ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";
+      const storedPath = isR2Configured()
+        ? await uploadFileToR2(downloaded.path, r2Key(ownerEmail, projectId, downloaded.type, fileName), mimeType)
+        : downloaded.path;
+      const asset = createAsset({
+        projectId,
+        type: downloaded.type,
+        fileName,
+        mimeType,
+        filePath: storedPath,
+        fileSize: fileStat.size,
+      });
+      assetIds.push(asset.id);
+    } catch (error) {
+      console.error(`[product-media] failed to attach media ${url} for project ${projectId}:`, error);
+    }
+  }
+  if (!assetIds.length) return;
+
+  const scenes = listScenes(projectId);
+  scenes.forEach((scene, index) => {
+    updateScene(scene.id, { source_asset_id: assetIds[index % assetIds.length] });
+  });
 }
 
 /** Best-effort: when a project linked to a product finishes rendering, tag
@@ -1393,8 +1420,8 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
   replaceProjectScenes(projectId, generated.script.scenes);
   if (project.product_id) {
     const product = getProduct(user.email, project.product_id);
-    if (product?.image_url) {
-      await attachProductImageToHookScene(user.email, projectId, product);
+    if (product?.image_url || product?.media_urls) {
+      await attachProductMediaToScenes(user.email, projectId, product);
     }
   }
   const scenes = listScenes(projectId);

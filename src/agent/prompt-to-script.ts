@@ -185,10 +185,17 @@ function buildPrompt(
   // Affiliate product videos are short-form ads, not long-form content — cap
   // the effective duration regardless of what the project's duration dial
   // was set to (that dial is shared with AI Content mode, which allows up to
-  // 30 minutes). This mirrors the plan's explicit rule: "Script 15-45 giây,
-  // product-first" — a mandatory constraint of affiliate mode, not a default.
+  // 30 minutes, and defaults to 30s picked in the UI's create form). The
+  // plan's original spec was 15-45s; real-world testing against a real
+  // product showed that's too tight for an actual persuasive structure
+  // (hook, relatable problem, dramatized benefits, CTA) at ANY point in that
+  // range, not just at the low end — a 30s ad has a ~64-86 word budget,
+  // which forces either a bare fact list or a mechanical trim, both flat and
+  // unconvincing. Floor raised to 35s (~100+ words) so there's room to
+  // actually build the structure below; 60s ceiling still keeps it a
+  // short-form ad, not a documentary.
   const effectiveDurationSec = mode === "affiliate"
-    ? Math.min(45, Math.max(15, targetDurationSec))
+    ? Math.min(60, Math.max(35, targetDurationSec))
     : targetDurationSec;
   // Vietnamese TTS at normal speed reads roughly 2.4-2.6 words/sec.
   const targetWords = Math.round(effectiveDurationSec * 2.5);
@@ -207,13 +214,17 @@ function buildPrompt(
       ? `end on a call-to-action inviting the viewer to check the current price on Shopee via the link in the description/bio (e.g. "xem giá trên Shopee ở link trong mô tả") — do not mention TikTok or any other platform by name`
       : `end on a call-to-action inviting the viewer to check the product info via the link in the video description`;
   const modeRules = mode === "affiliate" ? `
-- This is an AFFILIATE PRODUCT AD, not a review/commentary video. Every scene must sell the product itself — no film/topic commentary framing.
-- Product-first: the hook scene must open on the product and the problem it solves, not on a generic story intro.
-- NEVER write or imply that the narrator personally used, tried, or tested the product ("mình đã dùng", "sau khi trải nghiệm", "mình thấy da mình..."). Speak about the product's stated facts/benefits in third person instead ("sản phẩm này...", "công dụng chính là...").
-- Do NOT invent specs, results, or benefits beyond what is listed in "Thông tin sản phẩm THẬT" below. If a claim isn't in that list, don't make it.
+- This is an AFFILIATE PRODUCT AD whose job is to make someone want to buy — not a spec sheet read aloud, and not a review/commentary video. A viewer who watches this and thinks "ok, and?" is a failed ad even if every fact in it is accurate.
+- Follow a real ad structure, not a bullet list of facts:
+  1. HOOK (first scene): open on a specific, relatable moment where the viewer feels the problem — a concrete scenario they recognize ("đồ trang điểm vương vãi khắp bàn mỗi sáng"), not an abstract statement ("nhiều người gặp vấn đề lưu trữ"). Make them think "đúng là mình luôn vậy".
+  2. TURN (early body): introduce the product as the specific answer to that exact moment, not a generic "và đây là giải pháp" transition.
+  3. BENEFITS (middle body, most of the runtime): each benefit gets its own concrete, sensory, visual payoff — what the viewer will SEE or FEEL change, not just a restated feature. "gọn gàng hơn" is weak; "mở ngăn bàn ra là thấy ngay từng món, không phải bới tung mọi thứ" is strong. Pull this from "Thông tin sản phẩm THẬT" but dramatize it, don't just restate the bullet.
+  4. CTA (outro): ${platformCta} — do not say "mua ngay" as a command; invite them to look, not order.
+- Product-first: the hook must feature the product's situation, not a generic story unrelated to it.
+- NEVER write or imply that the narrator personally used, tried, or tested the product ("mình đã dùng", "sau khi trải nghiệm", "mình thấy da mình..."). Speak about the product's stated facts/benefits in third person instead ("sản phẩm này...", "công dụng chính là...") — you can still be vivid and sensory in third person without claiming personal use.
+- Do NOT invent specs, results, or benefits beyond what is listed in "Thông tin sản phẩm THẬT" below. Dramatizing a real benefit ("tìm đồ trong 2 giây thay vì lục tung cả bàn") is encouraged; inventing a new benefit that isn't there is not.
 - HARD RULE: never state a price, a discount amount, or any number of đồng/VNĐ in ANY scene's voiceText, not even in the outro — prices change and a wrong spoken price is a real compliance risk. The reference price in "Thông tin sản phẩm THẬT" is context for you only, never to be spoken. Invite the viewer to check the current price via the link/description instead (e.g. "xem giá hiện tại ở phần mô tả").
-- The last scene (outro) must ${platformCta} — do not say "mua ngay" as a command; invite them to look, not order.
-- Keep pacing punchy and short — this is a 15-45 second ad, not a documentary. Every sentence should either state a benefit or move toward the CTA.` : `
+- Keep pacing tight and punchy — this is a short ad, not a documentary — but "tight" means no wasted words, not "just list the facts and stop." Every sentence should either build the scenario, land a benefit, or move toward the CTA.` : `
 - This is a review/commentary video. Do not recreate copyrighted dialogue, do not provide a scene-by-scene substitute for watching the movie, and keep the tone transformative: summary, opinion, themes, strengths, weaknesses, verdict.
 - If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.`;
   const promptText = `
