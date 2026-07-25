@@ -1500,6 +1500,8 @@
               </div>
               <div><label>Link ảnh sản phẩm (ảnh bìa)</label><input id="productImageUrl" placeholder="https://... (link ảnh trực tiếp, đuôi .jpg/.png)" /></div>
               <div><label>Media Pack — ảnh/video phụ (mỗi dòng 1 link)</label><textarea id="productMediaUrls" placeholder="https://.../anh-2.jpg&#10;https://.../video-demo.mp4"></textarea></div>
+              <button class="btn" id="fetchShopeeGalleryButton" type="button">🔗 Lấy toàn bộ ảnh/video thật từ trang Shopee</button>
+              <p class="tiny" style="margin-top:4px;">Lấy đúng ảnh/video shop đã đăng trên trang sản phẩm (dùng "Link gốc sản phẩm (Shopee)" ở trên) — an toàn bản quyền vì là ảnh chính chủ shop, không phải nội dung mạng xã hội của người khác. <strong>Đã test thật: Shopee thường chặn (403)</strong> nên nút này không đáng tin cậy — cách chắc ăn hơn là tự mở trang sản phẩm, chuột phải từng ảnh muốn dùng → "Sao chép địa chỉ hình ảnh" → dán vào ô Media Pack ở trên.</p>
               <div><label>Danh mục</label><select id="productCategory"><option value="">— Chọn danh mục —</option></select></div>
               <div><label>Trạng thái</label>
                 <select id="productStatus">
@@ -4735,6 +4737,26 @@
         } finally {
           button.disabled = false;
           button.textContent = "🤖 Tạo Fact Sheet bằng AI";
+        }
+      });
+      $("#fetchShopeeGalleryButton")?.addEventListener("click", async () => {
+        if (!state.editingProductId) return toast("Hãy bấm Lưu sản phẩm trước, rồi mở lại để lấy ảnh Shopee.");
+        const button = $("#fetchShopeeGalleryButton");
+        button.disabled = true;
+        button.textContent = "Đang lấy ảnh...";
+        try {
+          const data = await api(`/api/products/${state.editingProductId}/shopee-gallery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+          if (data.added > 0) {
+            try { $("#productMediaUrls").value = (JSON.parse(data.product.media_urls || "[]") || []).join("\n"); } catch {}
+            toast(`Đã thêm ${data.added} ảnh/video thật từ Shopee — bấm Lưu để giữ lại.`);
+          } else {
+            toast("Shopee chặn truy vấn tự động (đã xác nhận thật, không phải lỗi tạm thời) — dán link ảnh vào ô Media Pack ở trên thay vì dùng nút này.");
+          }
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🔗 Lấy toàn bộ ảnh/video thật từ trang Shopee";
         }
       });
       $("#syncProductsButton")?.addEventListener("click", async () => {

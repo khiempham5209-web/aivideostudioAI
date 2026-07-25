@@ -16,6 +16,7 @@ import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
 import { fetchMedia } from "./assets/image-fetcher.js";
+import { fetchShopeeGallery } from "./assets/shopee-gallery.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import { fetchProductsFromSheet, isProductSheetConfigured, logProductClick, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
 import {
@@ -1571,6 +1572,33 @@ async function handleGenerateProductConcepts(req: IncomingMessage, res: ServerRe
   }
 }
 
+async function handleFetchShopeeGallery(req: IncomingMessage, res: ServerResponse, productId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const product = getProduct(user.email, productId);
+  if (!product) {
+    sendJson(res, 404, { error: "Product not found" });
+    return;
+  }
+  if (!product.original_url) {
+    sendJson(res, 400, { error: "Sản phẩm chưa có Link gốc Shopee — không có gì để lấy ảnh." });
+    return;
+  }
+  const gallery = await fetchShopeeGallery(product.original_url);
+  if (!gallery.imageUrls.length && !gallery.videoUrls.length) {
+    sendJson(res, 200, { ok: true, added: 0, product: productToJson(product) });
+    return;
+  }
+  let existing: string[] = [];
+  try {
+    const parsed = JSON.parse(product.media_urls ?? "[]") as unknown;
+    if (Array.isArray(parsed)) existing = parsed.filter((u): u is string => typeof u === "string");
+  } catch { /* malformed row — start fresh */ }
+  const merged = Array.from(new Set([...existing, ...gallery.imageUrls, ...gallery.videoUrls]));
+  const updated = updateProduct(productId, { media_urls: JSON.stringify(merged) });
+  sendJson(res, 200, { ok: true, added: merged.length - existing.length, product: productToJson(updated) });
+}
+
 async function handleDeleteProduct(req: IncomingMessage, res: ServerResponse, productId: string) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -2416,6 +2444,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const conceptsMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/concepts$/);
     if (req.method === "POST" && conceptsMatch) {
       await handleGenerateProductConcepts(req, res, conceptsMatch[1]);
+      return;
+    }
+    const shopeeGalleryMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/shopee-gallery$/);
+    if (req.method === "POST" && shopeeGalleryMatch) {
+      await handleFetchShopeeGallery(req, res, shopeeGalleryMatch[1]);
       return;
     }
     const productMatch = url.pathname.match(/^\/api\/products\/([^/]+)$/);
