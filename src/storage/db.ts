@@ -34,6 +34,24 @@ export interface ProjectRecord {
   error_message: string | null;
   /** Product (from Kho sản phẩm) this project was generated from, if any. */
   product_id: string | null;
+  /** Business mode chosen at creation — drives which script/CTA rules the
+   *  AI must follow (see buildPrompt in prompt-to-script.ts). Not editable
+   *  after creation: switching a project's business mode mid-flight would
+   *  leave already-written scenes following the wrong rule set. */
+  mode: "affiliate" | "content";
+  /** Where an affiliate video will be posted — each platform gets a
+   *  different CTA wording (see buildPrompt's platformCta). "generic" is the
+   *  default for AI Content mode and for affiliate projects created before
+   *  this field existed. */
+  platform: "tiktok_shop" | "shopee_aff" | "generic";
+  /** Review Center gate (plan A10): a project can render to "completed" and
+   *  still not be postable — a human must look at the MP4 + script + any
+   *  flagged claims and mark it "approved" (or "needs_fix") before it's
+   *  "Ready to Post". Orthogonal to `status` on purpose: extending the
+   *  render-pipeline status enum instead would touch every place that
+   *  already branches on "completed" across the app for a concept only
+   *  affiliate mode needs. */
+  review_status: "pending" | "approved" | "needs_fix";
   created_at: string;
   updated_at: string;
 }
@@ -58,6 +76,18 @@ export interface ProductRecord {
   views_clicks_orders: string | null;
   commission: string | null;
   landing_clicks: number;
+  /** Media Pack: extra product photos/videos beyond the single cover image_url,
+   *  stored as a JSON array of URL strings (e.g. '["https://...","https://..."]'). */
+  media_urls: string | null;
+  /** AI-generated {features, targetAudience, usage, uncertainClaims} JSON —
+   *  see generateProductFactSheet in prompt-to-script.ts. Null until the user
+   *  runs "Tạo Fact Sheet bằng AI" at least once. */
+  fact_sheet_json: string | null;
+  /** Human Approval gate (plan section A3): 0 until a person has reviewed the
+   *  AI-generated fact sheet, 1 once approved. Scripts can still be generated
+   *  from an unapproved sheet — this is a soft compliance flag, not a hard
+   *  block, since most existing products predate this field. */
+  fact_sheet_approved: number;
   created_at: string;
   updated_at: string;
 }
@@ -224,6 +254,9 @@ db.exec(`
     output_path TEXT,
     error_message TEXT,
     product_id TEXT,
+    mode TEXT NOT NULL DEFAULT 'content',
+    platform TEXT NOT NULL DEFAULT 'generic',
+    review_status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -362,6 +395,9 @@ db.exec(`
     views_clicks_orders TEXT,
     commission TEXT,
     landing_clicks INTEGER NOT NULL DEFAULT 0,
+    media_urls TEXT,
+    fact_sheet_json TEXT,
+    fact_sheet_approved INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -420,6 +456,12 @@ for (const statement of [
   "ALTER TABLE products ADD COLUMN rating TEXT",
   "ALTER TABLE products ADD COLUMN sold_count TEXT",
   "ALTER TABLE projects ADD COLUMN product_id TEXT",
+  "ALTER TABLE projects ADD COLUMN mode TEXT NOT NULL DEFAULT 'content'",
+  "ALTER TABLE projects ADD COLUMN platform TEXT NOT NULL DEFAULT 'generic'",
+  "ALTER TABLE projects ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'",
+  "ALTER TABLE products ADD COLUMN media_urls TEXT",
+  "ALTER TABLE products ADD COLUMN fact_sheet_json TEXT",
+  "ALTER TABLE products ADD COLUMN fact_sheet_approved INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE scenes ADD COLUMN visual_query TEXT",
 ]) {
   try {
@@ -526,6 +568,9 @@ async function initPostgresMirror() {
         output_path TEXT,
         error_message TEXT,
         product_id TEXT,
+        mode TEXT NOT NULL DEFAULT 'content',
+        platform TEXT NOT NULL DEFAULT 'generic',
+        review_status TEXT NOT NULL DEFAULT 'pending',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -709,6 +754,9 @@ async function initPostgresMirror() {
         views_clicks_orders TEXT,
         commission TEXT,
         landing_clicks INTEGER NOT NULL DEFAULT 0,
+        media_urls TEXT,
+        fact_sheet_json TEXT,
+        fact_sheet_approved INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -734,6 +782,12 @@ async function initPostgresMirror() {
     { label: "projects.output_path", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS output_path TEXT` },
     { label: "projects.error_message", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS error_message TEXT` },
     { label: "projects.product_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS product_id TEXT` },
+    { label: "projects.mode", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'content'` },
+    { label: "projects.platform", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'generic'` },
+    { label: "projects.review_status", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'` },
+    { label: "products.media_urls", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS media_urls TEXT` },
+    { label: "products.fact_sheet_json", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_json TEXT` },
+    { label: "products.fact_sheet_approved", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_approved INTEGER NOT NULL DEFAULT 0` },
     { label: "user_settings.theme", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'dark'` },
     { label: "user_settings.ui_scale", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1` },
     { label: "user_settings.storage_mode", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server'` },
@@ -913,6 +967,8 @@ export function createProject(data: {
   aspectRatio?: string;
   targetDurationSec?: number;
   productId?: string | null;
+  mode?: "affiliate" | "content";
+  platform?: "tiktok_shop" | "shopee_aff" | "generic";
 }): ProjectRecord {
   const created = nowIso();
   const project: ProjectRecord = {
@@ -929,13 +985,18 @@ export function createProject(data: {
     output_path: null,
     error_message: null,
     product_id: data.productId ?? null,
+    // Explicit mode wins; otherwise infer from whether a product was attached
+    // (kept for backward compatibility with projects created before "mode" existed).
+    mode: data.mode ?? (data.productId ? "affiliate" : "content"),
+    platform: data.platform ?? "generic",
+    review_status: "pending",
     created_at: created,
     updated_at: created,
   };
   db.prepare(`
     INSERT INTO projects
-    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, product_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, product_id, mode, platform, review_status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -950,11 +1011,25 @@ export function createProject(data: {
     project.output_path,
     project.error_message,
     project.product_id,
+    project.mode,
+    project.platform,
+    project.review_status,
     project.created_at,
     project.updated_at,
   );
   mirrorUpsert("projects", project as unknown as DbRow, "id");
   return project;
+}
+
+/** Review Center gate (plan A10) — orthogonal to updateProject's render-
+ *  pipeline fields on purpose, see the field's doc comment on ProjectRecord. */
+export function setProjectReviewStatus(projectId: string, reviewStatus: "pending" | "approved" | "needs_fix"): ProjectRecord | undefined {
+  const current = getProject(projectId);
+  if (!current) return undefined;
+  db.prepare("UPDATE projects SET review_status = ?, updated_at = ? WHERE id = ?").run(reviewStatus, nowIso(), projectId);
+  const updated = getProject(projectId);
+  if (updated) mirrorUpsert("projects", updated as unknown as DbRow, "id");
+  return updated;
 }
 
 export function listProducts(ownerEmail: string): ProductRecord[] {
@@ -1012,6 +1087,7 @@ export function createProduct(data: {
   keyPoints?: string | null;
   imageUrl?: string | null;
   category?: string | null;
+  mediaUrls?: string | null;
 }): ProductRecord {
   const created = nowIso();
   const product: ProductRecord = {
@@ -1034,19 +1110,23 @@ export function createProduct(data: {
     views_clicks_orders: null,
     commission: null,
     landing_clicks: 0,
+    media_urls: data.mediaUrls ?? null,
+    fact_sheet_json: null,
+    fact_sheet_approved: 0,
     created_at: created,
     updated_at: created,
   };
   db.prepare(`
     INSERT INTO products
-    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, media_urls, fact_sheet_json, fact_sheet_approved, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     product.id, product.owner_email, product.item_id, product.product_name, product.shop_name,
     product.original_url, product.affiliate_url, product.variation, product.price_reference,
     product.commission_type, product.key_points, product.image_url, product.category,
     product.status, product.video_file,
     product.tiktok_post_url, product.views_clicks_orders, product.commission, product.landing_clicks,
+    product.media_urls, product.fact_sheet_json, product.fact_sheet_approved,
     product.created_at, product.updated_at,
   );
   mirrorUpsert("products", product as unknown as DbRow, "id");
@@ -1059,13 +1139,15 @@ export function updateProduct(id: string, updates: Partial<Omit<ProductRecord, "
   const merged: ProductRecord = { ...existing, ...updates, updated_at: nowIso() };
   db.prepare(`
     UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?,
-    commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?, updated_at=?
+    commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?,
+    media_urls=?, fact_sheet_json=?, fact_sheet_approved=?, updated_at=?
     WHERE id=?
   `).run(
     merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation,
     merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category,
     merged.status, merged.video_file,
-    merged.tiktok_post_url, merged.views_clicks_orders, merged.commission, merged.updated_at, id,
+    merged.tiktok_post_url, merged.views_clicks_orders, merged.commission,
+    merged.media_urls, merged.fact_sheet_json, merged.fact_sheet_approved, merged.updated_at, id,
   );
   mirrorUpsert("products", merged as unknown as DbRow, "id");
   return merged;
@@ -1198,15 +1280,16 @@ export function getRenderJob(jobId: string): RenderJobRecord | undefined {
   return db.prepare("SELECT * FROM render_jobs WHERE id = ?").get(jobId) as RenderJobRecord | undefined;
 }
 
-export function listRenderJobsForOwner(ownerEmail: string, limit = 50): Array<RenderJobRecord & { project_title: string; project_topic: string }> {
+export function listRenderJobsForOwner(ownerEmail: string, limit = 50): Array<RenderJobRecord & { project_title: string; project_topic: string; project_mode: string; project_product_id: string | null; project_review_status: string }> {
   return db.prepare(`
-    SELECT render_jobs.*, projects.title AS project_title, projects.topic AS project_topic
+    SELECT render_jobs.*, projects.title AS project_title, projects.topic AS project_topic,
+      projects.mode AS project_mode, projects.product_id AS project_product_id, projects.review_status AS project_review_status
     FROM render_jobs
     JOIN projects ON projects.id = render_jobs.project_id
     WHERE projects.owner_email = ?
     ORDER BY render_jobs.created_at DESC
     LIMIT ?
-  `).all(ownerEmail, limit) as Array<RenderJobRecord & { project_title: string; project_topic: string }>;
+  `).all(ownerEmail, limit) as Array<RenderJobRecord & { project_title: string; project_topic: string; project_mode: string; project_product_id: string | null; project_review_status: string }>;
 }
 
 export function createAsset(data: {

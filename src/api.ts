@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import dotenv from "dotenv";
-import { generateScriptFromPrompt } from "./agent/prompt-to-script.js";
+import { generateScriptFromPrompt, generateProductFactSheet, generateProductConcepts, type ProductFactSheet } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
 import { findVoiceOption, getEffectiveVoiceOptions } from "./tts/voice-catalog.js";
@@ -61,6 +61,7 @@ import {
   updateClip,
   updateScene,
   updateProject,
+  setProjectReviewStatus,
   updateRenderJob,
   updateTrack,
   updateUserSettings,
@@ -134,6 +135,8 @@ interface CreateVideoBody {
   ratio?: string;
   durationSec?: number;
   productId?: string;
+  mode?: string;
+  platform?: string;
 }
 
 interface AuthUser {
@@ -775,6 +778,29 @@ function buildLocalProjectScript(project: NonNullable<ReturnType<typeof getProje
 }
 
 function buildProductFacts(product: NonNullable<ReturnType<typeof getProduct>>): string {
+  // Prefer the AI-generated, human-reviewable Fact Sheet over raw key_points
+  // once one exists — it's already been split into features/audience/usage
+  // and had uncertain claims flagged, which raw free-text key_points never
+  // was. Falls back to the old raw-field format for products that haven't
+  // run "Tạo Fact Sheet bằng AI" yet, so nothing regresses for them.
+  if (product.fact_sheet_json) {
+    try {
+      const sheet = JSON.parse(product.fact_sheet_json) as ProductFactSheet;
+      return [
+        `- Tên sản phẩm: ${product.product_name}`,
+        product.price_reference ? `- Giá tham khảo: ${product.price_reference}` : null,
+        product.shop_name ? `- Cửa hàng: ${product.shop_name}` : null,
+        `- Đối tượng phù hợp: ${sheet.targetAudience}`,
+        `- Cách dùng: ${sheet.usage}`,
+        `- Điểm nổi bật:\n${sheet.features.map((f) => `  + ${f}`).join("\n")}`,
+        sheet.uncertainClaims.length
+          ? `- Các chi tiết CHƯA XÁC NHẬN (không được nói chắc chắn trong video, có thể nhắc mờ hoặc bỏ qua): ${sheet.uncertainClaims.join("; ")}`
+          : null,
+      ].filter((line): line is string => Boolean(line)).join("\n");
+    } catch {
+      // Malformed JSON on an old/hand-edited row — fall through to raw fields.
+    }
+  }
   return [
     `- Tên sản phẩm: ${product.product_name}`,
     product.price_reference ? `- Giá tham khảo: ${product.price_reference}` : null,
@@ -859,12 +885,18 @@ async function syncCompletedVideoToProduct(ownerEmail: string, productId: string
 async function generateProjectScript(project: NonNullable<ReturnType<typeof getProject>>, aiProvider?: "gemini" | "openai") {
   try {
     const product = project.product_id ? getProduct(project.owner_email, project.product_id) : undefined;
+    // A project created before "mode" existed only has product_id to go on —
+    // treat any product-linked project as affiliate regardless of the stored
+    // default, so old projects don't silently lose affiliate script rules.
+    const mode = project.mode === "affiliate" || project.product_id ? "affiliate" : "content";
     const generated = await generateScriptFromPrompt(project.topic, {
       voiceProvider: "edge",
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
       targetDurationSec: project.target_duration_sec,
       aiProvider,
+      mode,
+      platform: project.platform,
       productFacts: product ? buildProductFacts(product) : undefined,
     });
     return { ...generated, usedFallback: false as const, fallbackReason: null as string | null };
@@ -1270,6 +1302,8 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     }
     productId = product.id;
   }
+  const mode = body.mode === "affiliate" || body.mode === "content" ? body.mode : undefined;
+  const platform = body.platform === "tiktok_shop" || body.platform === "shopee_aff" || body.platform === "generic" ? body.platform : undefined;
   const project = createProject({
     ownerEmail: user.email,
     topic: prompt,
@@ -1279,6 +1313,8 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     aspectRatio: ratio,
     targetDurationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
     productId,
+    mode,
+    platform,
   });
   if (body.projectName?.trim()) {
     updateProject(project.id, { title: body.projectName.trim() });
@@ -1417,6 +1453,7 @@ async function handleCreateProduct(req: IncomingMessage, res: ServerResponse) {
     commissionType: body.commissionType ? String(body.commissionType) : null,
     keyPoints: body.keyPoints ? String(body.keyPoints) : null,
     imageUrl: body.imageUrl ? String(body.imageUrl) : null,
+    mediaUrls: body.mediaUrls ? String(body.mediaUrls) : null,
     category: body.category ? String(body.category) : null,
   });
   sendJson(res, 201, { ok: true, product });
@@ -1434,18 +1471,76 @@ async function handleUpdateProduct(req: IncomingMessage, res: ServerResponse, pr
   const allowed = [
     "productName", "shopName", "originalUrl", "affiliateUrl", "variation", "priceReference",
     "commissionType", "keyPoints", "imageUrl", "category", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
+    "mediaUrls",
   ] as const;
   const fieldMap: Record<string, string> = {
     productName: "product_name", shopName: "shop_name", originalUrl: "original_url", affiliateUrl: "affiliate_url",
     variation: "variation", priceReference: "price_reference", commissionType: "commission_type", keyPoints: "key_points",
     imageUrl: "image_url", category: "category", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
+    mediaUrls: "media_urls",
   };
-  const updates: Record<string, string | null> = {};
+  const updates: Record<string, string | number | null> = {};
   for (const key of allowed) {
     if (body[key] !== undefined) updates[fieldMap[key]] = body[key] === null ? null : String(body[key]);
   }
+  // Boolean, not string — handled separately so it lands as a real 0/1 in the
+  // INTEGER column instead of the literal string "true"/"false".
+  if (typeof body.factSheetApproved === "boolean") {
+    updates.fact_sheet_approved = body.factSheetApproved ? 1 : 0;
+  }
   const product = updateProduct(productId, updates as never);
   sendJson(res, 200, { ok: true, product: productToJson(product) });
+}
+
+async function handleGenerateProductFactSheet(req: IncomingMessage, res: ServerResponse, productId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const product = getProduct(user.email, productId);
+  if (!product) {
+    sendJson(res, 404, { error: "Product not found" });
+    return;
+  }
+  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+  const aiProvider = body.aiProvider === "openai" ? "openai" : "gemini";
+  try {
+    const factSheet = await generateProductFactSheet({
+      productName: product.product_name,
+      shopName: product.shop_name,
+      priceReference: product.price_reference,
+      keyPoints: product.key_points,
+      category: product.category,
+    }, aiProvider);
+    // Regenerating resets approval — a person must look at the new claims
+    // again before they can ground a script, same as the first time.
+    const updated = updateProduct(productId, {
+      fact_sheet_json: JSON.stringify(factSheet),
+      fact_sheet_approved: 0,
+    });
+    sendJson(res, 200, { ok: true, product: productToJson(updated), factSheet });
+  } catch (error) {
+    sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleGenerateProductConcepts(req: IncomingMessage, res: ServerResponse, productId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const product = getProduct(user.email, productId);
+  if (!product) {
+    sendJson(res, 404, { error: "Product not found" });
+    return;
+  }
+  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+  const aiProvider = body.aiProvider === "openai" ? "openai" : "gemini";
+  try {
+    // Reuses the same fact-sheet-aware facts block the script generator
+    // grounds on, so a concept's scriptPrompt is built from the same
+    // reviewed facts it will later be scripted against.
+    const concepts = await generateProductConcepts(product.product_name, buildProductFacts(product), aiProvider);
+    sendJson(res, 200, { ok: true, concepts });
+  } catch (error) {
+    sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 async function handleDeleteProduct(req: IncomingMessage, res: ServerResponse, productId: string) {
@@ -2285,6 +2380,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       await handleSyncProducts(req, res);
       return;
     }
+    const factSheetMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/fact-sheet$/);
+    if (req.method === "POST" && factSheetMatch) {
+      await handleGenerateProductFactSheet(req, res, factSheetMatch[1]);
+      return;
+    }
+    const conceptsMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/concepts$/);
+    if (req.method === "POST" && conceptsMatch) {
+      await handleGenerateProductConcepts(req, res, conceptsMatch[1]);
+      return;
+    }
     const productMatch = url.pathname.match(/^\/api\/products\/([^/]+)$/);
     if (req.method === "PUT" && productMatch) {
       await handleUpdateProduct(req, res, productMatch[1]);
@@ -2410,6 +2515,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         target_duration_sec: Number.isFinite(durationSecRaw) && durationSecRaw > 0 ? Math.round(durationSecRaw) : undefined,
       });
       sendJson(res, 200, { ok: true, project: getProject(project.id) });
+      return;
+    }
+
+    const reviewMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/review$/);
+    if (req.method === "PUT" && reviewMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, reviewMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+      if (body.reviewStatus !== "pending" && body.reviewStatus !== "approved" && body.reviewStatus !== "needs_fix") {
+        sendJson(res, 400, { error: 'reviewStatus must be "pending", "approved", or "needs_fix"' });
+        return;
+      }
+      const updated = setProjectReviewStatus(project.id, body.reviewStatus);
+      sendJson(res, 200, { ok: true, project: updated });
       return;
     }
 

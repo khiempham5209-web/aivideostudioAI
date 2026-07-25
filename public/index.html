@@ -1261,7 +1261,11 @@
               <div id="profileDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:200px;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);">
                 <div id="userButton" class="tiny" data-page="account" title="Xem Tài khoản & gói" style="padding:8px;margin-bottom:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:center;font-weight:700;color:var(--text);cursor:pointer;border-radius:6px;">Chưa đăng nhập</div>
                 <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;">Cài đặt AI/API</button>
-                <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;">Điều chỉnh thanh công cụ</button>
+                <div style="margin:2px 0 6px;padding-top:6px;border-top:1px solid rgba(148,163,184,.25);">
+                  <div class="tiny" style="padding:2px 8px 6px;color:var(--muted,#94a3b8);font-weight:700;">Công cụ nâng cao</div>
+                  <div id="advancedToolsNav" style="display:flex;flex-direction:column;gap:4px;"></div>
+                </div>
+                <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;">Tùy chỉnh menu</button>
                 <button class="btn" id="desktopDownloadButton" type="button" style="width:100%;margin-bottom:6px;display:none;">⬇️ Tải app cho Windows</button>
                 <button class="btn" id="desktopResyncButton" type="button" style="width:100%;margin-bottom:6px;display:none;">🔄 Đồng bộ lại tài khoản web</button>
                 <button class="btn" id="logoutButton" style="width:100%;">Đăng xuất</button>
@@ -1352,6 +1356,17 @@
             <form class="panel" id="projectForm">
               <div class="panel-head"><h3>Thông tin dự án</h3><span class="pill ok">Step 1</span></div>
               <div class="panel-body field-stack">
+                <div><label>Chế độ dự án</label><div class="segmented" id="modePicker"><button class="active" type="button" data-mode="content">🎬 AI Content (giải trí)</button><button type="button" data-mode="affiliate">🛍️ Affiliate (sản phẩm)</button></div></div>
+                <div id="affiliateProductField" style="display:none;">
+                  <label for="createProductSelect">Sản phẩm Affiliate</label>
+                  <select id="createProductSelect"><option value="">— Chọn sản phẩm từ Kho sản phẩm —</option></select>
+                  <p class="tiny" style="margin-top:6px;">Chưa có sản phẩm? Mở "Kho sản phẩm" ở icon 👤 để thêm trước. Script sẽ tự rút gọn còn 15-45 giây, product-first, không bịa trải nghiệm cá nhân.</p>
+                  <label style="margin-top:8px;display:block;">Đăng ở đâu?</label>
+                  <div class="segmented" id="platformPicker"><button class="active" type="button" data-platform="generic">Chung</button><button type="button" data-platform="tiktok_shop">TikTok Shop</button><button type="button" data-platform="shopee_aff">Shopee</button></div>
+                  <p class="tiny" style="margin-top:4px;">CTA cuối video sẽ đổi theo nền tảng: TikTok Shop mời xem "sản phẩm gắn dưới video", Shopee mời "xem giá trên Shopee".</p>
+                  <button class="btn" id="generateConceptsButton" type="button" style="width:100%;margin-top:8px;" disabled>🎬 AI gợi ý concept cho sản phẩm này</button>
+                  <div id="conceptWizardList" style="display:none;margin-top:10px;flex-direction:column;gap:8px;"></div>
+                </div>
                 <div><label for="projectName">Tên dự án</label><input id="projectName" placeholder="Ví dụ: Review phim Kung Fu Panda 3" /></div>
                 <div><label for="prompt">Đề tài</label><textarea id="prompt" placeholder="Ví dụ: tạo video review phim Kung Fu Panda 3 trong khoảng hai phút, giọng kể chuyện cuốn hút, có nhận xét điểm hay điểm yếu và kết luận có đáng xem không"></textarea></div>
                 <div><label for="language">Ngôn ngữ</label><select id="language"><option>Tiếng Việt</option><option>English</option><option>Tiếng Trung</option></select></div>
@@ -1462,7 +1477,26 @@
               <div><label>Biến thể</label><input id="productVariation" placeholder="50ml/màu đen" /></div>
               <div><label>Giá tham khảo</label><input id="productPriceReference" placeholder="199.000 đ" /></div>
               <div><label>Điểm nổi bật (đưa AI viết kịch bản)</label><textarea id="productKeyPoints" placeholder="3-5 ý chính, mỗi ý 1 câu ngắn"></textarea></div>
-              <div><label>Link ảnh sản phẩm</label><input id="productImageUrl" placeholder="https://... (link ảnh trực tiếp, đuôi .jpg/.png)" /></div>
+              <div class="panel" style="padding:12px;margin:4px 0;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <strong>Product Fact Sheet (AI)</strong>
+                  <button class="btn" id="generateFactSheetButton" type="button">🤖 Tạo Fact Sheet bằng AI</button>
+                </div>
+                <p class="tiny" style="margin-top:6px;">AI tổng hợp công dụng/đối tượng/cách dùng CHỈ từ "Điểm nổi bật" ở trên, và đánh dấu số liệu chưa chắc chắn để bạn duyệt trước khi dùng viết kịch bản.</p>
+                <div id="factSheetDisplay" style="margin-top:10px;display:none;">
+                  <div class="tiny"><strong>Điểm nổi bật:</strong></div>
+                  <ul id="factSheetFeatures" style="margin:4px 0 8px;padding-left:18px;"></ul>
+                  <div class="tiny"><strong>Đối tượng phù hợp:</strong> <span id="factSheetAudience"></span></div>
+                  <div class="tiny" style="margin-top:4px;"><strong>Cách dùng:</strong> <span id="factSheetUsage"></span></div>
+                  <div id="factSheetUncertainWrap" style="display:none;margin-top:8px;padding:8px;border-radius:8px;background:rgba(250,204,21,.1);border:1px solid rgba(250,204,21,.35);">
+                    <div class="tiny" style="color:#facc15;"><strong>⚠️ Chưa xác nhận — kiểm tra lại trước khi duyệt:</strong></div>
+                    <ul id="factSheetUncertain" style="margin:4px 0 0;padding-left:18px;"></ul>
+                  </div>
+                  <label class="tiny" style="display:flex;align-items:center;gap:6px;margin-top:10px;"><input type="checkbox" id="factSheetApprovedCheckbox" /> Tôi đã kiểm tra và duyệt Fact Sheet này</label>
+                </div>
+              </div>
+              <div><label>Link ảnh sản phẩm (ảnh bìa)</label><input id="productImageUrl" placeholder="https://... (link ảnh trực tiếp, đuôi .jpg/.png)" /></div>
+              <div><label>Media Pack — ảnh/video phụ (mỗi dòng 1 link)</label><textarea id="productMediaUrls" placeholder="https://.../anh-2.jpg&#10;https://.../video-demo.mp4"></textarea></div>
               <div><label>Danh mục</label><select id="productCategory"><option value="">— Chọn danh mục —</option></select></div>
               <div><label>Trạng thái</label>
                 <select id="productStatus">
@@ -1538,6 +1572,7 @@
 
         <section class="page" id="outputs">
           <div class="page-head"><div><h2>Video đã xuất</h2><p class="muted">Kho kết quả: xem, tải xuống, xuất lại, sao chép dự án hoặc xóa.</p></div><div class="top-actions"><button class="btn" id="refreshOutputsButton">Làm mới</button></div></div>
+          <div class="segmented" id="outputsFilter" style="margin-bottom:12px;"><button class="active" type="button" data-filter="all">Tất cả</button><button type="button" data-filter="affiliate">🛍️ Affiliate</button><button type="button" data-filter="content">🎬 AI Content</button></div>
           <div class="grid output-grid" id="outputsGrid">
             <div class="empty">Chưa có video nào xuất xong.</div>
           </div>
@@ -1766,6 +1801,7 @@
         if (page === "assets") renderAssetLibrary();
         if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
         if (page === "products") loadProducts().catch(showError);
+        if (page === "create") loadProducts().catch(showError);
 
         // Push a real browser-history entry per page switch so Back/Forward
         // navigate between the app's own screens instead of leaving the app
@@ -1897,6 +1933,7 @@
       }
 
       function renderProducts() {
+        renderCreateProductSelect();
         const list = $("#productList");
         if (!list) return;
         const products = state.products || [];
@@ -1928,10 +1965,9 @@
             const product = products.find((p) => p.id === btn.dataset.createScript);
             if (!product) return;
             switchPage("create");
+            setCreateMode("affiliate", product.id);
             if ($("#projectName")) $("#projectName").value = product.product_name;
-            if ($("#prompt")) {
-              $("#prompt").value = `Tạo video quảng cáo ngắn cho sản phẩm ${product.product_name}${product.key_points ? " — " + product.key_points : ""}. Mở đầu bằng vấn đề người xem hay gặp mà sản phẩm này giải quyết được; nêu 2-3 điểm nổi bật; 1 lưu ý thật để không nói quá công dụng; kết bằng lời mời xem thêm thông tin và giá hiện tại tại link trong mô tả, không ghi giá cụ thể.`;
-            }
+            if ($("#prompt")) $("#prompt").value = buildAffiliatePromptForProduct(product);
             toast("Đã điền sẵn thông tin sản phẩm — kiểm tra lại rồi bấm Tạo dự án.");
           });
         });
@@ -1944,8 +1980,9 @@
               toast("Đang tạo video từ sản phẩm...");
               await createProjectAndGenerateScript({
                 projectName: product.product_name,
-                prompt: `Tạo video quảng cáo ngắn cho sản phẩm ${product.product_name}${product.key_points ? " — " + product.key_points : ""}. Mở đầu bằng vấn đề người xem hay gặp mà sản phẩm này giải quyết được; nêu 2-3 điểm nổi bật; 1 lưu ý thật để không nói quá công dụng; kết bằng lời mời xem thêm thông tin và giá hiện tại tại link trong mô tả, không ghi giá cụ thể.`,
+                prompt: buildAffiliatePromptForProduct(product),
                 productId: product.id,
+                mode: "affiliate",
                 voiceId: state.selectedVoiceId,
                 voiceSpeed: Number($("#speed")?.value) || 1,
                 ratio: "9:16",
@@ -1979,8 +2016,26 @@
         });
       }
 
+      function parseFactSheet(product) {
+        if (!product?.fact_sheet_json) return null;
+        try { return JSON.parse(product.fact_sheet_json); } catch { return null; }
+      }
+
+      function renderFactSheetDisplay(factSheet) {
+        const display = $("#factSheetDisplay");
+        if (!factSheet) { display.style.display = "none"; return; }
+        display.style.display = "block";
+        $("#factSheetFeatures").innerHTML = (factSheet.features || []).map((f) => `<li>${f}</li>`).join("");
+        $("#factSheetAudience").textContent = factSheet.targetAudience || "-";
+        $("#factSheetUsage").textContent = factSheet.usage || "-";
+        const uncertain = factSheet.uncertainClaims || [];
+        $("#factSheetUncertainWrap").style.display = uncertain.length ? "block" : "none";
+        $("#factSheetUncertain").innerHTML = uncertain.map((c) => `<li>${c}</li>`).join("");
+      }
+
       function openProductEditor(product) {
         state.editingProductId = product ? product.id : "";
+        state.editingProductFactSheet = parseFactSheet(product);
         $("#productEditorTitle").textContent = product ? "Sửa sản phẩm" : "Thêm sản phẩm";
         $("#productItemId").value = product?.item_id || "";
         $("#productItemId").disabled = Boolean(product);
@@ -1992,10 +2047,15 @@
         $("#productPriceReference").value = product?.price_reference || "";
         $("#productKeyPoints").value = product?.key_points || "";
         $("#productImageUrl").value = product?.image_url || "";
+        $("#productMediaUrls").value = (() => {
+          try { return (JSON.parse(product?.media_urls || "[]") || []).join("\n"); } catch { return ""; }
+        })();
         $("#productCategory").value = product?.category || "";
         $("#productStatus").value = product?.status || "Chưa tạo";
         $("#productTiktokPostUrl").value = product?.tiktok_post_url || "";
         $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
+        $("#factSheetApprovedCheckbox").checked = Boolean(product?.fact_sheet_approved);
+        renderFactSheetDisplay(state.editingProductFactSheet);
         $("#productEditorModal").classList.add("show");
       }
 
@@ -2069,6 +2129,47 @@
       function activeRatio() {
         const active = $("#ratioPicker .active");
         return active ? active.textContent.trim() : (state.settings?.default_ratio || "9:16");
+      }
+
+      function activeMode() {
+        const active = $("#modePicker .active");
+        return active ? active.dataset.mode : "content";
+      }
+
+      function activePlatform() {
+        const active = $("#platformPicker .active");
+        return active ? active.dataset.platform : "generic";
+      }
+
+      // Same product-first, no-personal-experience-claims prompt template used
+      // by every affiliate entry point (this form's product picker, and the
+      // "Tạo kịch bản" / "Tạo video" quick actions on a product card in Kho
+      // sản phẩm) — one place to edit instead of three copies drifting apart.
+      function buildAffiliatePromptForProduct(product) {
+        return `Tạo video quảng cáo ngắn cho sản phẩm ${product.product_name}${product.key_points ? " — " + product.key_points : ""}. Mở đầu bằng vấn đề người xem hay gặp mà sản phẩm này giải quyết được; nêu 2-3 điểm nổi bật; 1 lưu ý thật để không nói quá công dụng; kết bằng lời mời xem thêm thông tin và giá hiện tại tại link trong mô tả, không ghi giá cụ thể.`;
+      }
+
+      function renderCreateProductSelect() {
+        const select = $("#createProductSelect");
+        if (!select) return;
+        const current = select.value;
+        const products = state.products || [];
+        select.innerHTML = ['<option value="">— Chọn sản phẩm từ Kho sản phẩm —</option>']
+          .concat(products.map((p) => `<option value="${p.id}">${p.product_name} (${p.item_id})</option>`))
+          .join("");
+        if (products.some((p) => p.id === current)) select.value = current;
+      }
+
+      function setCreateMode(mode, productId) {
+        $$("#modePicker button").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+        $("#affiliateProductField").style.display = mode === "affiliate" ? "block" : "none";
+        $("#conceptWizardList").style.display = "none";
+        $("#conceptWizardList").innerHTML = "";
+        if (mode === "affiliate") {
+          renderCreateProductSelect();
+          if (productId && $("#createProductSelect")) $("#createProductSelect").value = productId;
+          $("#generateConceptsButton").disabled = !$("#createProductSelect")?.value;
+        }
       }
 
       function activeAiProvider() {
@@ -2203,7 +2304,7 @@
           const item = document.createElement("button");
           item.className = "asset-row";
           item.style.position = "relative";
-          item.innerHTML = `<button type="button" class="delete-project-btn" title="Xóa dự án" style="position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);background:rgba(0,0,0,.25);color:#fca5a5;font-weight:700;cursor:pointer;">✕</button><div class="voice-top"><strong>${project.title || "Untitled video"}</strong><span class="pill ${project.status === "completed" ? "ok" : "warn"}">${label(project.status)}</span></div><p class="tiny">${project.topic || ""}</p>`;
+          item.innerHTML = `<button type="button" class="delete-project-btn" title="Xóa dự án" style="position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);background:rgba(0,0,0,.25);color:#fca5a5;font-weight:700;cursor:pointer;">✕</button><div class="voice-top"><strong>${project.title || "Untitled video"}</strong><span class="pill ${project.status === "completed" ? "ok" : "warn"}">${label(project.status)}</span></div><span class="pill" style="margin-top:4px;display:inline-block;">${project.mode === "affiliate" ? "🛍️ Affiliate" : "🎬 AI Content"}</span><p class="tiny">${project.topic || ""}</p>`;
           item.addEventListener("click", () => selectProject(project));
           item.querySelector(".delete-project-btn")?.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -3618,20 +3719,87 @@
         }));
       }
 
-      function renderOutputs() {
+      const REVIEW_STATUS_PILL = {
+        approved: '<span class="pill ok">✅ Đã duyệt — Ready to Post</span>',
+        needs_fix: '<span class="pill" style="color:#fecdd3;">✏️ Cần sửa</span>',
+        pending: '<span class="pill warn">⏳ Chờ duyệt</span>',
+      };
+
+      function activeOutputsFilter() {
+        const active = $("#outputsFilter .active");
+        return active ? active.dataset.filter : "all";
+      }
+
+      async function renderOutputs() {
         const grid = $("#outputsGrid");
         if (!grid) return;
-        const completed = state.jobs.filter((j) => j.status === "completed" && j.video_path);
+        const filter = activeOutputsFilter();
+        const completed = state.jobs.filter((j) => j.status === "completed" && j.video_path
+          && (filter === "all" || j.project_mode === filter));
         if (!completed.length) {
-          grid.innerHTML = '<div class="empty">Chưa có video nào xuất xong.</div>';
+          grid.innerHTML = `<div class="empty">${filter === "all" ? "Chưa có video nào xuất xong." : "Chưa có video nào ở nhóm này."}</div>`;
           return;
         }
-        grid.innerHTML = completed.map((job, index) => `
-          <div class="panel"><div class="project-thumb" style="--art:${art[index % art.length]};"><footer><strong>${job.project_title || "Untitled video"}</strong><p class="tiny">${formatDateTime(job.finished_at || job.updated_at)}</p></footer></div>
-          <div class="panel-body top-actions">
-            <a class="btn primary" href="${fileUrl(job.video_path)}" target="_blank">Xem</a>
-            <a class="btn" href="${fileUrl(job.video_path)}" download>Tải</a>
-          </div></div>`).join("");
+        // Review Center only applies to affiliate videos (plan A10) — load
+        // products once so we can flag unconfirmed fact-sheet claims inline,
+        // without adding a network round trip per card.
+        const anyAffiliate = completed.some((j) => j.project_mode === "affiliate");
+        if (anyAffiliate && !state.products?.length) await loadProducts().catch(() => {});
+
+        grid.innerHTML = completed.map((job, index) => {
+          const isAffiliate = job.project_mode === "affiliate";
+          const product = isAffiliate ? (state.products || []).find((p) => p.id === job.project_product_id) : null;
+          let factSheet = null;
+          if (product?.fact_sheet_json) { try { factSheet = JSON.parse(product.fact_sheet_json); } catch { /* ignore */ } }
+          const hasUnresolvedClaims = factSheet && !product.fact_sheet_approved && factSheet.uncertainClaims?.length;
+          return `
+          <div class="panel">
+            <video src="${fileUrl(job.video_path)}" controls preload="none" style="width:100%;border-radius:10px;background:#000;max-height:360px;"></video>
+            <div class="panel-body field-stack">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <strong>${job.project_title || "Untitled video"}</strong>
+                <span class="pill">${isAffiliate ? "🛍️ Affiliate" : "🎬 AI Content"}</span>
+              </div>
+              <p class="tiny">${formatDateTime(job.finished_at || job.updated_at)}</p>
+              ${isAffiliate ? `
+                ${REVIEW_STATUS_PILL[job.project_review_status] || REVIEW_STATUS_PILL.pending}
+                ${hasUnresolvedClaims ? `<p class="tiny" style="color:#facc15;">⚠️ Sản phẩm còn số liệu chưa duyệt trong Fact Sheet — kiểm tra ở Kho sản phẩm trước khi đăng.</p>` : ""}
+                <button class="btn toggle-script-btn" type="button" data-project-id="${job.project_id}">Xem kịch bản</button>
+                <div class="script-preview" data-project-id="${job.project_id}" style="display:none;font-size:12px;max-height:160px;overflow:auto;background:rgba(0,0,0,.2);border-radius:8px;padding:8px;"></div>
+                <div class="top-actions">
+                  <button class="btn primary review-btn" type="button" data-project-id="${job.project_id}" data-status="approved">✅ Duyệt</button>
+                  <button class="btn review-btn" type="button" data-project-id="${job.project_id}" data-status="needs_fix">✏️ Cần sửa</button>
+                </div>` : ""}
+              <div class="top-actions">
+                <a class="btn" href="${fileUrl(job.video_path)}" target="_blank">Mở tab mới</a>
+                <a class="btn" href="${fileUrl(job.video_path)}" download>Tải</a>
+              </div>
+            </div>
+          </div>`;
+        }).join("");
+
+        grid.querySelectorAll(".toggle-script-btn").forEach((btn) => btn.addEventListener("click", async () => {
+          const box = grid.querySelector(`.script-preview[data-project-id="${btn.dataset.projectId}"]`);
+          if (!box) return;
+          if (box.style.display === "block") { box.style.display = "none"; return; }
+          box.style.display = "block";
+          box.innerHTML = "Đang tải...";
+          try {
+            const data = await api(`/api/projects/${btn.dataset.projectId}`);
+            box.innerHTML = (data.scenes || []).map((s, i) => `<p style="margin:4px 0;"><strong>${i + 1}.</strong> ${s.voice_text}</p>`).join("") || "Chưa có scene.";
+          } catch (error) {
+            box.innerHTML = "Không tải được kịch bản.";
+          }
+        }));
+        grid.querySelectorAll(".review-btn").forEach((btn) => btn.addEventListener("click", async () => {
+          try {
+            await api(`/api/projects/${btn.dataset.projectId}/review`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewStatus: btn.dataset.status }) });
+            const job = state.jobs.find((j) => j.project_id === btn.dataset.projectId);
+            if (job) job.project_review_status = btn.dataset.status;
+            renderOutputs();
+            toast(btn.dataset.status === "approved" ? "Đã duyệt — sẵn sàng đăng." : "Đã đánh dấu cần sửa.");
+          } catch (error) { showError(error); }
+        }));
       }
 
       async function loadHistory() {
@@ -3939,8 +4107,58 @@
           $("#durationCustomSec").style.display = e.target.dataset.sec === "custom" ? "block" : "none";
           if (e.target.dataset.sec === "custom") $("#durationCustomSec").focus();
         }
+        if (group.id === "modePicker") setCreateMode(e.target.dataset.mode);
+        if (group.id === "outputsFilter") renderOutputs();
         updateCreatePreview();
       }));
+      $("#createProductSelect")?.addEventListener("change", () => {
+        $("#conceptWizardList").style.display = "none";
+        $("#conceptWizardList").innerHTML = "";
+        const productId = $("#createProductSelect").value;
+        $("#generateConceptsButton").disabled = !productId;
+        const product = (state.products || []).find((p) => p.id === productId);
+        if (!product) return;
+        if ($("#projectName")) $("#projectName").value = product.product_name;
+        if ($("#prompt")) $("#prompt").value = buildAffiliatePromptForProduct(product);
+        updateCreatePreview();
+      });
+      $("#generateConceptsButton")?.addEventListener("click", async () => {
+        const productId = $("#createProductSelect")?.value;
+        if (!productId) return;
+        const button = $("#generateConceptsButton");
+        button.disabled = true;
+        const originalText = button.textContent;
+        button.textContent = "Đang tạo concept...";
+        try {
+          const data = await api(`/api/products/${productId}/concepts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
+          const conceptLabel = { "problem-solution": "Vấn đề → Giải pháp", "quick-review": "Review nhanh", "top-benefits": "Top lợi ích", demo: "Demo", pov: "POV", intro: "Giới thiệu" };
+          const list = $("#conceptWizardList");
+          list.innerHTML = (data.concepts || []).map((c, i) => `
+            <div class="panel" style="padding:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <span class="pill">${conceptLabel[c.angle] || c.angle}</span>
+                <button class="btn primary" type="button" data-use-concept="${i}">Dùng concept này</button>
+              </div>
+              <strong style="display:block;margin-top:6px;">${c.title}</strong>
+              <p class="tiny" style="margin-top:4px;">${c.description}</p>
+            </div>`).join("");
+          list.style.display = "flex";
+          list.querySelectorAll("[data-use-concept]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const concept = data.concepts[Number(btn.dataset.useConcept)];
+              if (!concept) return;
+              $("#prompt").value = concept.scriptPrompt;
+              updateCreatePreview();
+              toast(`Đã chọn concept "${concept.title}" — kiểm tra Đề tài rồi bấm Tạo dự án.`);
+            });
+          });
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      });
       $("#durationCustomSec")?.addEventListener("input", updateCreatePreview);
       ["projectName", "prompt", "language", "style"].forEach((id) => $(`#${id}`)?.addEventListener("input", updateCreatePreview));
       ["language", "style"].forEach((id) => $(`#${id}`)?.addEventListener("change", updateCreatePreview));
@@ -3959,26 +4177,31 @@
       });
       $("#refreshProjectsButton").addEventListener("click", () => loadProjects().catch(showError));
       const NAV_STORAGE_KEY = "avs_nav_config_v1";
+      // "advanced" pages are technical/support screens, not part of the golden
+      // path (nhập -> script -> voice -> media -> render -> duyệt -> xuất).
+      // They're hidden from the main sidebar and surfaced under the profile
+      // icon's "Công cụ nâng cao" menu instead.
       const DEFAULT_NAV_ITEMS = [
-        { page: "dashboard", label: "Trang chủ" },
-        { page: "create", label: "Tạo dự án mới" },
-        { page: "script", label: "Kịch bản AI" },
-        { page: "voice", label: "Giọng đọc AI" },
-        { page: "media", label: "Thư viện Media" },
-        { page: "assets", label: "Kho tài nguyên" },
-        { page: "project-explorer", label: "Project Explorer" },
-        { page: "products", label: "Kho sản phẩm" },
-        { page: "timeline", label: "Edit video V3" },
-        { page: "transitions", label: "Transition" },
-        { page: "animations", label: "Animation" },
-        { page: "music", label: "Nhạc nền" },
-        { page: "templates", label: "Mẫu video" },
-        { page: "jobs", label: "Hàng đợi render" },
-        { page: "outputs", label: "Video đã xuất" },
-        { page: "history", label: "Lịch sử chỉnh sửa" },
-        { page: "export", label: "Xuất video" },
-        { page: "stats", label: "Thống kê" },
+        { page: "dashboard", label: "Trang chủ", group: "main" },
+        { page: "create", label: "Tạo dự án mới", group: "main" },
+        { page: "script", label: "Kịch bản AI", group: "main" },
+        { page: "voice", label: "Giọng đọc AI", group: "main" },
+        { page: "media", label: "Thư viện Media", group: "main" },
+        { page: "assets", label: "Kho tài nguyên", group: "main" },
+        { page: "products", label: "Kho sản phẩm", group: "main" },
+        { page: "timeline", label: "Edit video V3", group: "main" },
+        { page: "music", label: "Nhạc nền", group: "main" },
+        { page: "outputs", label: "Video đã xuất", group: "main" },
+        { page: "export", label: "Xuất video", group: "main" },
+        { page: "project-explorer", label: "Project Explorer", group: "advanced" },
+        { page: "transitions", label: "Transition", group: "advanced" },
+        { page: "animations", label: "Animation", group: "advanced" },
+        { page: "templates", label: "Mẫu video", group: "advanced" },
+        { page: "jobs", label: "Hàng đợi render", group: "advanced" },
+        { page: "history", label: "Lịch sử chỉnh sửa", group: "advanced" },
+        { page: "stats", label: "Thống kê", group: "advanced" },
       ];
+      const NAV_GROUP_BY_PAGE = new Map(DEFAULT_NAV_ITEMS.map((item) => [item.page, item.group]));
 
       function getNavConfig() {
         try {
@@ -4005,15 +4228,22 @@
       function applyNavConfig() {
         const config = getNavConfig();
         const activePage = document.querySelector(".page.active")?.id || "dashboard";
+        const mainItems = config.filter((item) => (NAV_GROUP_BY_PAGE.get(item.page) || "main") !== "advanced");
+        const advancedItems = config.filter((item) => (NAV_GROUP_BY_PAGE.get(item.page) || "main") === "advanced");
         const sideNav = $("#sideNav");
         if (sideNav) {
-          sideNav.innerHTML = config.map((item) => `<button data-page="${item.page}" class="${item.page === activePage ? "active" : ""}">${item.label}</button>`).join("");
+          sideNav.innerHTML = mainItems.map((item) => `<button data-page="${item.page}" class="${item.page === activePage ? "active" : ""}">${item.label}</button>`).join("");
           bindNavClickHandlers(sideNav);
         }
         const mobileNav = $("#mobileNav");
         if (mobileNav) {
-          mobileNav.innerHTML = config.map((item) => `<button data-page="${item.page}" class="${item.page === activePage ? "active" : ""}">${item.label}</button>`).join("");
+          mobileNav.innerHTML = mainItems.map((item) => `<button data-page="${item.page}" class="${item.page === activePage ? "active" : ""}">${item.label}</button>`).join("");
           bindNavClickHandlers(mobileNav);
+        }
+        const advancedNav = $("#advancedToolsNav");
+        if (advancedNav) {
+          advancedNav.innerHTML = advancedItems.map((item) => `<button class="btn" data-page="${item.page}" style="width:100%;text-align:left;">${item.label}</button>`).join("");
+          bindNavClickHandlers(advancedNav);
         }
       }
 
@@ -4124,7 +4354,18 @@
         $("#createProjectButton").disabled = true;
         try {
           toast("Đang tạo project...");
-          await createProjectAndGenerateScript({ projectName: $("#projectName").value, prompt: $("#prompt").value, voiceId: state.selectedVoiceId, voiceSpeed: Number($("#speed").value), ratio: activeRatio(), durationSec: activeDurationSec() });
+          const mode = activeMode();
+          await createProjectAndGenerateScript({
+            projectName: $("#projectName").value,
+            prompt: $("#prompt").value,
+            voiceId: state.selectedVoiceId,
+            voiceSpeed: Number($("#speed").value),
+            ratio: activeRatio(),
+            durationSec: activeDurationSec(),
+            mode,
+            productId: mode === "affiliate" ? ($("#createProductSelect")?.value || undefined) : undefined,
+            platform: mode === "affiliate" ? activePlatform() : undefined,
+          });
         } catch (error) {
           showError(error);
         } finally {
@@ -4449,13 +4690,14 @@
           priceReference: $("#productPriceReference").value.trim(),
           keyPoints: $("#productKeyPoints").value.trim(),
           imageUrl: $("#productImageUrl").value.trim(),
+          mediaUrls: JSON.stringify($("#productMediaUrls").value.split("\n").map((s) => s.trim()).filter(Boolean)),
           category: $("#productCategory").value.trim(),
           status: $("#productStatus").value,
           tiktokPostUrl: $("#productTiktokPostUrl").value.trim(),
         };
         try {
           if (state.editingProductId) {
-            await api(`/api/products/${state.editingProductId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+            await api(`/api/products/${state.editingProductId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, factSheetApproved: $("#factSheetApprovedCheckbox").checked }) });
           } else {
             await api("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           }
@@ -4464,6 +4706,24 @@
           toast("Đã lưu sản phẩm.");
         } catch (error) {
           showError(error);
+        }
+      });
+      $("#generateFactSheetButton")?.addEventListener("click", async () => {
+        if (!state.editingProductId) return toast("Hãy bấm Lưu sản phẩm trước, rồi mở lại để tạo Fact Sheet.");
+        const button = $("#generateFactSheetButton");
+        button.disabled = true;
+        button.textContent = "Đang tạo...";
+        try {
+          const data = await api(`/api/products/${state.editingProductId}/fact-sheet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+          state.editingProductFactSheet = data.factSheet;
+          renderFactSheetDisplay(data.factSheet);
+          $("#factSheetApprovedCheckbox").checked = false;
+          toast("Đã tạo Fact Sheet — kiểm tra rồi tick \"Đã duyệt\" trước khi Lưu.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🤖 Tạo Fact Sheet bằng AI";
         }
       });
       $("#syncProductsButton")?.addEventListener("click", async () => {
