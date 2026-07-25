@@ -1454,6 +1454,7 @@ async function handleCreateProduct(req: IncomingMessage, res: ServerResponse) {
     keyPoints: body.keyPoints ? String(body.keyPoints) : null,
     imageUrl: body.imageUrl ? String(body.imageUrl) : null,
     mediaUrls: body.mediaUrls ? String(body.mediaUrls) : null,
+    tiktokProductId: body.tiktokProductId ? String(body.tiktokProductId) : null,
     category: body.category ? String(body.category) : null,
   });
   sendJson(res, 201, { ok: true, product });
@@ -1470,13 +1471,13 @@ async function handleUpdateProduct(req: IncomingMessage, res: ServerResponse, pr
   const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
   const allowed = [
     "productName", "shopName", "originalUrl", "affiliateUrl", "variation", "priceReference",
-    "commissionType", "keyPoints", "imageUrl", "category", "status", "videoFile", "tiktokPostUrl", "viewsClicksOrders", "commission",
+    "commissionType", "keyPoints", "imageUrl", "category", "status", "videoFile", "tiktokPostUrl", "tiktokProductId", "viewsClicksOrders", "commission",
     "mediaUrls",
   ] as const;
   const fieldMap: Record<string, string> = {
     productName: "product_name", shopName: "shop_name", originalUrl: "original_url", affiliateUrl: "affiliate_url",
     variation: "variation", priceReference: "price_reference", commissionType: "commission_type", keyPoints: "key_points",
-    imageUrl: "image_url", category: "category", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", viewsClicksOrders: "views_clicks_orders", commission: "commission",
+    imageUrl: "image_url", category: "category", status: "status", videoFile: "video_file", tiktokPostUrl: "tiktok_post_url", tiktokProductId: "tiktok_product_id", viewsClicksOrders: "views_clicks_orders", commission: "commission",
     mediaUrls: "media_urls",
   };
   const updates: Record<string, string | number | null> = {};

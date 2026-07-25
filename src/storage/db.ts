@@ -73,6 +73,12 @@ export interface ProductRecord {
   status: string;
   video_file: string | null;
   tiktok_post_url: string | null;
+  /** TikTok Shop Catalog product ID/link — used to tag this product natively
+   *  when posting to TikTok (TikTok Shop videos don't route through the
+   *  website like Shopee does, so original_url/affiliate_url aren't needed
+   *  for a TikTok-only product). Independent of tiktok_post_url, which is
+   *  the URL of one already-posted video, not the catalog entry. */
+  tiktok_product_id: string | null;
   views_clicks_orders: string | null;
   commission: string | null;
   landing_clicks: number;
@@ -392,6 +398,7 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'Chưa tạo',
     video_file TEXT,
     tiktok_post_url TEXT,
+    tiktok_product_id TEXT,
     views_clicks_orders TEXT,
     commission TEXT,
     landing_clicks INTEGER NOT NULL DEFAULT 0,
@@ -459,6 +466,7 @@ for (const statement of [
   "ALTER TABLE projects ADD COLUMN mode TEXT NOT NULL DEFAULT 'content'",
   "ALTER TABLE projects ADD COLUMN platform TEXT NOT NULL DEFAULT 'generic'",
   "ALTER TABLE projects ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'",
+  "ALTER TABLE products ADD COLUMN tiktok_product_id TEXT",
   "ALTER TABLE products ADD COLUMN media_urls TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_json TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_approved INTEGER NOT NULL DEFAULT 0",
@@ -751,6 +759,7 @@ async function initPostgresMirror() {
         status TEXT NOT NULL DEFAULT 'Chưa tạo',
         video_file TEXT,
         tiktok_post_url TEXT,
+        tiktok_product_id TEXT,
         views_clicks_orders TEXT,
         commission TEXT,
         landing_clicks INTEGER NOT NULL DEFAULT 0,
@@ -785,6 +794,7 @@ async function initPostgresMirror() {
     { label: "projects.mode", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'content'` },
     { label: "projects.platform", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'generic'` },
     { label: "projects.review_status", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'` },
+    { label: "products.tiktok_product_id", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS tiktok_product_id TEXT` },
     { label: "products.media_urls", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS media_urls TEXT` },
     { label: "products.fact_sheet_json", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_json TEXT` },
     { label: "products.fact_sheet_approved", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_approved INTEGER NOT NULL DEFAULT 0` },
@@ -996,7 +1006,7 @@ export function createProject(data: {
   db.prepare(`
     INSERT INTO projects
     (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, product_id, mode, platform, review_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -1088,6 +1098,7 @@ export function createProduct(data: {
   imageUrl?: string | null;
   category?: string | null;
   mediaUrls?: string | null;
+  tiktokProductId?: string | null;
 }): ProductRecord {
   const created = nowIso();
   const product: ProductRecord = {
@@ -1107,6 +1118,7 @@ export function createProduct(data: {
     status: "Chưa tạo",
     video_file: null,
     tiktok_post_url: null,
+    tiktok_product_id: data.tiktokProductId ?? null,
     views_clicks_orders: null,
     commission: null,
     landing_clicks: 0,
@@ -1118,14 +1130,14 @@ export function createProduct(data: {
   };
   db.prepare(`
     INSERT INTO products
-    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, views_clicks_orders, commission, landing_clicks, media_urls, fact_sheet_json, fact_sheet_approved, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, tiktok_product_id, views_clicks_orders, commission, landing_clicks, media_urls, fact_sheet_json, fact_sheet_approved, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     product.id, product.owner_email, product.item_id, product.product_name, product.shop_name,
     product.original_url, product.affiliate_url, product.variation, product.price_reference,
     product.commission_type, product.key_points, product.image_url, product.category,
     product.status, product.video_file,
-    product.tiktok_post_url, product.views_clicks_orders, product.commission, product.landing_clicks,
+    product.tiktok_post_url, product.tiktok_product_id, product.views_clicks_orders, product.commission, product.landing_clicks,
     product.media_urls, product.fact_sheet_json, product.fact_sheet_approved,
     product.created_at, product.updated_at,
   );
@@ -1139,14 +1151,14 @@ export function updateProduct(id: string, updates: Partial<Omit<ProductRecord, "
   const merged: ProductRecord = { ...existing, ...updates, updated_at: nowIso() };
   db.prepare(`
     UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?,
-    commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, views_clicks_orders=?, commission=?,
+    commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, tiktok_product_id=?, views_clicks_orders=?, commission=?,
     media_urls=?, fact_sheet_json=?, fact_sheet_approved=?, updated_at=?
     WHERE id=?
   `).run(
     merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation,
     merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category,
     merged.status, merged.video_file,
-    merged.tiktok_post_url, merged.views_clicks_orders, merged.commission,
+    merged.tiktok_post_url, merged.tiktok_product_id, merged.views_clicks_orders, merged.commission,
     merged.media_urls, merged.fact_sheet_json, merged.fact_sheet_approved, merged.updated_at, id,
   );
   mirrorUpsert("products", merged as unknown as DbRow, "id");
@@ -1280,16 +1292,17 @@ export function getRenderJob(jobId: string): RenderJobRecord | undefined {
   return db.prepare("SELECT * FROM render_jobs WHERE id = ?").get(jobId) as RenderJobRecord | undefined;
 }
 
-export function listRenderJobsForOwner(ownerEmail: string, limit = 50): Array<RenderJobRecord & { project_title: string; project_topic: string; project_mode: string; project_product_id: string | null; project_review_status: string }> {
+export function listRenderJobsForOwner(ownerEmail: string, limit = 50): Array<RenderJobRecord & { project_title: string; project_topic: string; project_mode: string; project_product_id: string | null; project_review_status: string; project_platform: string }> {
   return db.prepare(`
     SELECT render_jobs.*, projects.title AS project_title, projects.topic AS project_topic,
-      projects.mode AS project_mode, projects.product_id AS project_product_id, projects.review_status AS project_review_status
+      projects.mode AS project_mode, projects.product_id AS project_product_id, projects.review_status AS project_review_status,
+      projects.platform AS project_platform
     FROM render_jobs
     JOIN projects ON projects.id = render_jobs.project_id
     WHERE projects.owner_email = ?
     ORDER BY render_jobs.created_at DESC
     LIMIT ?
-  `).all(ownerEmail, limit) as Array<RenderJobRecord & { project_title: string; project_topic: string; project_mode: string; project_product_id: string | null; project_review_status: string }>;
+  `).all(ownerEmail, limit) as Array<RenderJobRecord & { project_title: string; project_topic: string; project_mode: string; project_product_id: string | null; project_review_status: string; project_platform: string }>;
 }
 
 export function createAsset(data: {

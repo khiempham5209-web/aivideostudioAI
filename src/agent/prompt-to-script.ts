@@ -181,7 +181,7 @@ function buildPrompt(
   productFacts?: string,
   mode: "affiliate" | "content" = "content",
   platform: "tiktok_shop" | "shopee_aff" | "generic" = "generic",
-): string {
+): { text: string; minWords: number; maxWords: number } {
   // Affiliate product videos are short-form ads, not long-form content — cap
   // the effective duration regardless of what the project's duration dial
   // was set to (that dial is shared with AI Content mode, which allows up to
@@ -216,7 +216,7 @@ function buildPrompt(
 - Keep pacing punchy and short — this is a 15-45 second ad, not a documentary. Every sentence should either state a benefit or move toward the CTA.` : `
 - This is a review/commentary video. Do not recreate copyrighted dialogue, do not provide a scene-by-scene substitute for watching the movie, and keep the tone transformative: summary, opinion, themes, strengths, weaknesses, verdict.
 - If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.`;
-  return `
+  const promptText = `
 You create Vietnamese short ${mode === "affiliate" ? "product ad" : "review"} videos as JSON for an existing renderer.
 
 User request:
@@ -243,8 +243,10 @@ Return ONLY valid JSON matching this exact structure:
 
 Scene rules:
 - Create ${minScenes} to ${maxScenes} scenes total: first scene type "hook", last scene type "outro", the rest type "body".
-- HARD REQUIREMENT: the sum of all scene.voiceText combined must be ${minWords} to ${maxWords} Vietnamese words — this is not a suggestion. Count as you write. A script that is shorter than ${minWords} words is a FAILED response, even if the topic feels "covered" — it is not a valid answer.
-- If the topic alone does not naturally have enough content, you MUST expand it yourself: add more concrete steps/details, examples, comparisons, tips, background context, or elaboration on each point, so the total reaches the required word count. Do not simply repeat the same idea in different words — add genuinely new, useful sub-points.
+- HARD REQUIREMENT: the sum of all scene.voiceText combined must be ${minWords} to ${maxWords} Vietnamese words total — this is a hard ceiling AND floor, not a suggestion. Count every word across every scene as you write, including the hook and outro. A script shorter than ${minWords} words OR longer than ${maxWords} words is a FAILED response — going over the ceiling is just as much a failure as falling short of the floor. Before returning your JSON, count the total words one more time and cut sentences if you are over ${maxWords}.
+${mode === "affiliate"
+    ? `- Do NOT pad this out. This is a short ad — if you run out of real content before ${minWords} words, that means fewer, punchier sentences per point, not more scenes or invented filler. Never exceed ${maxWords} words to "cover everything" — cut a point instead.`
+    : `- If the topic alone does not naturally have enough content, you MUST expand it yourself: add more concrete steps/details, examples, comparisons, tips, background context, or elaboration on each point, so the total reaches the required word count without exceeding ${maxWords}. Do not simply repeat the same idea in different words — add genuinely new, useful sub-points.`}
 - Each scene.voiceText must be a plain Vietnamese string, 2 to 4 sentences (longer per-scene text is expected for longer videos), no emoji, no URL, no markdown.${modeRules}
 - Write numbers and symbols in voiceText as Vietnamese words when possible.
 
@@ -267,6 +269,45 @@ search a stock media library). Concrete and visual, not abstract — e.g.
 "mountain hiking trail" not "adventure feeling". Example: { "id": "body-1", ...,
 "visualQuery": "busy city street night" }.
 `;
+  return { text: promptText, minWords, maxWords };
+}
+
+/** Deterministic safety net for buildPrompt's word-count ceiling (see the
+ *  comment at its call site) — cuts trailing sentences from the longest
+ *  scenes first until the script fits maxWords, always leaving at least one
+ *  sentence per scene. Never touches templateId/inputs/type, so it can't
+ *  break the JSON shape the way asking the model to redo the script did. */
+function trimScriptToWordBudget(script: TemplateScript, maxWords: number): TemplateScript {
+  const wordsOf = (text: string) => text.trim().split(/\s+/).filter(Boolean);
+  let total = script.scenes.reduce((sum, s) => sum + wordsOf(s.voiceText).length, 0);
+  if (total <= maxWords) return script;
+
+  const scenes = script.scenes.map((s) => ({ ...s }));
+  // Split each scene into sentences up front so trimming one sentence off
+  // never leaves a dangling half-sentence.
+  const sentenceSplit = (text: string) => text.split(/(?<=[.!?…])\s+/).filter((s) => s.trim());
+  const sceneSentences = scenes.map((s) => sentenceSplit(s.voiceText));
+
+  // Repeatedly drop the last sentence from whichever scene currently has the
+  // most sentences left (spreads the cut across scenes instead of gutting
+  // just one), stopping once under budget or every scene is down to its
+  // last sentence.
+  while (total > maxWords) {
+    let longestIdx = -1;
+    for (let i = 0; i < sceneSentences.length; i++) {
+      if (sceneSentences[i].length > 1 && (longestIdx === -1 || sceneSentences[i].length > sceneSentences[longestIdx].length)) {
+        longestIdx = i;
+      }
+    }
+    if (longestIdx === -1) break; // every scene is already a single sentence
+    const removed = sceneSentences[longestIdx].pop()!;
+    total -= wordsOf(removed).length;
+  }
+
+  return {
+    ...script,
+    scenes: scenes.map((s, i) => ({ ...s, voiceText: sceneSentences[i].join(" ") })),
+  };
 }
 
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -332,13 +373,45 @@ export async function generateScriptFromPrompt(
   const maxOutputTokens = aiProvider === "openai"
     ? Math.min(16000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)))
     : Math.min(60000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)));
-  const promptText = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts, options.mode ?? "content", options.platform ?? "generic");
-  const responseText = aiProvider === "openai"
-    ? await callOpenAI(promptText, options.model ?? DEFAULT_OPENAI_MODEL, maxOutputTokens)
-    : await callGemini(promptText, options.model ?? DEFAULT_MODEL, maxOutputTokens);
+  const mode = options.mode ?? "content";
+  const platform = options.platform ?? "generic";
 
-  const raw = normalizeGeneratedScript(extractJson(responseText));
-  const script = GeneratedScriptSchema.parse(raw);
+  const built = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts, mode, platform);
+
+  // Gemini 2.5 Flash occasionally drops a required field (seen: templateId
+  // missing on every scene) on an otherwise-fine response — confirmed by
+  // hand that re-running the IDENTICAL prompt succeeds most of the time, so
+  // this is model-call noise, not a prompt defect. A plain retry (same
+  // prompt, unmodified) recovers far more reliably than trying to word-tweak
+  // the prompt around it — that was tried and made things worse (asking the
+  // model to "fix" its answer caused it to drop the field on purpose).
+  let script: TemplateScript | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const responseText = aiProvider === "openai"
+        ? await callOpenAI(built.text, options.model ?? DEFAULT_OPENAI_MODEL, maxOutputTokens)
+        : await callGemini(built.text, options.model ?? DEFAULT_MODEL, maxOutputTokens);
+      const raw = normalizeGeneratedScript(extractJson(responseText));
+      script = GeneratedScriptSchema.parse(raw);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!script) throw lastError;
+
+  // Affiliate mode is a short ad — a model that ignores the word-count
+  // ceiling doesn't just run a bit long, it produces a 70s+ video where the
+  // plan calls for 15-45s. Observed in practice (Gemini 2.5 Flash: asked for
+  // 64-86 words, returned 257 — nearly 3x over — despite an explicit "HARD
+  // REQUIREMENT" in the prompt). Asking the model to retry proved unreliable
+  // in testing (it dropped required templateId fields when told to redo the
+  // whole thing), so this trims the already schema-valid scenes directly
+  // instead of re-prompting: deterministic and can't break the JSON shape.
+  if (mode === "affiliate") {
+    script = trimScriptToWordBudget(script, built.maxWords);
+  }
   const outputDir = join(
     options.outputRoot ?? "output",
     `${toSlug(script.metadata.title || prompt)}-${timestampForPath()}`,

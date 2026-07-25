@@ -1453,7 +1453,7 @@
 
         <section class="page" id="products">
           <div class="page-head">
-            <div><h2>Kho sản phẩm</h2><p class="muted">Link Shopee, mã SKU và trạng thái từng sản phẩm affiliate — đồng bộ 2 chiều với Google Sheet.</p></div>
+            <div><h2>Kho sản phẩm</h2><p class="muted">Link sản phẩm (Shopee, TikTok Shop...), mã SKU và trạng thái từng sản phẩm affiliate — đồng bộ 2 chiều với Google Sheet.</p></div>
             <div class="top-actions"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
           </div>
           <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
@@ -1472,8 +1472,11 @@
               <div><label>Mã sản phẩm (item_id) *</label><input id="productItemId" placeholder="SP0001" /></div>
               <div><label>Tên sản phẩm *</label><input id="productName" placeholder="Serum dưỡng trắng da..." /></div>
               <div><label>Tên shop</label><input id="productShopName" /></div>
-              <div><label>Link gốc Shopee</label><input id="productOriginalUrl" placeholder="https://shopee.vn/..." /></div>
-              <div><label>Link Affiliate</label><input id="productAffiliateUrl" placeholder="https://s.shopee.vn/..." /></div>
+              <div><label>Link gốc sản phẩm (Shopee)</label><input id="productOriginalUrl" placeholder="https://shopee.vn/..." /></div>
+              <div><label>Link Affiliate (Shopee)</label><input id="productAffiliateUrl" placeholder="https://s.shopee.vn/..." /></div>
+              <p class="tiny" style="margin:-6px 0 0;">2 link trên chỉ cần nếu sản phẩm này đăng qua website (Shopee). Không bắt buộc nếu chỉ đăng TikTok Shop.</p>
+              <div><label>Mã sản phẩm TikTok Shop Catalog</label><input id="productTiktokProductId" placeholder="Mã/ID sản phẩm trong TikTok Shop Seller Center (nếu có)" /></div>
+              <p class="tiny" style="margin:-6px 0 0;">Dùng để gắn sản phẩm trực tiếp trên TikTok khi đăng video (product tagging) — không cần qua website.</p>
               <div><label>Biến thể</label><input id="productVariation" placeholder="50ml/màu đen" /></div>
               <div><label>Giá tham khảo</label><input id="productPriceReference" placeholder="199.000 đ" /></div>
               <div><label>Điểm nổi bật (đưa AI viết kịch bản)</label><textarea id="productKeyPoints" placeholder="3-5 ý chính, mỗi ý 1 câu ngắn"></textarea></div>
@@ -2053,6 +2056,7 @@
         $("#productCategory").value = product?.category || "";
         $("#productStatus").value = product?.status || "Chưa tạo";
         $("#productTiktokPostUrl").value = product?.tiktok_post_url || "";
+        $("#productTiktokProductId").value = product?.tiktok_product_id || "";
         $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
         $("#factSheetApprovedCheckbox").checked = Boolean(product?.fact_sheet_approved);
         renderFactSheetDisplay(state.editingProductFactSheet);
@@ -3752,6 +3756,11 @@
           let factSheet = null;
           if (product?.fact_sheet_json) { try { factSheet = JSON.parse(product.fact_sheet_json); } catch { /* ignore */ } }
           const hasUnresolvedClaims = factSheet && !product.fact_sheet_approved && factSheet.uncertainClaims?.length;
+          const postingHint = job.project_platform === "tiktok_shop"
+            ? `📌 Đăng TikTok Shop: khi đăng, dùng tính năng <strong>gắn sản phẩm (Product Tagging)</strong> của TikTok Shop — không cần link website.${product?.tiktok_product_id ? ` Mã Catalog: <strong>${product.tiktok_product_id}</strong>.` : ` <span style="color:#facc15;">Chưa nhập mã TikTok Shop Catalog — vào Kho sản phẩm để thêm.</span>`}`
+            : job.project_platform === "shopee_aff"
+              ? `📌 Đăng Shopee: đảm bảo sản phẩm đã lên website (hukiai258.com) với link Shopee đúng trước khi đăng, dùng link đó trong mô tả/bio.`
+              : "";
           return `
           <div class="panel">
             <video src="${fileUrl(job.video_path)}" controls preload="none" style="width:100%;border-radius:10px;background:#000;max-height:360px;"></video>
@@ -3763,6 +3772,7 @@
               <p class="tiny">${formatDateTime(job.finished_at || job.updated_at)}</p>
               ${isAffiliate ? `
                 ${REVIEW_STATUS_PILL[job.project_review_status] || REVIEW_STATUS_PILL.pending}
+                ${postingHint ? `<p class="tiny">${postingHint}</p>` : ""}
                 ${hasUnresolvedClaims ? `<p class="tiny" style="color:#facc15;">⚠️ Sản phẩm còn số liệu chưa duyệt trong Fact Sheet — kiểm tra ở Kho sản phẩm trước khi đăng.</p>` : ""}
                 <button class="btn toggle-script-btn" type="button" data-project-id="${job.project_id}">Xem kịch bản</button>
                 <div class="script-preview" data-project-id="${job.project_id}" style="display:none;font-size:12px;max-height:160px;overflow:auto;background:rgba(0,0,0,.2);border-radius:8px;padding:8px;"></div>
@@ -4694,6 +4704,7 @@
           category: $("#productCategory").value.trim(),
           status: $("#productStatus").value,
           tiktokPostUrl: $("#productTiktokPostUrl").value.trim(),
+          tiktokProductId: $("#productTiktokProductId").value.trim(),
         };
         try {
           if (state.editingProductId) {

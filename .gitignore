@@ -26,6 +26,9 @@ api-smoke-*.*
 # Big SFX library (downloaded by `npm run sfx:download` — too large to commit)
 SFX/
 
+# Stock media downloaded on demand during render (Pexels) — runtime cache, not source.
+assets/pexels-cache/
+
 # Desktop installer build artifacts — portable Node runtime, staged
 # node_modules copy, and the compiled .exe. Rebuilt locally, not versioned.
 /desktop/node/
