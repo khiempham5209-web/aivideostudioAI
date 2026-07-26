@@ -9,7 +9,7 @@ import dotenv from "dotenv";
 import { generateScriptFromPrompt, generateProductFactSheet, generateProductConcepts, type ProductFactSheet } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
-import { findVoiceOption, getEffectiveVoiceOptions } from "./tts/voice-catalog.js";
+import { findVoiceOption, getEffectiveVoiceOptions, VOICE_OPTIONS } from "./tts/voice-catalog.js";
 import { createTtsClient } from "./tts/tts-client.js";
 import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
@@ -17,7 +17,7 @@ import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
 import { fetchMedia } from "./assets/image-fetcher.js";
 import { fetchShopeeGallery } from "./assets/shopee-gallery.js";
-import { deleteR2Object, downloadR2ToFile, isR2Configured, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
+import { deleteR2Object, downloadR2ToFile, isR2Configured, r2Uri, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import { fetchProductsFromSheet, isProductSheetConfigured, logProductClick, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
 import {
   createProject,
@@ -2192,6 +2192,27 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const user = requireUser(req, res);
       if (!user) return;
       sendJson(res, 200, { templates: TEMPLATE_PRESETS });
+      return;
+    }
+
+    // Piper voice model files (.onnx + .onnx.json) — shared, non-user-owned
+    // assets bundled once in R2 so a fresh install can download them lazily
+    // instead of bloating the installer with ~2GB of model weights. No
+    // login required: this runs during first-run setup, before any session
+    // exists, and these are public voice models, not anyone's private data.
+    // The filename is checked against the real catalog so this can't be
+    // used to read arbitrary R2 keys.
+    if (req.method === "GET" && url.pathname === "/api/voices/piper-asset") {
+      const file = url.searchParams.get("file") ?? "";
+      const knownNames = new Set(VOICE_OPTIONS.filter((v) => v.provider === "piper").map((v) => v.name));
+      const base = file.replace(/\.onnx(\.json)?$/, "");
+      if (!file || !knownNames.has(base) || !/^[\w.-]+$/.test(file)) {
+        sendJson(res, 400, { error: "Unknown voice asset" });
+        return;
+      }
+      const signed = await signedR2Url(r2Uri(`piper-voices/${file}`), 900);
+      res.writeHead(302, { Location: signed, "Cache-Control": "private, max-age=0, no-store" });
+      res.end();
       return;
     }
 

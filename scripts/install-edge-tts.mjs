@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
@@ -18,6 +19,20 @@ const pythonBin =
 // is lower than Edge TTS's neural voices, but they're 3 more real, distinct
 // local voice options alongside Edge's 2 — see voice-catalog.ts.
 const PIPER_VOICES = ["vi_VN-25hours_single-low", "vi_VN-vais1000-medium", "vi_VN-vivos-x_low"];
+
+// A second, larger voice pack (custom-trained models, not on Piper's own
+// public voice index) — hosted in our own R2 bucket instead, since
+// `piper.download_voices` only knows about Piper's official catalog.
+// "trumpviet" is deliberately excluded: its .onnx.json config is missing
+// from the source pack, so Piper can't load it.
+const CUSTOM_PIPER_VOICES = [
+  "adam1", "banmai", "calmwoman3688", "chieuthanh", "deepman3909", "duyoryx3175",
+  "indo_goreng", "john", "lacphi", "maiphuong", "manhdung", "mattheo", "mattheo1",
+  "minhkhang", "minhquang", "minhthu", "mytam2", "mytam2794", "ngochuyen",
+  "ngochuyennew", "ngocngan3701", "phuongtrang", "taian2", "taian4", "thanhphuong2",
+  "thientam", "tranthanh3870", "vietthao3886", "yannew",
+];
+const CUSTOM_PIPER_VOICES_BACKEND_URL = "https://aivideostudioaibackend.onrender.com";
 
 function quoteIfNeeded(value) {
   return typeof value === "string" && value.includes(" ") && !value.startsWith('"') ? `"${value}"` : value;
@@ -93,6 +108,32 @@ function installPiperVoices() {
   }
 }
 
+async function downloadCustomPiperVoices() {
+  // Same server-only skip as installPiperVoices() — desktop-only feature.
+  if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
+    console.log("Skipping custom Piper voice pack (server/production environment — desktop-only feature).");
+    return;
+  }
+  for (const voice of CUSTOM_PIPER_VOICES) {
+    const modelPath = join(piperVoicesDir, `${voice}.onnx`);
+    const configPath = join(piperVoicesDir, `${voice}.onnx.json`);
+    if (existsSync(modelPath) && existsSync(configPath)) {
+      console.log(`Custom Piper voice already downloaded: ${voice}`);
+      continue;
+    }
+    console.log(`Downloading custom Piper voice: ${voice}`);
+    try {
+      for (const [file, dest] of [[`${voice}.onnx`, modelPath], [`${voice}.onnx.json`, configPath]]) {
+        const resp = await fetch(`${CUSTOM_PIPER_VOICES_BACKEND_URL}/api/voices/piper-asset?file=${encodeURIComponent(file)}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        await writeFile(dest, Buffer.from(await resp.arrayBuffer()));
+      }
+    } catch (error) {
+      console.error(`Failed to download custom Piper voice "${voice}" — it will be unavailable. (${error instanceof Error ? error.message : error})`);
+    }
+  }
+}
+
 function installSupertonic() {
   // Same reasoning as installPiperVoices() — desktop-only, skip on the server.
   if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
@@ -124,6 +165,7 @@ if (existsSync(edgeTtsBin) && existsSync(pythonBin)) {
     process.exit(1);
   }
   installPiperVoices();
+  await downloadCustomPiperVoices();
   installSupertonic();
   process.exit(0);
 }
@@ -153,4 +195,5 @@ if (!existsSync(edgeTtsBin)) {
 
 console.log(`edge-tts installed: ${edgeTtsBin}`);
 installPiperVoices();
+await downloadCustomPiperVoices();
 installSupertonic();
