@@ -18,7 +18,16 @@ import { getDurationSec } from "./assets/audio-tools.js";
 import { fetchMedia } from "./assets/image-fetcher.js";
 import { fetchShopeeGallery } from "./assets/shopee-gallery.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, r2Uri, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
-import { fetchProductsFromSheet, isProductSheetConfigured, logProductClick, pushProductUpdatesToSheet } from "./cloud/product-sheet-sync.js";
+import {
+  fetchApprovedContentQueue,
+  fetchPendingContentQueue,
+  fetchProductsFromSheet,
+  isProductSheetConfigured,
+  logProductClick,
+  markContentQueueDone,
+  pushProductUpdatesToSheet,
+  writeContentQueueResult,
+} from "./cloud/product-sheet-sync.js";
 import {
   createProject,
   createSession,
@@ -1463,6 +1472,104 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
   });
 }
 
+/** Parses the free-text "Độ dài" cell from the KichBanYTB queue into a
+ *  target duration + mode. Blank or anything mentioning "tự động"/"auto" ->
+ *  Auto mode (see prompt-to-script.ts); otherwise reads a number of phút or
+ *  giây, defaulting to 120s content-mode pacing if the text doesn't parse. */
+function parseQueueDuration(label?: string): { sec: number; mode: "fixed" | "auto" } {
+  const trimmed = (label || "").trim().toLowerCase();
+  if (!trimmed || trimmed.includes("tự động") || trimmed.includes("auto")) return { sec: 1200, mode: "auto" };
+  const match = trimmed.match(/(\d+)\s*(phút|giây|s|p)?/);
+  if (!match) return { sec: 120, mode: "fixed" };
+  const n = Number(match[1]);
+  const unit = match[2] || "";
+  const sec = unit.startsWith("p") ? n * 60 : n;
+  return { sec: sec > 0 ? sec : 120, mode: "fixed" };
+}
+
+/** Pulls "Đề tài" rows from the KichBanYTB Sheet tab still marked "Chờ viết",
+ *  creates a real project + AI script for each, and writes the readable
+ *  script text back to the Sheet for the user to read/edit — this is
+ *  deliberately step 1 only (concept/content), matching the plan: voice
+ *  generation is a separate, explicit step gated on the user flipping
+ *  Trạng thái to "Đã duyệt" themselves (see handleProcessApprovedContentQueue). */
+async function handleSyncContentQueue(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!isProductSheetConfigured()) {
+    sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
+    return;
+  }
+  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+  const aiProvider = body.aiProvider === "openai" ? "openai" : "gemini";
+  const pending = await fetchPendingContentQueue();
+  const results: { row: number; deTai: string; ok: boolean; error?: string; projectId?: string }[] = [];
+  for (const item of pending) {
+    try {
+      const { sec, mode: durationMode } = parseQueueDuration(item.doDai);
+      const styleHint = item.phongCach?.trim();
+      const topic = styleHint ? `${item.deTai} (phong cách: ${styleHint})` : item.deTai;
+      const project = createProject({
+        ownerEmail: user.email,
+        topic,
+        voiceId: "edge-hoaimy-south-story",
+        voiceName: "vi-VN-HoaiMyNeural",
+        voiceSpeed: 1,
+        targetDurationSec: sec,
+        durationMode,
+        mode: "content",
+      });
+      if (item.ma?.trim()) updateProject(project.id, { title: item.ma.trim() });
+      const generated = await generateProjectScript(project, aiProvider);
+      replaceProjectScenes(project.id, generated.script.scenes);
+      updateProject(project.id, {
+        title: generated.script.metadata.title,
+        status: "draft",
+        error_message: generated.usedFallback ? `AI script fallback: ${generated.fallbackReason}` : null,
+      });
+      const readableScript = generated.script.scenes.map((s) => s.voiceText).join("\n\n");
+      await writeContentQueueResult(item.row, readableScript, project.id);
+      results.push({ row: item.row, deTai: item.deTai, ok: true, projectId: project.id });
+    } catch (error) {
+      results.push({ row: item.row, deTai: item.deTai, ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  sendJson(res, 200, { ok: true, processed: results.length, results });
+}
+
+/** Pulls rows marked "Đã duyệt" (user has read/edited the script in the
+ *  Sheet and approved it) and starts real voice generation for each
+ *  linked project — the step the plan calls "chỉ tiếp tục xử lý voice sau
+ *  khi duyệt". Marks the row "Đã xong" once the voice job is *queued*, not
+ *  necessarily finished — final render/export is still done in-app like any
+ *  other project, so the user can review voice/timeline before exporting. */
+async function handleProcessApprovedContentQueue(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!isProductSheetConfigured()) {
+    sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
+    return;
+  }
+  const approved = await fetchApprovedContentQueue();
+  const results: { row: number; projectId: string; ok: boolean; error?: string }[] = [];
+  for (const item of approved) {
+    try {
+      const project = getUserProject(user.email, item.projectId);
+      if (!project) throw new Error("Không tìm thấy dự án tương ứng trong app");
+      const runningJob = getLatestJobForProject(project.id);
+      if (!(runningJob && (runningJob.status === "queued" || runningJob.status === "running"))) {
+        const job = createRenderJob(project.id);
+        startAudioJob(project.id, job.id);
+      }
+      await markContentQueueDone(item.row);
+      results.push({ row: item.row, projectId: item.projectId, ok: true });
+    } catch (error) {
+      results.push({ row: item.row, projectId: item.projectId, ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  sendJson(res, 200, { ok: true, processed: results.length, results });
+}
+
 function productToJson(p: ReturnType<typeof getProduct>) {
   if (!p) return p;
   return { ...p };
@@ -2470,6 +2577,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "POST" && url.pathname === "/api/products/sync") {
       await handleSyncProducts(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/content-queue/sync") {
+      await handleSyncContentQueue(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/content-queue/process-approved") {
+      await handleProcessApprovedContentQueue(req, res);
       return;
     }
     const factSheetMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/fact-sheet$/);

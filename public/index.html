@@ -1445,6 +1445,17 @@
             <div class="top-actions"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
           </div>
           <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
+          <div class="panel" style="margin-bottom:16px;">
+            <div class="panel-head"><h3>Hàng đợi kịch bản AI Content (tab KichBanYTB)</h3></div>
+            <div class="panel-body field-stack">
+              <p class="tiny">Nhập Đề tài vào Sheet trước, bấm nút 1 để AI viết kịch bản đầy đủ cho các dòng "Chờ viết". Đọc/sửa kịch bản ngay trong Sheet, đổi Trạng thái thành "Đã duyệt" rồi bấm nút 2 để bắt đầu tạo voice.</p>
+              <div class="top-actions">
+                <button class="btn primary" id="syncContentQueueButton" type="button">📝 1. Viết kịch bản cho hàng đợi</button>
+                <button class="btn" id="processApprovedQueueButton" type="button">🎙️ 2. Tạo voice cho mục đã duyệt</button>
+              </div>
+              <div class="empty" id="contentQueueStatus" style="text-align:left;display:none;"></div>
+            </div>
+          </div>
           <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
             <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
           </div>
@@ -4798,6 +4809,54 @@
         } finally {
           button.disabled = false;
           button.textContent = "🔄 Đồng bộ Google Sheet";
+        }
+      });
+
+      $("#syncContentQueueButton")?.addEventListener("click", async () => {
+        const button = $("#syncContentQueueButton");
+        const status = $("#contentQueueStatus");
+        button.disabled = true;
+        button.textContent = "Đang viết kịch bản...";
+        try {
+          const data = await api("/api/content-queue/sync", { method: "POST" });
+          const okCount = (data.results || []).filter((r) => r.ok).length;
+          const failCount = (data.results || []).length - okCount;
+          if (status) {
+            status.style.display = "block";
+            status.textContent = data.processed
+              ? `Đã viết ${okCount} kịch bản mới${failCount ? `, ${failCount} dòng lỗi` : ""} — mở Sheet để đọc/sửa, đổi Trạng thái thành "Đã duyệt" khi ưng ý.`
+              : `Không có dòng nào đang "Chờ viết" trong Sheet.`;
+          }
+          toast(data.processed ? `Đã xử lý ${data.processed} đề tài trong hàng đợi.` : "Hàng đợi trống — không có đề tài mới.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "📝 1. Viết kịch bản cho hàng đợi";
+        }
+      });
+      $("#processApprovedQueueButton")?.addEventListener("click", async () => {
+        const button = $("#processApprovedQueueButton");
+        const status = $("#contentQueueStatus");
+        button.disabled = true;
+        button.textContent = "Đang tạo voice...";
+        try {
+          const data = await api("/api/content-queue/process-approved", { method: "POST" });
+          const okCount = (data.results || []).filter((r) => r.ok).length;
+          const failCount = (data.results || []).length - okCount;
+          if (status) {
+            status.style.display = "block";
+            status.textContent = data.processed
+              ? `Đã bắt đầu tạo voice cho ${okCount} dự án${failCount ? `, ${failCount} dòng lỗi` : ""} — vào từng dự án trong app để nghe thử và xuất video khi xong.`
+              : `Không có dòng nào đang "Đã duyệt" trong Sheet.`;
+          }
+          toast(data.processed ? `Đã xử lý ${data.processed} mục đã duyệt.` : "Chưa có mục nào được duyệt.");
+          await loadProjects();
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🎙️ 2. Tạo voice cho mục đã duyệt";
         }
       });
 

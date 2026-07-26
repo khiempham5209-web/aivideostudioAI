@@ -81,3 +81,59 @@ export async function pushProductUpdatesToSheet(updates: SheetPushUpdate[]): Pro
   if (!data.ok) throw new Error(data.error || "Sheet sync POST failed");
   return data.updated ?? 0;
 }
+
+// ---- "KichBanYTB" content-queue tab (AI Content backlog) — same Sheet,
+// same Apps Script deployment, different tab. See the .gs code handed to
+// the user separately for the actions this calls.
+
+export interface ContentQueueItem {
+  row: number;
+  ma?: string;
+  deTai: string;
+  doDai?: string;
+  phongCach?: string;
+}
+
+export interface ApprovedContentItem {
+  row: number;
+  projectId: string;
+}
+
+async function postAction<T>(action: string, extra: Record<string, unknown> = {}): Promise<T> {
+  const { url, key } = config();
+  if (!url || !key) throw new Error("Missing PRODUCT_SHEET_SYNC_URL or PRODUCT_SHEET_SECRET in .env.local");
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, action, ...extra }),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (!resp.ok) throw new Error(`Sheet sync POST failed: HTTP ${resp.status}`);
+  const data = (await resp.json()) as { ok: boolean; error?: string } & T;
+  if (!data.ok) throw new Error(data.error || "Sheet sync POST failed");
+  return data;
+}
+
+/** Rows in "KichBanYTB" with an Đề tài but no kịch bản written yet
+ *  (Trạng thái blank or "Chờ viết"). */
+export async function fetchPendingContentQueue(): Promise<ContentQueueItem[]> {
+  const data = await postAction<{ items?: ContentQueueItem[] }>("listContentQueue");
+  return data.items ?? [];
+}
+
+/** Writes the AI-generated script back to a row and flips its status to
+ *  "Đã viết - Chờ duyệt" — the user reads/edits it directly in the Sheet,
+ *  then flips Trạng thái to "Đã duyệt" themselves when it's ready for voice. */
+export async function writeContentQueueResult(row: number, kichBan: string, projectId: string): Promise<void> {
+  await postAction("writeContentResult", { row, kichBan, projectId });
+}
+
+/** Rows the user has marked "Đã duyệt" — ready to have voice generated. */
+export async function fetchApprovedContentQueue(): Promise<ApprovedContentItem[]> {
+  const data = await postAction<{ items?: ApprovedContentItem[] }>("listApprovedContent");
+  return data.items ?? [];
+}
+
+export async function markContentQueueDone(row: number, videoLink?: string): Promise<void> {
+  await postAction("markContentDone", { row, videoLink });
+}
