@@ -1345,7 +1345,10 @@
                 <div id="affiliateProductField" style="display:none;">
                   <label for="createProductSelect">Sản phẩm Affiliate</label>
                   <select id="createProductSelect"><option value="">— Chọn sản phẩm từ Kho sản phẩm —</option></select>
-                  <p class="tiny" style="margin-top:6px;">Chưa có sản phẩm? Mở "Kho sản phẩm" ở icon 👤 để thêm trước. Script sẽ tự rút gọn còn 15-45 giây, product-first, không bịa trải nghiệm cá nhân.</p>
+                  <p class="tiny" style="margin-top:6px;">Chưa có sản phẩm? Mở "Kho sản phẩm" ở icon 👤 để thêm trước. Script sẽ tự canh 35-120 giây, product-first, không bịa trải nghiệm cá nhân.</p>
+                  <label style="margin-top:8px;display:block;">Độ dài video</label>
+                  <div class="segmented" id="affiliateDurationPicker"><button type="button" data-sec="60">60 giây</button><button class="active" type="button" data-sec="90">90 giây</button><button type="button" data-sec="120">120 giây</button></div>
+                  <p class="tiny" style="margin-top:4px;">60s ≈ 8-12 cảnh · 90s ≈ 12-16 cảnh · 120s ≈ 16-20 cảnh.</p>
                   <label style="margin-top:8px;display:block;">Đăng ở đâu?</label>
                   <div class="segmented" id="platformPicker"><button class="active" type="button" data-platform="generic">Chung</button><button type="button" data-platform="tiktok_shop">TikTok Shop</button><button type="button" data-platform="shopee_aff">Shopee</button></div>
                   <p class="tiny" style="margin-top:4px;">CTA cuối video sẽ đổi theo nền tảng: TikTok Shop mời xem "sản phẩm gắn dưới video", Shopee mời "xem giá trên Shopee".</p>
@@ -1355,7 +1358,7 @@
                 <div><label for="projectName">Tên dự án</label><input id="projectName" placeholder="Ví dụ: Review phim Kung Fu Panda 3" /></div>
                 <div><label for="prompt">Đề tài</label><textarea id="prompt" placeholder="Ví dụ: tạo video review phim Kung Fu Panda 3 trong khoảng hai phút, giọng kể chuyện cuốn hút, có nhận xét điểm hay điểm yếu và kết luận có đáng xem không"></textarea></div>
                 <div><label for="language">Ngôn ngữ</label><select id="language"><option>Tiếng Việt</option><option>English</option><option>Tiếng Trung</option></select></div>
-                <div><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button" data-sec="30">30s</button><button type="button" data-sec="60">1 phút</button><button class="active" type="button" data-sec="120">2 phút</button><button type="button" data-sec="180">3 phút</button><button type="button" data-sec="300">5 phút</button><button type="button" data-sec="custom">Tùy chỉnh</button></div><input id="durationCustomSec" type="number" min="10" max="1800" step="5" placeholder="Nhập số giây, từ 10 đến 1800 (tối đa 30 phút)" style="display:none;margin-top:8px;" /></div>
+                <div id="contentDurationField"><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button" data-sec="30">30s</button><button type="button" data-sec="60">1 phút</button><button class="active" type="button" data-sec="120">2 phút</button><button type="button" data-sec="180">3 phút</button><button type="button" data-sec="300">5 phút</button><button type="button" data-sec="custom">Tùy chỉnh</button></div><input id="durationCustomSec" type="number" min="10" max="1800" step="5" placeholder="Nhập số giây, từ 10 đến 1800 (tối đa 30 phút)" style="display:none;margin-top:8px;" /></div>
                 <div><label>Tỷ lệ video</label><div class="segmented" id="ratioPicker"><button type="button">16:9</button><button class="active" type="button">9:16</button><button type="button">1:1</button></div></div>
                 <div><label for="style">Phong cách</label><select id="style"><option>Review phim hài hước</option><option>Tin tức nhanh</option><option>Bán hàng</option><option>Giải thích giáo dục</option><option>Drama cuốn hút</option></select></div>
                 <div><label>AI viết kịch bản</label><div class="segmented" id="aiProviderPicker"><button type="button" class="active" data-provider="gemini">Gemini</button><button type="button" data-provider="openai">ChatGPT</button></div></div>
@@ -2151,6 +2154,7 @@
       function setCreateMode(mode, productId) {
         $$("#modePicker button").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
         $("#affiliateProductField").style.display = mode === "affiliate" ? "block" : "none";
+        if ($("#contentDurationField")) $("#contentDurationField").style.display = mode === "affiliate" ? "none" : "block";
         $("#conceptWizardList").style.display = "none";
         $("#conceptWizardList").innerHTML = "";
         if (mode === "affiliate") {
@@ -2166,6 +2170,10 @@
       }
 
       function activeDurationSec() {
+        if (activeMode() === "affiliate") {
+          const activeAff = $("#affiliateDurationPicker .active");
+          return activeAff ? Number(activeAff.dataset.sec) || 90 : 90;
+        }
         const active = $("#durationPicker .active");
         if (!active) return 120;
         if (active.dataset.sec === "custom") {
@@ -2176,6 +2184,10 @@
       }
 
       function activeDuration() {
+        if (activeMode() === "affiliate") {
+          const activeAff = $("#affiliateDurationPicker .active");
+          return activeAff ? activeAff.textContent.trim() : "90 giây";
+        }
         const active = $("#durationPicker .active");
         if (active && active.dataset.sec === "custom") {
           const sec = activeDurationSec();

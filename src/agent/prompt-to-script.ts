@@ -185,27 +185,34 @@ function buildPrompt(
   // Affiliate product videos are short-form ads, not long-form content — cap
   // the effective duration regardless of what the project's duration dial
   // was set to (that dial is shared with AI Content mode, which allows up to
-  // 30 minutes, and defaults to 30s picked in the UI's create form). The
-  // plan's original spec was 15-45s; real-world testing against a real
-  // product showed that's too tight for an actual persuasive structure
-  // (hook, relatable problem, dramatized benefits, CTA) at ANY point in that
-  // range, not just at the low end — a 30s ad has a ~64-86 word budget,
-  // which forces either a bare fact list or a mechanical trim, both flat and
-  // unconvincing. Floor raised to 35s (~100+ words) so there's room to
-  // actually build the structure below; 60s ceiling still keeps it a
-  // short-form ad, not a documentary.
+  // 30 minutes). The plan's original spec was 15-45s; real-world testing
+  // against a real product showed that's too tight for an actual persuasive
+  // structure (hook, relatable problem, dramatized benefits, CTA). Range
+  // widened again to 35-120s per the follow-up spec (which explicitly wants
+  // 60/90/120s as the three real options) — 120s is still a short ad, not a
+  // documentary, and the wider ceiling is what makes the "8-20 scenes"
+  // target below reachable at all.
   const effectiveDurationSec = mode === "affiliate"
-    ? Math.min(60, Math.max(35, targetDurationSec))
+    ? Math.min(120, Math.max(35, targetDurationSec))
     : targetDurationSec;
   // Vietnamese TTS at normal speed reads roughly 2.4-2.6 words/sec.
   const targetWords = Math.round(effectiveDurationSec * 2.5);
   const minWords = Math.max(60, Math.round(targetWords * 0.85));
   const maxWords = Math.round(targetWords * 1.15);
-  // Sized to cover the full duration range the UI allows (up to 1800s/30min
-  // -> ~130 scenes at ~14s/scene) rather than an arbitrary lower ceiling.
-  const sceneCount = Math.min(150, Math.max(3, Math.round(effectiveDurationSec / 14)));
-  const minScenes = Math.max(3, sceneCount - 2);
-  const maxScenes = Math.min(155, sceneCount + 2);
+  // Affiliate scene density follows the spec's three anchor points exactly
+  // (60s->8-12, 90s->12-16, 120s->16-20 — each range is 4 scenes wide, and
+  // the floor scales at a constant 2/15 scenes-per-second, so this formula
+  // reproduces all three anchors exactly instead of the old flat
+  // duration/14 divisor, which gave a 60s affiliate ad only ~4 scenes.
+  // Content mode keeps the old ~14s/scene pacing — it wasn't the one this
+  // was reported broken for, and it already yields plenty of scenes across
+  // the up-to-30-minute range that mode allows.
+  const minScenes = mode === "affiliate"
+    ? Math.max(3, Math.round((effectiveDurationSec * 2) / 15))
+    : Math.max(3, Math.round(effectiveDurationSec / 14) - 2);
+  const maxScenes = mode === "affiliate"
+    ? Math.min(155, minScenes + 4)
+    : Math.min(155, Math.max(3, Math.round(effectiveDurationSec / 14)) + 2);
   // Plan section 7's rule engine: CTA wording is platform-specific, everything
   // else about the ad is the same regardless of where it's posted.
   const platformCta = platform === "tiktok_shop"
@@ -226,7 +233,9 @@ function buildPrompt(
 - HARD RULE: never state a price, a discount amount, or any number of đồng/VNĐ in ANY scene's voiceText, not even in the outro — prices change and a wrong spoken price is a real compliance risk. The reference price in "Thông tin sản phẩm THẬT" is context for you only, never to be spoken. Invite the viewer to check the current price via the link/description instead (e.g. "xem giá hiện tại ở phần mô tả").
 - Keep pacing tight and punchy — this is a short ad, not a documentary — but "tight" means no wasted words, not "just list the facts and stop." Every sentence should either build the scenario, land a benefit, or move toward the CTA.` : `
 - This is a review/commentary video. Do not recreate copyrighted dialogue, do not provide a scene-by-scene substitute for watching the movie, and keep the tone transformative: summary, opinion, themes, strengths, weaknesses, verdict.
-- If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.`;
+- If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.${effectiveDurationSec > 150 ? `
+- This is a longer video with ${minScenes}-${maxScenes} scenes to fill, covering a topic that likely has a natural sequence (a process, a timeline, a build, a list of distinct sub-topics). Before writing scenes, mentally split the topic into clear sequential CHAPTERS that together cover it start to finish — e.g. for "xây nhà cấp 4 ở nông thôn" that's roughly: chọn/chuẩn bị đất -> san nền -> làm móng -> xây tường -> làm mái -> hoàn thiện nội thất -> thành quả. Then distribute the scenes evenly across those chapters (a few scenes per chapter, not all scenes on one chapter while others get skipped). Do NOT pad a single chapter with repetitive scenes just to hit the scene-count floor — if you're repeating yourself, you've missed a real chapter you haven't covered yet.
+- Make the chapter progression audible in the script itself: each chapter's first scene should clearly signal the topic has moved to a new phase (e.g. "Sau khi có nền xong, bước tiếp theo là...", "Tiếp đến là phần mái nhà..."), so a listener can follow the structure without seeing any on-screen chapter labels.` : ""}`;
   const promptText = `
 You create Vietnamese short ${mode === "affiliate" ? "product ad" : "review"} videos as JSON for an existing renderer.
 
