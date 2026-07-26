@@ -12,7 +12,13 @@ import { toSlug } from "../utils/slug.js";
 
 dotenv.config({ path: ".env.local" });
 
-const CHANNEL_NAME = process.env.CHANNEL_NAME ?? "Khiempham AI";
+// "||" on purpose, not "??": CHANNEL_NAME can be present-but-empty in
+// .env.local (e.g. after the desktop auto-sync writes `CHANNEL_NAME=`), and
+// an empty string must fall through to the default too, not just a truly
+// missing key — an empty channel name fails TemplateScriptSchema's
+// metadata.channel (z.string().min(1)) and silently discards the real AI
+// script for the generic fallback script instead.
+const CHANNEL_NAME = process.env.CHANNEL_NAME || "Khiempham AI";
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 // The scene-count cap lives in one place now: TemplateScriptSchema itself
