@@ -1358,7 +1358,7 @@
                 <div><label for="projectName">Tên dự án</label><input id="projectName" placeholder="Ví dụ: Review phim Kung Fu Panda 3" /></div>
                 <div><label for="prompt">Đề tài</label><textarea id="prompt" placeholder="Ví dụ: tạo video review phim Kung Fu Panda 3 trong khoảng hai phút, giọng kể chuyện cuốn hút, có nhận xét điểm hay điểm yếu và kết luận có đáng xem không"></textarea></div>
                 <div><label for="language">Ngôn ngữ</label><select id="language"><option>Tiếng Việt</option><option>English</option><option>Tiếng Trung</option></select></div>
-                <div id="contentDurationField"><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button" data-sec="30">30s</button><button type="button" data-sec="60">1 phút</button><button class="active" type="button" data-sec="120">2 phút</button><button type="button" data-sec="180">3 phút</button><button type="button" data-sec="300">5 phút</button><button type="button" data-sec="custom">Tùy chỉnh</button></div><input id="durationCustomSec" type="number" min="10" max="1800" step="5" placeholder="Nhập số giây, từ 10 đến 1800 (tối đa 30 phút)" style="display:none;margin-top:8px;" /></div>
+                <div id="contentDurationField"><label>Độ dài video</label><div class="segmented" id="durationPicker"><button type="button" data-sec="auto">Tự động</button><button type="button" data-sec="30">30s</button><button type="button" data-sec="60">1 phút</button><button class="active" type="button" data-sec="120">2 phút</button><button type="button" data-sec="180">3 phút</button><button type="button" data-sec="300">5 phút</button><button type="button" data-sec="600">10 phút</button><button type="button" data-sec="900">15 phút</button><button type="button" data-sec="1200">20 phút</button><button type="button" data-sec="1800">30 phút</button><button type="button" data-sec="custom">Tùy chỉnh</button></div><input id="durationCustomSec" type="number" min="10" max="1800" step="5" placeholder="Nhập số giây, từ 10 đến 1800 (tối đa 30 phút)" style="display:none;margin-top:8px;" /><p class="tiny" id="durationAutoHint" style="display:none;margin-top:4px;">AI sẽ tự quyết định độ dài phù hợp với nội dung — chủ đề đơn giản ra video ngắn, chủ đề nhiều ý sẽ ra video dài, không gò ép theo số phút cố định.</p></div>
                 <div><label>Tỷ lệ video</label><div class="segmented" id="ratioPicker"><button type="button">16:9</button><button class="active" type="button">9:16</button><button type="button">1:1</button></div></div>
                 <div><label for="style">Phong cách</label><select id="style"><option>Review phim hài hước</option><option>Tin tức nhanh</option><option>Bán hàng</option><option>Giải thích giáo dục</option><option>Drama cuốn hút</option></select></div>
                 <div><label>AI viết kịch bản</label><div class="segmented" id="aiProviderPicker"><button type="button" class="active" data-provider="gemini">Gemini</button><button type="button" data-provider="openai">ChatGPT</button></div></div>
@@ -2169,6 +2169,12 @@
         return active ? active.dataset.provider : "gemini";
       }
 
+      function activeDurationMode() {
+        if (activeMode() === "affiliate") return "fixed";
+        const active = $("#durationPicker .active");
+        return active && active.dataset.sec === "auto" ? "auto" : "fixed";
+      }
+
       function activeDurationSec() {
         if (activeMode() === "affiliate") {
           const activeAff = $("#affiliateDurationPicker .active");
@@ -2176,6 +2182,10 @@
         }
         const active = $("#durationPicker .active");
         if (!active) return 120;
+        // "Auto" doesn't have a real target — send a generous number anyway so
+        // the AI-call token budget (proportional to this) has enough headroom
+        // in case the topic genuinely needs a long script.
+        if (active.dataset.sec === "auto") return 1200;
         if (active.dataset.sec === "custom") {
           const custom = Number($("#durationCustomSec")?.value || 0);
           return custom > 0 ? custom : 120;
@@ -2189,6 +2199,7 @@
           return activeAff ? activeAff.textContent.trim() : "90 giây";
         }
         const active = $("#durationPicker .active");
+        if (active && active.dataset.sec === "auto") return "Tự động (theo nội dung)";
         if (active && active.dataset.sec === "custom") {
           const sec = activeDurationSec();
           return sec >= 60 ? `${(sec / 60).toFixed(sec % 60 === 0 ? 0 : 1)} phút` : `${sec}s`;
@@ -4114,6 +4125,7 @@
         if (group.id === "durationPicker" && $("#durationCustomSec")) {
           $("#durationCustomSec").style.display = e.target.dataset.sec === "custom" ? "block" : "none";
           if (e.target.dataset.sec === "custom") $("#durationCustomSec").focus();
+          if ($("#durationAutoHint")) $("#durationAutoHint").style.display = e.target.dataset.sec === "auto" ? "block" : "none";
         }
         if (group.id === "modePicker") setCreateMode(e.target.dataset.mode);
         if (group.id === "outputsFilter") renderOutputs();
@@ -4361,8 +4373,16 @@
         event.preventDefault();
         $("#createProjectButton").disabled = true;
         try {
-          toast("Đang tạo project...");
           const mode = activeMode();
+          // ChatGPT (gpt-4o-mini) hard-caps completions at 16k tokens — a long
+          // Content video (or "Tự động") needs far more than that, so the
+          // script silently truncates well before reaching the requested
+          // length/scene count. Gemini's cap is much higher and handles this
+          // fine. Advisory only — still let them proceed if they insist.
+          if (mode === "content" && activeAiProvider() === "openai" && (activeDurationMode() === "auto" || activeDurationSec() > 420)) {
+            toast("Lưu ý: ChatGPT dễ bị cắt cụt kịch bản với video dài — nên chọn Gemini cho video trên ~7 phút hoặc Tự động.");
+          }
+          toast("Đang tạo project...");
           await createProjectAndGenerateScript({
             projectName: $("#projectName").value,
             prompt: $("#prompt").value,
@@ -4370,6 +4390,7 @@
             voiceSpeed: Number($("#speed").value),
             ratio: activeRatio(),
             durationSec: activeDurationSec(),
+            durationMode: activeDurationMode(),
             mode,
             productId: mode === "affiliate" ? ($("#createProductSelect")?.value || undefined) : undefined,
             platform: mode === "affiliate" ? activePlatform() : undefined,

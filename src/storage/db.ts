@@ -30,6 +30,12 @@ export interface ProjectRecord {
   voice_speed: number;
   aspect_ratio: string;
   target_duration_sec: number;
+  /** "auto" means target_duration_sec is just a generous token-budget
+   *  headroom number, not a real target — the script prompt tells the AI to
+   *  pick a length that actually fits the topic's natural depth instead of
+   *  padding/trimming to hit a fixed number. Only meaningful for "content"
+   *  mode; affiliate videos always use a fixed 60/90/120s target. */
+  duration_mode: "fixed" | "auto";
   output_path: string | null;
   error_message: string | null;
   /** Product (from Kho sản phẩm) this project was generated from, if any. */
@@ -257,6 +263,7 @@ db.exec(`
     voice_speed REAL NOT NULL,
     aspect_ratio TEXT NOT NULL DEFAULT '9:16',
     target_duration_sec INTEGER NOT NULL DEFAULT 120,
+    duration_mode TEXT NOT NULL DEFAULT 'fixed',
     output_path TEXT,
     error_message TEXT,
     product_id TEXT,
@@ -466,6 +473,7 @@ for (const statement of [
   "ALTER TABLE projects ADD COLUMN mode TEXT NOT NULL DEFAULT 'content'",
   "ALTER TABLE projects ADD COLUMN platform TEXT NOT NULL DEFAULT 'generic'",
   "ALTER TABLE projects ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'",
+  "ALTER TABLE projects ADD COLUMN duration_mode TEXT NOT NULL DEFAULT 'fixed'",
   "ALTER TABLE products ADD COLUMN tiktok_product_id TEXT",
   "ALTER TABLE products ADD COLUMN media_urls TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_json TEXT",
@@ -573,6 +581,7 @@ async function initPostgresMirror() {
         voice_speed DOUBLE PRECISION NOT NULL,
         aspect_ratio TEXT NOT NULL DEFAULT '9:16',
         target_duration_sec INTEGER NOT NULL DEFAULT 120,
+        duration_mode TEXT NOT NULL DEFAULT 'fixed',
         output_path TEXT,
         error_message TEXT,
         product_id TEXT,
@@ -794,6 +803,7 @@ async function initPostgresMirror() {
     { label: "projects.mode", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'content'` },
     { label: "projects.platform", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'generic'` },
     { label: "projects.review_status", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'` },
+    { label: "projects.duration_mode", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS duration_mode TEXT NOT NULL DEFAULT 'fixed'` },
     { label: "products.tiktok_product_id", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS tiktok_product_id TEXT` },
     { label: "products.media_urls", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS media_urls TEXT` },
     { label: "products.fact_sheet_json", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_json TEXT` },
@@ -976,6 +986,7 @@ export function createProject(data: {
   voiceSpeed: number;
   aspectRatio?: string;
   targetDurationSec?: number;
+  durationMode?: "fixed" | "auto";
   productId?: string | null;
   mode?: "affiliate" | "content";
   platform?: "tiktok_shop" | "shopee_aff" | "generic";
@@ -992,6 +1003,7 @@ export function createProject(data: {
     voice_speed: data.voiceSpeed,
     aspect_ratio: data.aspectRatio && ["16:9", "9:16", "1:1"].includes(data.aspectRatio) ? data.aspectRatio : "9:16",
     target_duration_sec: data.targetDurationSec && data.targetDurationSec > 0 ? Math.round(data.targetDurationSec) : 120,
+    duration_mode: data.durationMode === "auto" ? "auto" : "fixed",
     output_path: null,
     error_message: null,
     product_id: data.productId ?? null,
@@ -1005,8 +1017,8 @@ export function createProject(data: {
   };
   db.prepare(`
     INSERT INTO projects
-    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, output_path, error_message, product_id, mode, platform, review_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, duration_mode, output_path, error_message, product_id, mode, platform, review_status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -1018,6 +1030,7 @@ export function createProject(data: {
     project.voice_speed,
     project.aspect_ratio,
     project.target_duration_sec,
+    project.duration_mode,
     project.output_path,
     project.error_message,
     project.product_id,

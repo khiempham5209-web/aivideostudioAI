@@ -39,6 +39,11 @@ export interface GenerateScriptOptions {
   voiceSpeed?: number;
   /** Target spoken duration in seconds — shapes requested word count and scene count. */
   targetDurationSec?: number;
+  /** "auto" (content mode only): targetDurationSec becomes a loose token-budget
+   *  headroom number instead of a real target — the AI is told to pick a
+   *  length that actually fits the topic instead of padding/trimming to a
+   *  fixed number. */
+  durationMode?: "fixed" | "auto";
   /** Which AI writes the script. Defaults to Gemini. */
   aiProvider?: "gemini" | "openai";
   /** Real product facts (name/price/shop/key points) to ground the script in —
@@ -187,7 +192,11 @@ function buildPrompt(
   productFacts?: string,
   mode: "affiliate" | "content" = "content",
   platform: "tiktok_shop" | "shopee_aff" | "generic" = "generic",
+  durationMode: "fixed" | "auto" = "fixed",
 ): { text: string; minWords: number; maxWords: number } {
+  // "Auto" only makes sense for content mode — affiliate always targets a
+  // real, fixed ad length (60/90/120s), never "however long the topic needs".
+  const isAutoDuration = durationMode === "auto" && mode !== "affiliate";
   // Affiliate product videos are short-form ads, not long-form content — cap
   // the effective duration regardless of what the project's duration dial
   // was set to (that dial is shared with AI Content mode, which allows up to
@@ -203,7 +212,10 @@ function buildPrompt(
     : targetDurationSec;
   // Vietnamese TTS at normal speed reads roughly 2.4-2.6 words/sec.
   const targetWords = Math.round(effectiveDurationSec * 2.5);
-  const minWords = Math.max(60, Math.round(targetWords * 0.85));
+  // Auto mode: targetDurationSec is just a ceiling for token-budget headroom,
+  // not a real target — drop the 0.85 floor so a naturally short topic can
+  // stay short instead of being padded out to hit a word count nobody asked for.
+  const minWords = isAutoDuration ? 60 : Math.max(60, Math.round(targetWords * 0.85));
   const maxWords = Math.round(targetWords * 1.15);
   // Affiliate scene density follows the spec's three anchor points exactly
   // (60s->8-12, 90s->12-16, 120s->16-20 — each range is 4 scenes wide, and
@@ -215,7 +227,9 @@ function buildPrompt(
   // the up-to-30-minute range that mode allows.
   const minScenes = mode === "affiliate"
     ? Math.max(3, Math.round((effectiveDurationSec * 2) / 15))
-    : Math.max(3, Math.round(effectiveDurationSec / 14) - 2);
+    : isAutoDuration
+      ? 3
+      : Math.max(3, Math.round(effectiveDurationSec / 14) - 2);
   const maxScenes = mode === "affiliate"
     ? Math.min(155, minScenes + 4)
     : Math.min(155, Math.max(3, Math.round(effectiveDurationSec / 14)) + 2);
@@ -239,7 +253,8 @@ function buildPrompt(
 - HARD RULE: never state a price, a discount amount, or any number of đồng/VNĐ in ANY scene's voiceText, not even in the outro — prices change and a wrong spoken price is a real compliance risk. The reference price in "Thông tin sản phẩm THẬT" is context for you only, never to be spoken. Invite the viewer to check the current price via the link/description instead (e.g. "xem giá hiện tại ở phần mô tả").
 - Keep pacing tight and punchy — this is a short ad, not a documentary — but "tight" means no wasted words, not "just list the facts and stop." Every sentence should either build the scenario, land a benefit, or move toward the CTA.` : `
 - This is a review/commentary video. Do not recreate copyrighted dialogue, do not provide a scene-by-scene substitute for watching the movie, and keep the tone transformative: summary, opinion, themes, strengths, weaknesses, verdict.
-- If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.${effectiveDurationSec > 150 ? `
+- If the user asks to review a film, cover: hook, premise, main conflict, character arc, highlights, weak points, message, verdict.${isAutoDuration ? `
+- DURATION IS AUTOMATIC: the ${minWords}-${maxWords} word / ${minScenes}-${maxScenes} scene numbers below are a ceiling only, not a target to hit. Decide the actual length yourself based on how much the topic genuinely needs to say — a quick tip or simple fact deserves a short, tight script; a process, story, or multi-part topic deserves a long one. Do NOT pad with repetition or filler to reach a word/scene count, and do NOT cut real content short just because you reached a "typical" length. Length should be a consequence of the content, not the other way around.` : ""}${effectiveDurationSec > 150 ? `
 - This is a longer video with ${minScenes}-${maxScenes} scenes to fill, covering a topic that likely has a natural sequence (a process, a timeline, a build, a list of distinct sub-topics). Before writing scenes, mentally split the topic into clear sequential CHAPTERS that together cover it start to finish — e.g. for "xây nhà cấp 4 ở nông thôn" that's roughly: chọn/chuẩn bị đất -> san nền -> làm móng -> xây tường -> làm mái -> hoàn thiện nội thất -> thành quả. Then distribute the scenes evenly across those chapters (a few scenes per chapter, not all scenes on one chapter while others get skipped). Do NOT pad a single chapter with repetitive scenes just to hit the scene-count floor — if you're repeating yourself, you've missed a real chapter you haven't covered yet.
 - Make the chapter progression audible in the script itself: each chapter's first scene should clearly signal the topic has moved to a new phase (e.g. "Sau khi có nền xong, bước tiếp theo là...", "Tiếp đến là phần mái nhà..."), so a listener can follow the structure without seeing any on-screen chapter labels.` : ""}`;
   const promptText = `
@@ -268,11 +283,15 @@ Return ONLY valid JSON matching this exact structure:
 }
 
 Scene rules:
-- Create ${minScenes} to ${maxScenes} scenes total: first scene type "hook", last scene type "outro", the rest type "body".
-- HARD REQUIREMENT: the sum of all scene.voiceText combined must be ${minWords} to ${maxWords} Vietnamese words total — this is a hard ceiling AND floor, not a suggestion. Count every word across every scene as you write, including the hook and outro. A script shorter than ${minWords} words OR longer than ${maxWords} words is a FAILED response — going over the ceiling is just as much a failure as falling short of the floor. Before returning your JSON, count the total words one more time and cut sentences if you are over ${maxWords}.
-${mode === "affiliate"
-    ? `- Do NOT pad this out. This is a short ad — if you run out of real content before ${minWords} words, that means fewer, punchier sentences per point, not more scenes or invented filler. Never exceed ${maxWords} words to "cover everything" — cut a point instead.`
-    : `- If the topic alone does not naturally have enough content, you MUST expand it yourself: add more concrete steps/details, examples, comparisons, tips, background context, or elaboration on each point, so the total reaches the required word count without exceeding ${maxWords}. Do not simply repeat the same idea in different words — add genuinely new, useful sub-points.`}
+- Create ${minScenes} to ${maxScenes} scenes total${isAutoDuration ? " AT MOST" : ""}: first scene type "hook", last scene type "outro", the rest type "body".${isAutoDuration ? ` This is a ceiling, not a target — use as few of them as the topic genuinely needs (a trivial topic can be just hook + 1 body + outro = 3 scenes).` : ""}
+${isAutoDuration
+    ? `- The ${minWords}-${maxWords} word count is a CEILING ONLY (never exceed ${maxWords}) — there is NO floor. Stop writing as soon as you've genuinely said everything worth saying about the topic, even if that's well under ${minWords} words. A 3-sentence answer to a simple question is a correct, complete response here, not an unfinished one.`
+    : `- HARD REQUIREMENT: the sum of all scene.voiceText combined must be ${minWords} to ${maxWords} Vietnamese words total — this is a hard ceiling AND floor, not a suggestion. Count every word across every scene as you write, including the hook and outro. A script shorter than ${minWords} words OR longer than ${maxWords} words is a FAILED response — going over the ceiling is just as much a failure as falling short of the floor. Before returning your JSON, count the total words one more time and cut sentences if you are over ${maxWords}.`}
+${isAutoDuration
+    ? `- Do NOT pad, repeat yourself, or invent tangential sub-points just to reach a longer runtime. Never exceed ${maxWords} words either — if the topic is huge, cover the most important parts well rather than everything shallowly.`
+    : mode === "affiliate"
+      ? `- Do NOT pad this out. This is a short ad — if you run out of real content before ${minWords} words, that means fewer, punchier sentences per point, not more scenes or invented filler. Never exceed ${maxWords} words to "cover everything" — cut a point instead.`
+      : `- If the topic alone does not naturally have enough content, you MUST expand it yourself: add more concrete steps/details, examples, comparisons, tips, background context, or elaboration on each point, so the total reaches the required word count without exceeding ${maxWords}. Do not simply repeat the same idea in different words — add genuinely new, useful sub-points.`}
 - Each scene.voiceText must be a plain Vietnamese string, 2 to 4 sentences (longer per-scene text is expected for longer videos), no emoji, no URL, no markdown.${modeRules}
 - Write numbers and symbols in voiceText as Vietnamese words when possible.
 
@@ -401,8 +420,9 @@ export async function generateScriptFromPrompt(
     : Math.min(60000, Math.max(4096, Math.round(targetDurationSec * tokensPerSecond)));
   const mode = options.mode ?? "content";
   const platform = options.platform ?? "generic";
+  const durationMode = options.durationMode ?? "fixed";
 
-  const built = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts, mode, platform);
+  const built = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts, mode, platform, durationMode);
 
   // Gemini 2.5 Flash occasionally drops a required field (seen: templateId
   // missing on every scene) on an otherwise-fine response — confirmed by

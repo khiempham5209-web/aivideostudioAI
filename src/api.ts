@@ -145,6 +145,7 @@ interface CreateVideoBody {
   folderName?: string;
   ratio?: string;
   durationSec?: number;
+  durationMode?: string;
   productId?: string;
   mode?: string;
   platform?: string;
@@ -933,6 +934,7 @@ async function generateProjectScript(project: NonNullable<ReturnType<typeof getP
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
       targetDurationSec: project.target_duration_sec,
+      durationMode: project.duration_mode,
       aiProvider,
       mode,
       platform: project.platform,
@@ -1343,6 +1345,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
   }
   const mode = body.mode === "affiliate" || body.mode === "content" ? body.mode : undefined;
   const platform = body.platform === "tiktok_shop" || body.platform === "shopee_aff" || body.platform === "generic" ? body.platform : undefined;
+  const durationMode = body.durationMode === "auto" ? "auto" : undefined;
   const project = createProject({
     ownerEmail: user.email,
     topic: prompt,
@@ -1351,6 +1354,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     voiceSpeed: body.voiceSpeed ?? 1,
     aspectRatio: ratio,
     targetDurationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
+    durationMode,
     productId,
     mode,
     platform,
