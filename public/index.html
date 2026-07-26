@@ -1320,7 +1320,7 @@
             <div class="card"><span class="muted">Voice sẵn sàng</span><strong id="readyVoices">0</strong><span class="trend">Nam/Nữ, vùng miền</span></div>
           </div>
 
-          <div class="grid dashboard-grid" style="margin-top:14px;">
+          <div class="grid" style="margin-top:14px;">
             <div class="panel">
               <div class="panel-head">
                 <div><h3>Dự án gần đây</h3><p class="tiny">Click để mở lại project và render tiếp.</p></div>
@@ -1328,21 +1328,6 @@
               </div>
               <div class="panel-body">
                 <div class="grid recent-grid" id="recentProjects"></div>
-              </div>
-            </div>
-            <div class="panel">
-              <div class="panel-head">
-                <div><h3>Video đang render</h3><p class="tiny">Thanh tiến trình xử lý từ API.</p></div>
-                <span class="pill warn" id="jobBadge">Chưa có job</span>
-              </div>
-              <div class="panel-body">
-                <div class="preview-frame" id="dashboardPreviewFrame" style="height:220px;">
-                  <div class="empty" id="dashboardPreviewEmpty">Chưa có video nào đang render.</div>
-                </div>
-                <div class="progress" style="margin-top:14px;">
-                  <div style="display:flex;justify-content:space-between;"><strong id="progressLabel">Sẵn sàng render</strong><span id="progressPct">0%</span></div>
-                  <div class="bar"><span id="progressBar" style="width:0%;"></span></div>
-                </div>
               </div>
             </div>
           </div>
@@ -2097,11 +2082,8 @@
 
       function setProgress(progress, text) {
         const p = Math.max(0, Math.min(100, Number(progress || 0)));
-        $("#progressPct").textContent = `${p}%`;
-        $("#progressBar").style.width = `${p}%`;
-        $("#exportPct").textContent = `${p}%`;
-        $("#exportBar").style.width = `${p}%`;
-        $("#progressLabel").textContent = text || "Đang xử lý";
+        if ($("#exportPct")) $("#exportPct").textContent = `${p}%`;
+        if ($("#exportBar")) $("#exportBar").style.width = `${p}%`;
       }
 
       function activeProject() {
@@ -2265,7 +2247,7 @@
         if (!list.length) {
           $("#recentProjects").innerHTML = '<div class="empty">Chưa có dự án nào trong tài khoản Gmail này.</div>';
         }
-        list.slice(0, 8).forEach((project, index) => {
+        list.forEach((project, index) => {
           const item = document.createElement("button");
           item.className = "project-thumb";
           item.style.setProperty("--art", art[index % art.length]);
@@ -3542,8 +3524,10 @@
         if (!job.video_path && $("#dashboardPreviewFrame") && !$("#dashboardPreviewFrame").querySelector("video")) {
           $("#dashboardPreviewFrame").innerHTML = '<div class="empty" id="dashboardPreviewEmpty">Chưa có video nào đang render.</div>';
         }
-        $("#jobBadge").textContent = label(job.status);
-        $("#jobBadge").className = `pill ${job.status === "completed" ? "ok" : "warn"}`;
+        if ($("#jobBadge")) {
+          $("#jobBadge").textContent = label(job.status);
+          $("#jobBadge").className = `pill ${job.status === "completed" ? "ok" : "warn"}`;
+        }
         setProgress(job.progress || 0, job.current_step || label(job.status));
         if ($("#exportErrorMessage")) {
           if (job.status === "failed" && job.error_message) {
