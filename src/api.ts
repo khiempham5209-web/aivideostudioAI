@@ -116,6 +116,16 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS ?? "")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 
+// Explicit, deliberately loud escape hatch — the ALLOWED_EMAILS empty-list
+// behavior already defaults to "deny all" in production on purpose (see
+// isAllowedEmail below), so opening the app to literally anyone requires
+// this separate flag rather than just clearing ALLOWED_EMAILS. Anyone who
+// can reach the URL can then create an "account" (any email string, no
+// verification) and spend this deployment's real Gemini/R2 quota — turn
+// this back off (unset it, or set to anything other than "true") once
+// you're done letting people in.
+const ALLOW_PUBLIC_ACCESS = process.env.ALLOW_PUBLIC_ACCESS === "true";
+
 const TEMPLATE_PRESETS = [
   { id: "review-film", name: "Review phim", style: "Review phim", description: "Hook, tom tat, diem hay, diem yeu va ket luan co dang xem khong." },
   { id: "sales-short", name: "Ban hang ngan", style: "Quang cao san pham", description: "Neu van de, loi ich, bang chung va CTA." },
@@ -147,6 +157,7 @@ interface AuthUser {
 }
 
 function isAllowedEmail(email: string): boolean {
+  if (ALLOW_PUBLIC_ACCESS) return true;
   if (ALLOWED_EMAILS.length === 0) return !IS_PRODUCTION;
   return ALLOWED_EMAILS.includes(email.trim().toLowerCase());
 }
@@ -1793,7 +1804,7 @@ async function handleGoogleCallback(req: IncomingMessage, res: ServerResponse, u
 }
 
 async function handleDevLogin(req: IncomingMessage, res: ServerResponse) {
-  if (process.env.ALLOW_DEV_LOGIN !== "true") {
+  if (process.env.ALLOW_DEV_LOGIN !== "true" && !ALLOW_PUBLIC_ACCESS) {
     sendJson(res, 403, { error: "Dev login is disabled. Use Google OAuth." });
     return;
   }
@@ -2074,7 +2085,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         authenticated: Boolean(user),
         user,
         googleConfigured: Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
-        devLoginEnabled: process.env.ALLOW_DEV_LOGIN === "true",
+        devLoginEnabled: process.env.ALLOW_DEV_LOGIN === "true" || ALLOW_PUBLIC_ACCESS,
         privateAccessEnabled: ALLOWED_EMAILS.length > 0,
         privateAccessRequired: IS_PRODUCTION,
         webRenderDisabled: DISABLE_WEB_RENDER,
