@@ -40,6 +40,11 @@ export interface ProjectRecord {
   error_message: string | null;
   /** Product (from Kho sản phẩm) this project was generated from, if any. */
   product_id: string | null;
+  /** Row number in the "KichBanYTB" Sheet tab this project was created
+   *  from, if any — lets script generation write the result back to the
+   *  right row, and lets the Voice page know to show the "Duyệt kịch bản"
+   *  action that starts voice generation + marks that row done. */
+  content_queue_row: number | null;
   /** Business mode chosen at creation — drives which script/CTA rules the
    *  AI must follow (see buildPrompt in prompt-to-script.ts). Not editable
    *  after creation: switching a project's business mode mid-flight would
@@ -267,6 +272,7 @@ db.exec(`
     output_path TEXT,
     error_message TEXT,
     product_id TEXT,
+    content_queue_row INTEGER,
     mode TEXT NOT NULL DEFAULT 'content',
     platform TEXT NOT NULL DEFAULT 'generic',
     review_status TEXT NOT NULL DEFAULT 'pending',
@@ -474,6 +480,7 @@ for (const statement of [
   "ALTER TABLE projects ADD COLUMN platform TEXT NOT NULL DEFAULT 'generic'",
   "ALTER TABLE projects ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'",
   "ALTER TABLE projects ADD COLUMN duration_mode TEXT NOT NULL DEFAULT 'fixed'",
+  "ALTER TABLE projects ADD COLUMN content_queue_row INTEGER",
   "ALTER TABLE products ADD COLUMN tiktok_product_id TEXT",
   "ALTER TABLE products ADD COLUMN media_urls TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_json TEXT",
@@ -585,6 +592,7 @@ async function initPostgresMirror() {
         output_path TEXT,
         error_message TEXT,
         product_id TEXT,
+        content_queue_row INTEGER,
         mode TEXT NOT NULL DEFAULT 'content',
         platform TEXT NOT NULL DEFAULT 'generic',
         review_status TEXT NOT NULL DEFAULT 'pending',
@@ -804,6 +812,7 @@ async function initPostgresMirror() {
     { label: "projects.platform", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'generic'` },
     { label: "projects.review_status", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'` },
     { label: "projects.duration_mode", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS duration_mode TEXT NOT NULL DEFAULT 'fixed'` },
+    { label: "projects.content_queue_row", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS content_queue_row INTEGER` },
     { label: "products.tiktok_product_id", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS tiktok_product_id TEXT` },
     { label: "products.media_urls", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS media_urls TEXT` },
     { label: "products.fact_sheet_json", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_json TEXT` },
@@ -988,6 +997,7 @@ export function createProject(data: {
   targetDurationSec?: number;
   durationMode?: "fixed" | "auto";
   productId?: string | null;
+  contentQueueRow?: number | null;
   mode?: "affiliate" | "content";
   platform?: "tiktok_shop" | "shopee_aff" | "generic";
 }): ProjectRecord {
@@ -1007,6 +1017,7 @@ export function createProject(data: {
     output_path: null,
     error_message: null,
     product_id: data.productId ?? null,
+    content_queue_row: data.contentQueueRow ?? null,
     // Explicit mode wins; otherwise infer from whether a product was attached
     // (kept for backward compatibility with projects created before "mode" existed).
     mode: data.mode ?? (data.productId ? "affiliate" : "content"),
@@ -1017,8 +1028,8 @@ export function createProject(data: {
   };
   db.prepare(`
     INSERT INTO projects
-    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, duration_mode, output_path, error_message, product_id, mode, platform, review_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, duration_mode, output_path, error_message, product_id, content_queue_row, mode, platform, review_status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -1034,6 +1045,7 @@ export function createProject(data: {
     project.output_path,
     project.error_message,
     project.product_id,
+    project.content_queue_row,
     project.mode,
     project.platform,
     project.review_status,

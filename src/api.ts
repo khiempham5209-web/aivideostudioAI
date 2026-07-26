@@ -19,7 +19,6 @@ import { fetchMedia } from "./assets/image-fetcher.js";
 import { fetchShopeeGallery } from "./assets/shopee-gallery.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, r2Uri, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import {
-  fetchApprovedContentQueue,
   fetchPendingContentQueue,
   fetchProductsFromSheet,
   isProductSheetConfigured,
@@ -156,6 +155,7 @@ interface CreateVideoBody {
   durationSec?: number;
   durationMode?: string;
   productId?: string;
+  contentQueueRow?: number;
   mode?: string;
   platform?: string;
 }
@@ -1355,6 +1355,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
   const mode = body.mode === "affiliate" || body.mode === "content" ? body.mode : undefined;
   const platform = body.platform === "tiktok_shop" || body.platform === "shopee_aff" || body.platform === "generic" ? body.platform : undefined;
   const durationMode = body.durationMode === "auto" ? "auto" : undefined;
+  const contentQueueRowNum = Number(body.contentQueueRow);
   const project = createProject({
     ownerEmail: user.email,
     topic: prompt,
@@ -1365,6 +1366,7 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     targetDurationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
     durationMode,
     productId,
+    contentQueueRow: Number.isFinite(contentQueueRowNum) && contentQueueRowNum > 0 ? contentQueueRowNum : undefined,
     mode,
     platform,
   });
@@ -1458,6 +1460,19 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
     // or checking the error chip later) instead of being lost immediately.
     error_message: generated.usedFallback ? `AI script fallback: ${generated.fallbackReason}` : null,
   });
+  // This project came from the "Tạo" button on a KichBanYTB card — write the
+  // real script back to that row so the user can read/edit it in the Sheet,
+  // same as before, just triggered by the normal single-project flow now
+  // instead of a background bulk job. Best-effort: a Sheet hiccup here must
+  // not lose the script the user is about to see in the app either way.
+  if (project.content_queue_row) {
+    const readableScript = generated.script.scenes.map((s) => s.voiceText).join("\n\n");
+    try {
+      await writeContentQueueResult(project.content_queue_row, readableScript, projectId);
+    } catch (error) {
+      console.warn(`Failed to write script back to content queue row ${project.content_queue_row}:`, error instanceof Error ? error.message : error);
+    }
+  }
   sendJson(res, 200, {
     ok: true,
     project: getProject(projectId),
@@ -1472,102 +1487,56 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
   });
 }
 
-/** Parses the free-text "Độ dài" cell from the KichBanYTB queue into a
- *  target duration + mode. Blank or anything mentioning "tự động"/"auto" ->
- *  Auto mode (see prompt-to-script.ts); otherwise reads a number of phút or
- *  giây, defaulting to 120s content-mode pacing if the text doesn't parse. */
-function parseQueueDuration(label?: string): { sec: number; mode: "fixed" | "auto" } {
-  const trimmed = (label || "").trim().toLowerCase();
-  if (!trimmed || trimmed.includes("tự động") || trimmed.includes("auto")) return { sec: 1200, mode: "auto" };
-  const match = trimmed.match(/(\d+)\s*(phút|giây|s|p)?/);
-  if (!match) return { sec: 120, mode: "fixed" };
-  const n = Number(match[1]);
-  const unit = match[2] || "";
-  const sec = unit.startsWith("p") ? n * 60 : n;
-  return { sec: sec > 0 ? sec : 120, mode: "fixed" };
-}
-
-/** Pulls "Đề tài" rows from the KichBanYTB Sheet tab still marked "Chờ viết",
- *  creates a real project + AI script for each, and writes the readable
- *  script text back to the Sheet for the user to read/edit — this is
- *  deliberately step 1 only (concept/content), matching the plan: voice
- *  generation is a separate, explicit step gated on the user flipping
- *  Trạng thái to "Đã duyệt" themselves (see handleProcessApprovedContentQueue). */
-async function handleSyncContentQueue(req: IncomingMessage, res: ServerResponse) {
+/** Lists "Đề tài" rows from the KichBanYTB Sheet tab still marked "Chờ
+ *  viết", for display as cards — mirrors how Kho sản phẩm shows synced
+ *  products. Deliberately does NOT generate anything: the user picks one
+ *  card, which takes them to "Tạo dự án mới" pre-filled so they can adjust
+ *  duration/style/AI provider themselves before generating, exactly like
+ *  the existing product -> "Tạo video" flow. */
+async function handleListContentQueue(req: IncomingMessage, res: ServerResponse) {
   const user = requireUser(req, res);
   if (!user) return;
   if (!isProductSheetConfigured()) {
     sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
     return;
   }
-  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
-  const aiProvider = body.aiProvider === "openai" ? "openai" : "gemini";
-  const pending = await fetchPendingContentQueue();
-  const results: { row: number; deTai: string; ok: boolean; error?: string; projectId?: string }[] = [];
-  for (const item of pending) {
-    try {
-      const { sec, mode: durationMode } = parseQueueDuration(item.doDai);
-      const styleHint = item.phongCach?.trim();
-      const topic = styleHint ? `${item.deTai} (phong cách: ${styleHint})` : item.deTai;
-      const project = createProject({
-        ownerEmail: user.email,
-        topic,
-        voiceId: "edge-hoaimy-south-story",
-        voiceName: "vi-VN-HoaiMyNeural",
-        voiceSpeed: 1,
-        targetDurationSec: sec,
-        durationMode,
-        mode: "content",
-      });
-      if (item.ma?.trim()) updateProject(project.id, { title: item.ma.trim() });
-      const generated = await generateProjectScript(project, aiProvider);
-      replaceProjectScenes(project.id, generated.script.scenes);
-      updateProject(project.id, {
-        title: generated.script.metadata.title,
-        status: "draft",
-        error_message: generated.usedFallback ? `AI script fallback: ${generated.fallbackReason}` : null,
-      });
-      const readableScript = generated.script.scenes.map((s) => s.voiceText).join("\n\n");
-      await writeContentQueueResult(item.row, readableScript, project.id);
-      results.push({ row: item.row, deTai: item.deTai, ok: true, projectId: project.id });
-    } catch (error) {
-      results.push({ row: item.row, deTai: item.deTai, ok: false, error: error instanceof Error ? error.message : String(error) });
-    }
-  }
-  sendJson(res, 200, { ok: true, processed: results.length, results });
+  const items = await fetchPendingContentQueue();
+  sendJson(res, 200, { ok: true, items });
 }
 
-/** Pulls rows marked "Đã duyệt" (user has read/edited the script in the
- *  Sheet and approved it) and starts real voice generation for each
- *  linked project — the step the plan calls "chỉ tiếp tục xử lý voice sau
- *  khi duyệt". Marks the row "Đã xong" once the voice job is *queued*, not
- *  necessarily finished — final render/export is still done in-app like any
- *  other project, so the user can review voice/timeline before exporting. */
-async function handleProcessApprovedContentQueue(req: IncomingMessage, res: ServerResponse) {
+/** Starts real voice generation for a project that came from the content
+ *  queue and marks its Sheet row "Đã xong" — the "Duyệt kịch bản" action on
+ *  the Voice page. Scoped to one project (not a bulk sweep) since approval
+ *  now happens in-app right where the user is already reading the script
+ *  and picking a voice, not by editing a Sheet cell out-of-band. */
+async function handleApproveContentProject(req: IncomingMessage, res: ServerResponse, projectId: string) {
   const user = requireUser(req, res);
   if (!user) return;
-  if (!isProductSheetConfigured()) {
-    sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
     return;
   }
-  const approved = await fetchApprovedContentQueue();
-  const results: { row: number; projectId: string; ok: boolean; error?: string }[] = [];
-  for (const item of approved) {
-    try {
-      const project = getUserProject(user.email, item.projectId);
-      if (!project) throw new Error("Không tìm thấy dự án tương ứng trong app");
-      const runningJob = getLatestJobForProject(project.id);
-      if (!(runningJob && (runningJob.status === "queued" || runningJob.status === "running"))) {
-        const job = createRenderJob(project.id);
-        startAudioJob(project.id, job.id);
-      }
-      await markContentQueueDone(item.row);
-      results.push({ row: item.row, projectId: item.projectId, ok: true });
-    } catch (error) {
-      results.push({ row: item.row, projectId: item.projectId, ok: false, error: error instanceof Error ? error.message : String(error) });
-    }
+  if (!project.content_queue_row) {
+    sendJson(res, 400, { error: "Dự án này không gắn với hàng đợi nội dung nào" });
+    return;
   }
-  sendJson(res, 200, { ok: true, processed: results.length, results });
+  const runningJob = getLatestJobForProject(project.id);
+  if (runningJob && (runningJob.status === "queued" || runningJob.status === "running")) {
+    sendJson(res, 409, { error: "Project already has a running job", job: runningJob });
+    return;
+  }
+  const job = createRenderJob(project.id);
+  startAudioJob(project.id, job.id);
+  try {
+    await markContentQueueDone(project.content_queue_row);
+  } catch (error) {
+    // Voice job already started — don't fail the request over a Sheet
+    // write hiccup, just surface it so the user knows to flip it by hand.
+    sendJson(res, 202, { ok: true, job, sheetWarning: error instanceof Error ? error.message : String(error) });
+    return;
+  }
+  sendJson(res, 202, { ok: true, job });
 }
 
 function productToJson(p: ReturnType<typeof getProduct>) {
@@ -2579,12 +2548,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       await handleSyncProducts(req, res);
       return;
     }
-    if (req.method === "POST" && url.pathname === "/api/content-queue/sync") {
-      await handleSyncContentQueue(req, res);
+    if (req.method === "GET" && url.pathname === "/api/content-queue/pending") {
+      await handleListContentQueue(req, res);
       return;
     }
-    if (req.method === "POST" && url.pathname === "/api/content-queue/process-approved") {
-      await handleProcessApprovedContentQueue(req, res);
+    const approveContentMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/approve-content$/);
+    if (req.method === "POST" && approveContentMatch) {
+      await handleApproveContentProject(req, res, approveContentMatch[1]);
       return;
     }
     const factSheetMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/fact-sheet$/);

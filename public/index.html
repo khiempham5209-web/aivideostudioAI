@@ -1397,6 +1397,13 @@
           <div class="page-head">
             <div><h2>Giọng đọc AI</h2><p class="muted">Chọn giọng Nam/Nữ, preview, tốc độ, pitch và âm lượng.</p></div>
           </div>
+          <div class="panel" id="approveContentPanel" style="display:none;margin-bottom:16px;">
+            <div class="panel-head"><h3>Dự án từ hàng đợi Nội dung</h3></div>
+            <div class="panel-body field-stack">
+              <p class="tiny">Chọn giọng đọc phù hợp bên dưới trước, rồi bấm nút này để duyệt kịch bản — app sẽ tạo voice thật cho dự án và đánh dấu "Đã xong" trên Google Sheet.</p>
+              <button class="btn primary" id="approveContentButton" type="button">✅ Duyệt kịch bản & Tạo Voice</button>
+            </div>
+          </div>
           <div class="grid workspace-grid">
             <div class="panel">
               <div class="panel-head"><h3>Bộ lọc voice</h3><span class="pill" id="voiceTotal">0 preset</span></div>
@@ -1441,23 +1448,28 @@
 
         <section class="page" id="products">
           <div class="page-head">
-            <div><h2>Kho sản phẩm</h2><p class="muted">Link sản phẩm (Shopee, TikTok Shop...), mã SKU và trạng thái từng sản phẩm affiliate — đồng bộ 2 chiều với Google Sheet.</p></div>
-            <div class="top-actions"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
+            <div><h2>Kho sản phẩm & Nội dung</h2><p class="muted">Sản phẩm affiliate và đề tài AI Content — cả 2 đều đồng bộ 2 chiều với Google Sheet.</p></div>
           </div>
-          <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
-          <div class="panel" style="margin-bottom:16px;">
-            <div class="panel-head"><h3>Hàng đợi kịch bản AI Content (tab KichBanYTB)</h3></div>
-            <div class="panel-body field-stack">
-              <p class="tiny">Nhập Đề tài vào Sheet trước, bấm nút 1 để AI viết kịch bản đầy đủ cho các dòng "Chờ viết". Đọc/sửa kịch bản ngay trong Sheet, đổi Trạng thái thành "Đã duyệt" rồi bấm nút 2 để bắt đầu tạo voice.</p>
-              <div class="top-actions">
-                <button class="btn primary" id="syncContentQueueButton" type="button">📝 1. Viết kịch bản cho hàng đợi</button>
-                <button class="btn" id="processApprovedQueueButton" type="button">🎙️ 2. Tạo voice cho mục đã duyệt</button>
-              </div>
-              <div class="empty" id="contentQueueStatus" style="text-align:left;display:none;"></div>
+          <div class="segmented" id="warehouseTabPicker" style="margin-bottom:16px;">
+            <button class="active" type="button" data-tab="products">📦 Sản phẩm</button>
+            <button type="button" data-tab="content">📝 Nội dung</button>
+          </div>
+
+          <div id="productsTabPanel">
+            <div class="top-actions" style="margin-bottom:12px;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
+            <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
+            <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+              <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
             </div>
           </div>
-          <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
-            <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
+
+          <div id="contentQueueTabPanel" style="display:none;">
+            <p class="tiny" style="margin-bottom:8px;">Nhập Đề tài vào tab <b>KichBanYTB</b> trên Sheet trước, rồi bấm Đồng bộ để thấy ở đây. Bấm "Tạo" trên 1 thẻ để qua màn Tạo dự án, tự chọn độ dài/phong cách rồi mới cho AI viết kịch bản.</p>
+            <div class="top-actions" style="margin-bottom:12px;"><button class="btn" id="syncContentQueueButton" type="button">🔄 Đồng bộ Google Sheet</button></div>
+            <div class="empty" id="contentQueueStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
+            <div class="grid" id="contentQueueList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+              <div class="empty">Chưa đồng bộ — bấm "Đồng bộ Google Sheet" để lấy đề tài từ tab KichBanYTB.</div>
+            </div>
           </div>
         </section>
 
@@ -2352,6 +2364,7 @@
 
       function selectProject(project) {
         state.activeProjectId = project.id;
+        state.activeProject = project;
         state.activeJobId = project.latestJob ? project.latestJob.id : "";
         $("#projectName").value = project.title || "";
         $("#prompt").value = project.topic || $("#prompt").value;
@@ -2360,12 +2373,19 @@
         syncProjectControls();
         updateCreatePreview();
         applyPreviewAspect();
+        updateApproveContentPanel();
         if (project.latestJob) setJob(project, project.latestJob);
         else resetJobPanel();
         loadAssets(project.id).catch(showError);
         loadScenes(project.id).catch(showError);
         loadTimeline(project.id).catch(showError);
         switchPage("script");
+      }
+
+      function updateApproveContentPanel() {
+        const panel = $("#approveContentPanel");
+        if (!panel) return;
+        panel.style.display = state.activeProject?.content_queue_row ? "block" : "none";
       }
 
       function voiceMatches(v) {
@@ -4394,6 +4414,7 @@
             toast("Lưu ý: ChatGPT dễ bị cắt cụt kịch bản với video dài — nên chọn Gemini cho video trên ~7 phút hoặc Tự động.");
           }
           toast("Đang tạo project...");
+          const contentQueueRow = mode === "content" ? state.pendingContentQueueRow : undefined;
           await createProjectAndGenerateScript({
             projectName: $("#projectName").value,
             prompt: $("#prompt").value,
@@ -4405,7 +4426,11 @@
             mode,
             productId: mode === "affiliate" ? ($("#createProductSelect")?.value || undefined) : undefined,
             platform: mode === "affiliate" ? activePlatform() : undefined,
+            contentQueueRow,
           });
+          // One-shot: only the project this row was filled in for should
+          // carry the link back to the Sheet, not whatever the user creates next.
+          state.pendingContentQueueRow = undefined;
         } catch (error) {
           showError(error);
         } finally {
@@ -4812,51 +4837,96 @@
         }
       });
 
-      $("#syncContentQueueButton")?.addEventListener("click", async () => {
-        const button = $("#syncContentQueueButton");
-        const status = $("#contentQueueStatus");
-        button.disabled = true;
-        button.textContent = "Đang viết kịch bản...";
-        try {
-          const data = await api("/api/content-queue/sync", { method: "POST" });
-          const okCount = (data.results || []).filter((r) => r.ok).length;
-          const failCount = (data.results || []).length - okCount;
-          if (status) {
-            status.style.display = "block";
-            status.textContent = data.processed
-              ? `Đã viết ${okCount} kịch bản mới${failCount ? `, ${failCount} dòng lỗi` : ""} — mở Sheet để đọc/sửa, đổi Trạng thái thành "Đã duyệt" khi ưng ý.`
-              : `Không có dòng nào đang "Chờ viết" trong Sheet.`;
-          }
-          toast(data.processed ? `Đã xử lý ${data.processed} đề tài trong hàng đợi.` : "Hàng đợi trống — không có đề tài mới.");
-        } catch (error) {
-          showError(error);
-        } finally {
-          button.disabled = false;
-          button.textContent = "📝 1. Viết kịch bản cho hàng đợi";
+      function renderContentQueue() {
+        const list = $("#contentQueueList");
+        if (!list) return;
+        const items = state.contentQueue || [];
+        if (!items.length) {
+          list.innerHTML = '<div class="empty">Chưa đồng bộ — bấm "Đồng bộ Google Sheet" để lấy đề tài từ tab KichBanYTB.</div>';
+          return;
         }
+        list.innerHTML = items.map((item) => `
+          <div class="panel">
+            <div class="panel-head"><span class="pill">${item.ma || "—"}</span></div>
+            <div class="panel-body field-stack">
+              <strong>${item.deTai}</strong>
+              ${item.doDai ? `<p class="tiny">Độ dài gợi ý: ${item.doDai}</p>` : ""}
+              ${item.phongCach ? `<p class="tiny">Phong cách: ${item.phongCach}</p>` : ""}
+              <button class="btn primary" type="button" data-content-row="${item.row}">🎬 Tạo</button>
+            </div>
+          </div>
+        `).join("");
+        list.querySelectorAll("[data-content-row]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const row = Number(btn.dataset.contentRow);
+            const item = items.find((i) => i.row === row);
+            if (!item) return;
+            state.pendingContentQueueRow = row;
+            switchPage("create");
+            setCreateMode("content");
+            if ($("#projectName")) $("#projectName").value = item.ma || item.deTai.slice(0, 40);
+            if ($("#prompt")) $("#prompt").value = item.deTai;
+            updateCreatePreview();
+            toast(`Đã điền đề tài "${item.deTai}" — chỉnh độ dài/phong cách rồi bấm AI Tạo Kịch Bản.`);
+          });
+        });
+      }
+
+      $("#warehouseTabPicker")?.addEventListener("click", (e) => {
+        if (e.target.tagName !== "BUTTON") return;
+        $$("#warehouseTabPicker button").forEach((b) => b.classList.toggle("active", b === e.target));
+        const tab = e.target.dataset.tab;
+        if ($("#productsTabPanel")) $("#productsTabPanel").style.display = tab === "products" ? "block" : "none";
+        if ($("#contentQueueTabPanel")) $("#contentQueueTabPanel").style.display = tab === "content" ? "block" : "none";
       });
-      $("#processApprovedQueueButton")?.addEventListener("click", async () => {
-        const button = $("#processApprovedQueueButton");
-        const status = $("#contentQueueStatus");
+
+      $("#approveContentButton")?.addEventListener("click", async () => {
+        const button = $("#approveContentButton");
+        if (!state.activeProjectId) return;
         button.disabled = true;
-        button.textContent = "Đang tạo voice...";
+        button.textContent = "Đang xử lý...";
         try {
-          const data = await api("/api/content-queue/process-approved", { method: "POST" });
-          const okCount = (data.results || []).filter((r) => r.ok).length;
-          const failCount = (data.results || []).length - okCount;
-          if (status) {
-            status.style.display = "block";
-            status.textContent = data.processed
-              ? `Đã bắt đầu tạo voice cho ${okCount} dự án${failCount ? `, ${failCount} dòng lỗi` : ""} — vào từng dự án trong app để nghe thử và xuất video khi xong.`
-              : `Không có dòng nào đang "Đã duyệt" trong Sheet.`;
+          await api(`/api/projects/${state.activeProjectId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1) }),
+          });
+          const data = await api(`/api/projects/${state.activeProjectId}/approve-content`, { method: "POST" });
+          if (data.sheetWarning) {
+            toast(`Đã bắt đầu tạo voice, nhưng ghi trạng thái lên Sheet lỗi: ${data.sheetWarning}`);
+          } else {
+            toast("Đã duyệt kịch bản — đang tạo voice, đã đánh dấu \"Đã xong\" trên Sheet.");
           }
-          toast(data.processed ? `Đã xử lý ${data.processed} mục đã duyệt.` : "Chưa có mục nào được duyệt.");
           await loadProjects();
         } catch (error) {
           showError(error);
         } finally {
           button.disabled = false;
-          button.textContent = "🎙️ 2. Tạo voice cho mục đã duyệt";
+          button.textContent = "✅ Duyệt kịch bản & Tạo Voice";
+        }
+      });
+
+      $("#syncContentQueueButton")?.addEventListener("click", async () => {
+        const button = $("#syncContentQueueButton");
+        const status = $("#contentQueueStatus");
+        button.disabled = true;
+        button.textContent = "Đang đồng bộ...";
+        try {
+          const data = await api("/api/content-queue/pending");
+          state.contentQueue = data.items || [];
+          renderContentQueue();
+          if (status) {
+            status.style.display = "block";
+            status.textContent = state.contentQueue.length
+              ? `Đã lấy ${state.contentQueue.length} đề tài đang "Chờ viết" từ Sheet.`
+              : `Không có đề tài nào đang "Chờ viết" trong Sheet.`;
+          }
+          toast(state.contentQueue.length ? `Đã lấy ${state.contentQueue.length} đề tài.` : "Không có đề tài mới.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🔄 Đồng bộ Google Sheet";
         }
       });
 
