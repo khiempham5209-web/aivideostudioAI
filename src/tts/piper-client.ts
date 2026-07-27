@@ -33,13 +33,36 @@ function ensureEspeakDataDir(): string | undefined {
   return target;
 }
 
+// Piper's bundled espeak-ng occasionally hangs instead of throwing on
+// certain input (a variant of the known Vietnamese-diacritic bug — see the
+// fallback comment below) — without a timeout, one bad scene stalls the
+// entire sequential TTS queue (TTS_CONCURRENCY defaults to 1) forever.
+const PIPER_TIMEOUT_MS = 60_000;
+
 function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv; stdin?: string } = {}): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(command, args, { env: options.env, windowsHide: true });
     let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      proc.kill("SIGKILL");
+      reject(new Error(`${command} timed out after ${PIPER_TIMEOUT_MS}ms (hung, no exit)`));
+    }, PIPER_TIMEOUT_MS);
     proc.stderr.on("data", (d) => (stderr += d.toString()));
-    proc.on("close", (code) => (code === 0 ? resolvePromise() : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-800)}`))));
-    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      code === 0 ? resolvePromise() : reject(new Error(`${command} failed (exit ${code}): ${stderr.slice(-800)}`));
+    });
+    proc.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
     if (options.stdin !== undefined) {
       proc.stdin.write(options.stdin, "utf-8");
       proc.stdin.end();

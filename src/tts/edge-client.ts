@@ -6,6 +6,11 @@ import { EDGE_TTS_BIN, EDGE_TTS_PYTHON } from "../utils/binaries.js";
 
 const execFileAsync = promisify(execFile);
 
+// A hung child process here blocks the whole static queue below forever
+// (TTS_CONCURRENCY defaults to 1, so every later scene waits on this one) —
+// same defensive reasoning as PIPER_TIMEOUT_MS in piper-client.ts.
+const EXEC_TIMEOUT_MS = 60_000;
+
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -40,7 +45,7 @@ export class EdgeTtsClient {
       resolve("scripts", "gtts-fallback.py"),
       inputPath,
       audioOutPath,
-    ]);
+    ], { timeout: EXEC_TIMEOUT_MS });
   }
 
   async generate(text: string, audioOutPath: string, srtOutPath?: string): Promise<void> {
@@ -69,7 +74,7 @@ export class EdgeTtsClient {
             inputPath,
             "--write-media",
             audioOutPath
-          ]);
+          ], { timeout: EXEC_TIMEOUT_MS });
 
           if (srtOutPath) {
             await writeFile(srtOutPath, "", "utf-8");
