@@ -87,17 +87,25 @@ export class PiperClient {
     const espeakDataDir = ensureEspeakDataDir();
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (espeakDataDir) env.ESPEAK_DATA_PATH = espeakDataDir;
+    // Without this, Python's stdin on Windows decodes under the system
+    // codepage instead of UTF-8, mangling multi-byte characters (e.g. the
+    // curly quotes "..." U+201C/U+201D) into invalid lone surrogates and
+    // crashing piper's espeak-ng phonemizer with UnicodeEncodeError. This
+    // was previously misdiagnosed as an unfixable espeak-ng bug on certain
+    // Vietnamese words — it's actually this encoding mismatch.
+    env.PYTHONUTF8 = "1";
+    env.PYTHONIOENCODING = "utf-8";
 
     try {
       await run(PIPER_PYTHON, ["-m", "piper", "--model", modelPath, "--output_file", wavPath], { env, stdin: text });
       await run(FFMPEG_BIN, ["-y", "-i", wavPath, "-codec:a", "libmp3lame", "-qscale:a", "4", audioOutPath]);
       await rm(wavPath, { force: true });
     } catch (error) {
-      // Known, unresolved bug in Piper's bundled Windows espeak-ng data: it
-      // throws on common Vietnamese words (verified: "học", "đọc", "họ",
-      // "giỏi" all fail identically across piper-tts 1.3.0–1.5.0) instead of
-      // just mispronouncing them. Rather than let one bad word kill an
-      // entire scene's narration, fall back to Edge TTS for this line only.
+      // This used to be attributed to an "unresolved espeak-ng bug" on
+      // words like "học"/"đọc" — it was actually the PYTHONUTF8/
+      // PYTHONIOENCODING mismatch above, now fixed at the source. This
+      // fallback stays as a safety net for any other unexpected failure so
+      // one bad scene doesn't kill the whole render, not as the primary fix.
       console.warn(`Piper TTS failed for this text, falling back to Edge TTS: ${error instanceof Error ? error.message.split("\n")[0] : error}`);
       await rm(wavPath, { force: true });
       const fallback = new EdgeTtsClient({ voice: "vi-VN-HoaiMyNeural" });
