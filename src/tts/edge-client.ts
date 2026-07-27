@@ -54,6 +54,9 @@ export class EdgeTtsClient {
         return;
       }
 
+      const inputPath = `${audioOutPath}.txt`;
+      await writeFile(inputPath, text, "utf-8");
+
       let lastError: unknown;
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -62,8 +65,8 @@ export class EdgeTtsClient {
             this.voice,
             "--rate",
             this.rateArg(),
-            "--text",
-            text,
+            "--file",
+            inputPath,
             "--write-media",
             audioOutPath
           ]);
