@@ -3641,9 +3641,11 @@
         if (!state.activeProjectId && state.projects.length) {
           const project = state.projects[0];
           state.activeProjectId = project.id;
+          state.activeProject = project;
           state.activeJobId = project.latestJob ? project.latestJob.id : "";
           $("#scriptTitle").textContent = `Tiêu đề: ${project.title || "Untitled video"}`;
           $("#scriptHook").textContent = `Đề tài: ${project.topic || ""}`;
+          updateApproveContentPanel();
           if (project.latestJob) setJob(project, project.latestJob);
           await Promise.all([loadAssets(project.id), loadScenes(project.id), loadTimeline(project.id)]);
         }
@@ -4972,7 +4974,9 @@
           const project = state.projects.find((p) => p.id === projectId);
           if (project) {
             state.activeProjectId = project.id;
+            state.activeProject = project;
             state.activeJobId = project.latestJob ? project.latestJob.id : "";
+            updateApproveContentPanel();
             syncProjectControls();
             await Promise.all([loadScenes(project.id), loadAssets(project.id)]);
           }
