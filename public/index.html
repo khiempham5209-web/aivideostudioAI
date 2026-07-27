@@ -1827,7 +1827,7 @@
         if (page === "music") renderMusicLibrary();
         if (page === "assets") renderAssetLibrary();
         if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
-        if (page === "products") loadProducts().catch(showError);
+        if (page === "products") { loadProducts().catch(showError); loadContentQueue().catch(() => {}); }
         if (page === "create") loadProducts().catch(showError);
 
         // Push a real browser-history entry per page switch so Back/Forward
@@ -4981,11 +4981,8 @@
         }
       });
 
-      $("#syncContentQueueButton")?.addEventListener("click", async () => {
-        const button = $("#syncContentQueueButton");
+      async function loadContentQueue({ silent = true } = {}) {
         const status = $("#contentQueueStatus");
-        button.disabled = true;
-        button.textContent = "Đang đồng bộ...";
         try {
           const data = await api("/api/content-queue/pending");
           state.contentQueue = data.items || [];
@@ -4996,7 +4993,18 @@
               ? `Đã lấy ${state.contentQueue.length} đề tài đang "Chờ viết" từ Sheet.`
               : `Không có đề tài nào đang "Chờ viết" trong Sheet.`;
           }
-          toast(state.contentQueue.length ? `Đã lấy ${state.contentQueue.length} đề tài.` : "Không có đề tài mới.");
+          if (!silent) toast(state.contentQueue.length ? `Đã lấy ${state.contentQueue.length} đề tài.` : "Không có đề tài mới.");
+        } catch (error) {
+          if (!silent) throw error;
+        }
+      }
+
+      $("#syncContentQueueButton")?.addEventListener("click", async () => {
+        const button = $("#syncContentQueueButton");
+        button.disabled = true;
+        button.textContent = "Đang đồng bộ...";
+        try {
+          await loadContentQueue({ silent: false });
         } catch (error) {
           showError(error);
         } finally {
