@@ -1362,6 +1362,7 @@
                 <div><label>Tỷ lệ video</label><div class="segmented" id="ratioPicker"><button type="button">16:9</button><button class="active" type="button">9:16</button><button type="button">1:1</button></div></div>
                 <div><label for="style">Phong cách</label><select id="style"><option>Review phim hài hước</option><option>Tin tức nhanh</option><option>Bán hàng</option><option>Giải thích giáo dục</option><option>Drama cuốn hút</option></select></div>
                 <div><label>AI viết kịch bản</label><div class="segmented" id="aiProviderPicker"><button type="button" class="active" data-provider="gemini">Gemini</button><button type="button" data-provider="openai">ChatGPT</button></div></div>
+                <div><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input type="checkbox" id="skipAiCheckbox" style="width:auto;" /> Bỏ qua AI, tôi tự dán/viết kịch bản (có sẵn văn bản)</label></div>
                 <button class="btn primary" id="createProjectButton" type="submit">AI Tạo Kịch Bản</button>
               </div>
             </form>
@@ -1385,7 +1386,17 @@
         <section class="page" id="script">
           <div class="page-head">
             <div><h2>Kịch bản AI</h2><p class="muted">Tiêu đề, hook, Scene 1..N, sửa tay, regenerate, thêm/xóa cảnh.</p></div>
-            <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
+            <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="pasteTextButton" type="button">📋 Dán văn bản</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
+          </div>
+          <div class="modal-backdrop" id="pasteTextModal">
+            <section class="modal">
+              <div class="panel-head"><h3>Dán văn bản có sẵn</h3><button class="btn" id="closePasteTextButton" type="button">✕</button></div>
+              <div class="panel-body field-stack">
+                <p class="tiny">Dán 1 đoạn văn bản đã viết sẵn — không cần AI viết kịch bản. App sẽ tự chia thành nhiều cảnh (theo đoạn văn cách dòng trống, hoặc theo câu nếu bạn dán liền 1 khối) rồi thêm vào dự án. Sau đó bạn chọn giọng và tạo voice như bình thường.</p>
+                <textarea id="pasteTextArea" rows="12" placeholder="Dán văn bản vào đây..."></textarea>
+                <button class="btn primary" id="pasteTextSubmitButton" type="button">Tạo cảnh từ văn bản này</button>
+              </div>
+            </section>
           </div>
           <div class="panel">
             <div class="panel-head"><div><h3 id="scriptTitle">Tiêu đề: Hành trình trở thành Chiến binh Rồng</h3><p class="tiny" id="scriptHook">Hook: Po trở lại trong một câu chuyện vừa hài vừa cảm xúc.</p></div><span class="pill" id="sceneCount">0 scene</span></div>
@@ -4383,7 +4394,7 @@
       });
       // Shared by #projectForm submit and the "🎬 Tạo video" product-row
       // button: create the project, then immediately generate its AI script.
-      async function createProjectAndGenerateScript(payload) {
+      async function createProjectAndGenerateScript(payload, options = {}) {
         const data = await api("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -4392,6 +4403,11 @@
         await loadProjects();
         await loadStats();
         selectProject(data.project);
+        if (options.skipAi) {
+          switchPage("script");
+          toast('Đã tạo dự án trống — bấm "📋 Dán văn bản" để dán kịch bản có sẵn, không cần AI.');
+          return data;
+        }
         toast(`Đang sinh kịch bản AI (${activeAiProvider() === "openai" ? "ChatGPT" : "Gemini"})...`);
         const scriptData = await api(`/api/projects/${state.activeProjectId}/generate-script`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aiProvider: activeAiProvider() }) });
         await loadProjects();
@@ -4417,9 +4433,14 @@
           }
           toast("Đang tạo project...");
           const contentQueueRow = mode === "content" ? state.pendingContentQueueRow : undefined;
+          const skipAi = $("#skipAiCheckbox")?.checked;
+          // Backend requires a non-empty "prompt" (used as the project's topic
+          // label even without AI) — fall back to the project name so skipping
+          // AI doesn't just fail on an empty Đề tài.
+          const promptValue = $("#prompt").value.trim() || (skipAi ? $("#projectName").value.trim() || "Dự án tự nhập kịch bản" : "");
           await createProjectAndGenerateScript({
             projectName: $("#projectName").value,
-            prompt: $("#prompt").value,
+            prompt: promptValue,
             voiceId: state.selectedVoiceId,
             voiceSpeed: Number($("#speed").value),
             ratio: activeRatio(),
@@ -4429,7 +4450,7 @@
             productId: mode === "affiliate" ? ($("#createProductSelect")?.value || undefined) : undefined,
             platform: mode === "affiliate" ? activePlatform() : undefined,
             contentQueueRow,
-          });
+          }, { skipAi });
           // One-shot: only the project this row was filled in for should
           // carry the link back to the Sheet, not whatever the user creates next.
           state.pendingContentQueueRow = undefined;
@@ -4710,6 +4731,58 @@
         }
         openSceneEditor("add");
       }, true);
+
+      // Splits pasted text into scenes without any AI call: paragraphs
+      // (blank-line separated) if there are any, otherwise groups of ~2-3
+      // sentences so one giant pasted block doesn't become one giant scene.
+      function splitPastedTextIntoScenes(raw) {
+        const paragraphs = raw.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+        if (paragraphs.length > 1) return paragraphs;
+        const sentences = raw.replace(/\s+/g, " ").trim().split(/(?<=[.!?…])\s+/).filter(Boolean);
+        const chunks = [];
+        for (let i = 0; i < sentences.length; i += 3) {
+          chunks.push(sentences.slice(i, i + 3).join(" "));
+        }
+        return chunks.filter(Boolean);
+      }
+
+      $("#pasteTextButton")?.addEventListener("click", () => {
+        if (!state.activeProjectId) {
+          toast("Hãy chọn hoặc tạo project trước.");
+          return;
+        }
+        $("#pasteTextArea").value = "";
+        $("#pasteTextModal").classList.add("show");
+      });
+      $("#closePasteTextButton")?.addEventListener("click", () => {
+        $("#pasteTextModal").classList.remove("show");
+      });
+      $("#pasteTextSubmitButton")?.addEventListener("click", async () => {
+        const raw = $("#pasteTextArea").value.trim();
+        if (!raw) return toast("Chưa dán văn bản nào.");
+        const chunks = splitPastedTextIntoScenes(raw);
+        if (!chunks.length) return toast("Không tách được cảnh nào từ văn bản này.");
+        const button = $("#pasteTextSubmitButton");
+        button.disabled = true;
+        button.textContent = "Đang tạo cảnh...";
+        try {
+          for (const voiceText of chunks) {
+            await api(`/api/projects/${state.activeProjectId}/scenes`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ voiceText }),
+            });
+          }
+          await loadScenes(state.activeProjectId);
+          $("#pasteTextModal").classList.remove("show");
+          toast(`Đã tạo ${chunks.length} cảnh từ văn bản dán vào — chọn giọng rồi tạo voice như bình thường.`);
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "Tạo cảnh từ văn bản này";
+        }
+      });
 
       $("#sceneList").addEventListener("click", (event) => {
         const target = event.target;
