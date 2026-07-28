@@ -3444,7 +3444,7 @@
         }
         if (!$("#voiceOutputList")) return;
         $("#voiceOutputList").innerHTML = audioAssets.length
-          ? audioAssets.map((asset) => `<div class="asset-row"><div><strong>${asset.file_name}</strong><p class="tiny">${Math.round((asset.file_size || 0) / 1024)} KB · ${asset.file_path}</p><audio controls src="${fileUrl(asset.file_path)}" style="width:100%;margin-top:8px;"></audio></div><a class="btn" href="${fileUrl(asset.file_path)}" target="_blank" download>Tải MP3</a></div>`).join("")
+          ? audioAssets.map((asset) => `<div class="asset-row"><div><strong>${asset.file_name}</strong><p class="tiny">${Math.round((asset.file_size || 0) / 1024)} KB · ${asset.file_path}</p><audio controls src="${fileUrl(asset.file_path)}" style="width:100%;margin-top:8px;"></audio></div><div class="field-stack"><a class="btn" href="${fileUrl(asset.file_path)}" target="_blank" download>Tải MP3</a><button class="btn delete-voice-output" data-id="${asset.id}" type="button">🗑️ Xoá</button></div></div>`).join("")
           : '<div class="empty">MP3 tạo từ kịch bản sẽ hiện ở đây sau khi job hoàn thành.</div>';
         attachMediaErrorHandlers($("#voiceOutputList"));
       }
@@ -4573,6 +4573,22 @@
       $("#assetFile").addEventListener("change", async () => {
         if (!$("#assetFile").files.length) return;
         if (state.pendingUploadKind) await uploadSelectedAsset();
+      });
+      $("#voiceOutputList")?.addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.classList.contains("delete-voice-output")) return;
+        const assetId = target.dataset.id;
+        if (!assetId) return;
+        if (!confirm("Xoá file voice này? Không thể hoàn tác.")) return;
+        target.disabled = true;
+        try {
+          await api(`/api/assets/${assetId}`, { method: "DELETE" });
+          await loadAssets(state.activeProjectId);
+          toast("Đã xoá file voice cũ. Bấm \"Tạo voice MP3 từ kịch bản\" để tạo lại.");
+        } catch (error) {
+          showError(error);
+          target.disabled = false;
+        }
       });
       $("#mediaGrid").addEventListener("click", async (event) => {
         const target = event.target;
