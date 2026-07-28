@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import pLimit from "p-limit";
@@ -122,6 +122,24 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const limit = pLimit(cfg.ttsConcurrency);
   const voiceDir = join(outputDir, "voice");
   await mkdir(voiceDir, { recursive: true });
+
+  // The reuse check below (`if (existsSync(out))`) is what lets a retried
+  // job skip scenes it already synthesized — but it only checks file
+  // existence, not which voice made the file. Without this guard, switching
+  // a project's voice and re-generating silently kept reusing the OLD
+  // voice's audio for every scene that happened to already have an mp3 on
+  // disk from a prior run, so the output never changed to match the newly
+  // selected voice. Clearing stale scene files when the voice signature
+  // changes makes the reuse optimization voice-aware.
+  const voiceSignature = `${effectiveTtsProvider}:${script.voice.name}:${script.voice.speed}`;
+  const voiceSignaturePath = join(voiceDir, ".voice-signature");
+  const previousSignature = existsSync(voiceSignaturePath) ? await readFile(voiceSignaturePath, "utf8") : null;
+  if (previousSignature !== voiceSignature) {
+    const staleFiles = (await readdir(voiceDir)).filter((f) => f.startsWith("scene-"));
+    await Promise.all(staleFiles.map((f) => rm(join(voiceDir, f), { force: true })));
+    await writeFile(voiceSignaturePath, voiceSignature, "utf8");
+  }
+
   let ttsDone = 0;
   const reportTts = () => {
     ttsDone += 1;
