@@ -1,5 +1,5 @@
 {
-  "version": "1.1.6",
+  "version": "1.1.7",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Giong Ngoc Huyen thanh giong mac dinh. Them che do chon 1 giong hoac 2 giong (hoi-dap) khi tao voice, sua loi tu dong lan 2 giong khac nhau. Sua loi upload video file lon tren ban may tinh. Them nut Request APP de lay du lieu moi tu web ma khong can dang nhap lai."
+  "notes": "Sua loi Piper (giong local) bi mat/nuot chu dau tien trong moi cau. Sua loi cau thoai co ngoac kep de bi loi giong. Giam loi console flash khi tao voice. Voice Library dang bang de xem, them chon du an ngay o trang Kich ban va Giong doc."
 }
