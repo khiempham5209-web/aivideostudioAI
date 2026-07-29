@@ -3,7 +3,7 @@
 ; Output: desktop\dist-installer\AI-Video-Studio-Setup.exe
 
 #define MyAppName "AI Video Studio"
-#define MyAppVersion "1.1.5"
+#define MyAppVersion "1.1.6"
 #define MyAppExeDesc "AI Video Studio (local)"
 
 [Setup]

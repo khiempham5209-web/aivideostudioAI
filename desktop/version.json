@@ -1,5 +1,5 @@
 {
-  "version": "1.1.5",
+  "version": "1.1.6",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Sua loi phu de burn-in bi phong to qua khong dung ty le, che het khung hinh. Video san pham gio dung anh that o ca canh mo dau va canh ket, khong chi canh dau."
+  "notes": "Giong Ngoc Huyen thanh giong mac dinh. Them che do chon 1 giong hoac 2 giong (hoi-dap) khi tao voice, sua loi tu dong lan 2 giong khac nhau. Sua loi upload video file lon tren ban may tinh. Them nut Request APP de lay du lieu moi tu web ma khong can dang nhap lai."
 }
