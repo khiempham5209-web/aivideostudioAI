@@ -45,7 +45,7 @@ export class EdgeTtsClient {
       resolve("scripts", "gtts-fallback.py"),
       inputPath,
       audioOutPath,
-    ], { timeout: EXEC_TIMEOUT_MS });
+    ], { timeout: EXEC_TIMEOUT_MS, windowsHide: true });
   }
 
   async generate(text: string, audioOutPath: string, srtOutPath?: string): Promise<void> {
@@ -74,7 +74,7 @@ export class EdgeTtsClient {
             inputPath,
             "--write-media",
             audioOutPath
-          ], { timeout: EXEC_TIMEOUT_MS });
+          ], { timeout: EXEC_TIMEOUT_MS, windowsHide: true });
 
           if (srtOutPath) {
             await writeFile(srtOutPath, "", "utf-8");

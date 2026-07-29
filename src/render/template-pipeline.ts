@@ -52,6 +52,16 @@ function srtText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Quote marks are never meant to be spoken, but leaving them in for TTS
+ *  input isn't just cosmetic — a line starting right at a quote character
+ *  (dialogue-style scenes like `"Bác mang cây đi đâu vậy ạ?"`) is where we
+ *  observed both Piper/espeak-ng synthesis failures AND clipped first
+ *  words, on both Piper and Edge. Strip double-quote variants before
+ *  synthesis only — subtitles/script.txt still show the real punctuation. */
+function textForTts(text: string): string {
+  return text.replace(/["“”„‟«»]/g, "").replace(/\s+/g, " ").trim();
+}
+
 async function listFootageFiles(dir: string): Promise<string[]> {
   if (!existsSync(dir)) return [];
   const entries = await readdir(dir, { withFileTypes: true });
@@ -170,7 +180,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
           return { id: scene.id, path: out, durationSec: dur };
         }
         log.info(`  TTS scene ${scene.id} (${scene.voiceText.length} chars)...`);
-        await ttsClientFor(scene).generate(scene.voiceText, out, srtOut);
+        await ttsClientFor(scene).generate(textForTts(scene.voiceText), out, srtOut);
         const dur = await getDurationSec(out);
         log.info(`  scene ${scene.id}: ${dur.toFixed(2)}s`);
         reportTts();

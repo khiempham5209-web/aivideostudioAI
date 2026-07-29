@@ -45,6 +45,8 @@ function main() {
   copy(join(ROOT, "desktop", "version.json"), join(STAGING, "desktop", "version.json"));
   copy(join(ROOT, "scripts", "launch-desktop.mjs"), join(STAGING, "scripts", "launch-desktop.mjs"));
   copy(join(ROOT, "scripts", "install-edge-tts.mjs"), join(STAGING, "scripts", "install-edge-tts.mjs"));
+  copy(join(ROOT, "scripts", "supertonic-synth.py"), join(STAGING, "scripts", "supertonic-synth.py"));
+  copy(join(ROOT, "scripts", "gtts-fallback.py"), join(STAGING, "scripts", "gtts-fallback.py"));
   copy(join(ROOT, "desktop", "hidden-launch.vbs"), join(STAGING, "hidden-launch.vbs"));
   copy(join(ROOT, "package.json"), join(STAGING, "package.json"));
   copy(join(ROOT, "package-lock.json"), join(STAGING, "package-lock.json"));

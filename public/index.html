@@ -442,6 +442,40 @@
         align-items: start;
       }
 
+      .voice-page-grid {
+        grid-template-columns: 460px 260px minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .voice-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      .voice-table th {
+        text-align: left;
+        padding: 8px 10px;
+        color: var(--muted, #94a3b8);
+        font-weight: 700;
+        border-bottom: 1px solid var(--line);
+        white-space: nowrap;
+      }
+
+      .voice-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        vertical-align: middle;
+      }
+
+      .voice-table tr.selected td {
+        background: rgba(124, 58, 237, 0.14);
+      }
+
+      .voice-table tr.not-ready td {
+        opacity: 0.55;
+      }
+
       label {
         display: block;
         margin: 0 0 7px;
@@ -962,6 +996,7 @@
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .workspace-grid,
+        .voice-page-grid,
         .dashboard-grid,
         .export-grid {
           grid-template-columns: 1fr;
@@ -1389,6 +1424,12 @@
             <div><h2>Kịch bản AI</h2><p class="muted">Tiêu đề, hook, Scene 1..N, sửa tay, regenerate, thêm/xóa cảnh.</p></div>
             <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="pasteTextButton" type="button">📋 Dán văn bản</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
           </div>
+          <div class="panel" style="margin-bottom:16px;">
+            <div class="panel-body field-stack">
+              <label for="scriptPageProjectSelect">Dự án đang thao tác</label>
+              <select id="scriptPageProjectSelect"><option value="">Chưa chọn dự án</option></select>
+            </div>
+          </div>
           <div class="modal-backdrop" id="pasteTextModal">
             <section class="modal">
               <div class="panel-head"><h3>Dán văn bản có sẵn</h3><button class="btn" id="closePasteTextButton" type="button">✕</button></div>
@@ -1409,6 +1450,12 @@
           <div class="page-head">
             <div><h2>Giọng đọc AI</h2><p class="muted">Chọn giọng Nam/Nữ, preview, tốc độ, pitch và âm lượng.</p></div>
           </div>
+          <div class="panel" style="margin-bottom:16px;">
+            <div class="panel-body field-stack">
+              <label for="voicePageProjectSelect">Dự án đang tạo voice</label>
+              <select id="voicePageProjectSelect"><option value="">Chưa chọn dự án</option></select>
+            </div>
+          </div>
           <div class="panel" id="approveContentPanel" style="display:none;margin-bottom:16px;">
             <div class="panel-head"><h3>Dự án từ hàng đợi Nội dung</h3></div>
             <div class="panel-body field-stack">
@@ -1416,19 +1463,7 @@
               <button class="btn primary" id="approveContentButton" type="button">✅ Duyệt kịch bản & Tạo Voice</button>
             </div>
           </div>
-          <div class="grid workspace-grid">
-            <div class="panel">
-              <div class="panel-head"><h3>Bộ lọc voice</h3><span class="pill" id="voiceTotal">0 preset</span></div>
-              <div class="panel-body field-stack">
-                <select id="genderFilter"><option value="all">Tất cả giới tính</option><option value="female">Nữ</option><option value="male">Nam</option></select>
-                <select id="regionFilter"><option value="all">Tất cả vùng miền</option><option value="north">Miền Bắc</option><option value="central">Miền Trung</option><option value="south">Miền Nam</option><option value="neutral">Trung tính</option></select>
-                <select id="toneFilter"><option value="all">Tất cả tông đọc</option><option value="story">Kể chuyện</option><option value="news">Tin tức</option><option value="warm">Ấm</option><option value="dramatic">Kịch tính</option><option value="calm">Trầm</option><option value="sales">Bán hàng</option></select>
-              </div>
-            </div>
-            <div class="panel">
-              <div class="panel-head"><h3>Voice Library</h3><span class="pill ok">Preview</span></div>
-              <div class="panel-body"><div class="voice-list" id="voiceList"></div></div>
-            </div>
+          <div class="grid voice-page-grid">
             <div class="panel">
               <div class="panel-head"><h3>Điều chỉnh giọng</h3></div>
               <div class="panel-body field-stack">
@@ -1447,6 +1482,32 @@
                 <div><label for="volume">Âm lượng</label><input id="volume" type="range" min="0" max="150" step="5" value="100" /></div>
                 <button class="btn" id="previewVoiceButton">Preview giọng đọc</button>
                 <audio id="voicePreviewPlayer" style="display:none;width:100%;margin-top:8px;" controls></audio>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>Bộ lọc voice</h3><span class="pill" id="voiceTotal">0 preset</span></div>
+              <div class="panel-body field-stack">
+                <select id="genderFilter"><option value="all">Tất cả giới tính</option><option value="female">Nữ</option><option value="male">Nam</option></select>
+                <select id="regionFilter"><option value="all">Tất cả vùng miền</option><option value="north">Miền Bắc</option><option value="central">Miền Trung</option><option value="south">Miền Nam</option><option value="neutral">Trung tính</option></select>
+                <select id="toneFilter"><option value="all">Tất cả tông đọc</option><option value="story">Kể chuyện</option><option value="news">Tin tức</option><option value="warm">Ấm</option><option value="dramatic">Kịch tính</option><option value="calm">Trầm</option><option value="sales">Bán hàng</option></select>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>Voice Library</h3><span class="pill ok" id="voiceTotal2">0 preset</span></div>
+              <div class="panel-body" style="overflow-x:auto;">
+                <table class="voice-table">
+                  <thead>
+                    <tr>
+                      <th>Giọng</th>
+                      <th>Giới tính</th>
+                      <th>Vùng miền</th>
+                      <th>Tông đọc</th>
+                      <th>Trạng thái</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="voiceList"></tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -2155,6 +2216,14 @@
           $("#exportProjectSelect").innerHTML = options;
           $("#exportProjectSelect").value = state.activeProjectId || "";
         }
+        if ($("#scriptPageProjectSelect")) {
+          $("#scriptPageProjectSelect").innerHTML = options;
+          $("#scriptPageProjectSelect").value = state.activeProjectId || "";
+        }
+        if ($("#voicePageProjectSelect")) {
+          $("#voicePageProjectSelect").innerHTML = options;
+          $("#voicePageProjectSelect").value = state.activeProjectId || "";
+        }
         const project = activeProject();
         if ($("#activeProjectBanner")) {
           $("#activeProjectBanner").innerHTML = project
@@ -2389,7 +2458,7 @@
         }
       }
 
-      function selectProject(project) {
+      function selectProject(project, options = {}) {
         state.activeProjectId = project.id;
         state.activeProject = project;
         state.activeJobId = project.latestJob ? project.latestJob.id : "";
@@ -2406,7 +2475,7 @@
         loadAssets(project.id).catch(showError);
         loadScenes(project.id).catch(showError);
         loadTimeline(project.id).catch(showError);
-        switchPage("script");
+        if (!options.skipPageSwitch) switchPage("script");
       }
 
       function updateApproveContentPanel() {
@@ -2423,6 +2492,7 @@
 
       function renderVoices() {
         $("#voiceTotal").textContent = `${state.voices.length} preset`;
+        if ($("#voiceTotal2")) $("#voiceTotal2").textContent = `${state.voices.length} preset`;
         $("#voiceName").innerHTML = "";
         if ($("#voiceName2")) $("#voiceName2").innerHTML = "";
         state.voices.forEach((v) => {
@@ -2439,12 +2509,20 @@
         });
         $("#voiceList").innerHTML = "";
         state.voices.filter(voiceMatches).forEach((v) => {
-          const item = document.createElement("button");
-          item.className = `voice ${v.id === state.selectedVoiceId ? "selected" : ""}`;
-          item.disabled = v.status !== "ready";
-          item.innerHTML = `<div class="voice-top"><strong>${v.label}</strong><span class="pill ${v.status === "ready" ? "ok" : "warn"}">${v.status === "ready" ? "Preview" : "Cần server"}</span></div><p class="tiny">${v.description || ""}</p><div><span class="pill">${label(v.gender)}</span> <span class="pill">${label(v.region)}</span> <span class="pill">${label(v.tone)}</span></div>`;
-          item.addEventListener("click", () => chooseVoice(v.id));
-          $("#voiceList").appendChild(item);
+          const row = document.createElement("tr");
+          row.className = `voice-row ${v.id === state.selectedVoiceId ? "selected" : ""} ${v.status !== "ready" ? "not-ready" : ""}`;
+          row.dataset.voiceId = v.id;
+          row.title = v.description || "";
+          row.innerHTML = `
+            <td><strong>${v.label}</strong></td>
+            <td>${label(v.gender)}</td>
+            <td>${label(v.region)}</td>
+            <td>${label(v.tone)}</td>
+            <td><span class="pill ${v.status === "ready" ? "ok" : "warn"}">${v.status === "ready" ? "Sẵn sàng" : "Cần server"}</span></td>
+            <td><button type="button" class="btn" ${v.status !== "ready" ? "disabled" : ""}>${v.id === state.selectedVoiceId ? "Đã chọn" : "Chọn"}</button></td>
+          `;
+          if (v.status === "ready") row.querySelector("button").addEventListener("click", () => chooseVoice(v.id));
+          $("#voiceList").appendChild(row);
         });
         chooseVoice(state.selectedVoiceId || state.voices.find((v) => v.status === "ready")?.id || "");
         if ($("#voiceName2")) chooseVoice2(state.selectedVoice2Id || state.voices.find((v) => v.status === "ready")?.id || "");
@@ -2455,7 +2533,12 @@
         const v = state.voices.find((voice) => voice.id === id);
         if ($("#voiceName").value !== id) $("#voiceName").value = id;
         $("#selectedVoiceMeta").textContent = v ? `${v.description || ""} | ${v.provider} | ${v.name}` : "Chưa chọn giọng đọc.";
-        $$(".voice").forEach((el) => el.classList.remove("selected"));
+        $$(".voice-row").forEach((row) => {
+          const isSelected = row.dataset.voiceId === id;
+          row.classList.toggle("selected", isSelected);
+          const button = row.querySelector("button");
+          if (button && !button.disabled) button.textContent = isSelected ? "Đã chọn" : "Chọn";
+        });
       }
 
       function chooseVoice2(id) {
@@ -4315,6 +4398,14 @@
           switchPage("export");
         }
       });
+      $("#scriptPageProjectSelect")?.addEventListener("change", () => {
+        const project = state.projects.find((p) => p.id === $("#scriptPageProjectSelect").value);
+        if (project) selectProject(project, { skipPageSwitch: true });
+      });
+      $("#voicePageProjectSelect")?.addEventListener("change", () => {
+        const project = state.projects.find((p) => p.id === $("#voicePageProjectSelect").value);
+        if (project) selectProject(project, { skipPageSwitch: true });
+      });
       $("#refreshProjectsButton").addEventListener("click", () => loadProjects().catch(showError));
       const NAV_STORAGE_KEY = "avs_nav_config_v1";
       // "advanced" pages are technical/support screens, not part of the golden
@@ -4609,20 +4700,34 @@
         const uploadKind = state.pendingUploadKind;
         $("#uploadButton").disabled = true;
         $("#uploadButton").textContent = "Đang upload... 0%";
-        toast(`Đang upload trực tiếp lên R2: ${file.name}...`);
+        // Direct-to-R2 upload only works from the real web domain — R2's
+        // bucket CORS policy is configured for that origin, so trying it
+        // from the desktop build's 127.0.0.1 origin always fails with a
+        // browser CORS error, even when R2 credentials ARE configured (they
+        // often are on desktop, just so it can *download* web-uploaded
+        // assets). Skip straight to the plain backend upload there instead.
+        const isLocalBuild = ["localhost", "127.0.0.1"].includes(location.hostname);
         try {
           let uploaded;
-          try {
-            uploaded = await uploadAssetDirectToR2(file, (percent) => {
-              $("#uploadButton").textContent = `Đang upload... ${percent}%`;
-            });
-          } catch (directError) {
-            if (!/R2 is not configured/i.test(directError?.error || "")) throw directError;
+          if (isLocalBuild) {
+            toast(`Đang upload: ${file.name}...`);
             const fd = new FormData();
             fd.append("file", file);
-            toast("R2 chưa cấu hình, tạm upload qua backend. File lớn có thể lỗi.");
-            $("#uploadButton").textContent = "Đang upload...";
             uploaded = await api(`/api/projects/${state.activeProjectId}/assets`, { method: "POST", body: fd });
+          } else {
+            toast(`Đang upload trực tiếp lên R2: ${file.name}...`);
+            try {
+              uploaded = await uploadAssetDirectToR2(file, (percent) => {
+                $("#uploadButton").textContent = `Đang upload... ${percent}%`;
+              });
+            } catch (directError) {
+              if (!/R2 is not configured/i.test(directError?.error || "")) throw directError;
+              const fd = new FormData();
+              fd.append("file", file);
+              toast("R2 chưa cấu hình, tạm upload qua backend. File lớn có thể lỗi.");
+              $("#uploadButton").textContent = "Đang upload...";
+              uploaded = await api(`/api/projects/${state.activeProjectId}/assets`, { method: "POST", body: fd });
+            }
           }
           $("#assetFile").value = "";
           await loadAssets(state.activeProjectId);
