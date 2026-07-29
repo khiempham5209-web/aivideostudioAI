@@ -28,6 +28,10 @@ export const TemplateScene = z.object({
   /** Short English keyword(s) for stock photo/video search (Pexels) when no
    *  footage/image is manually assigned to this scene — e.g. "beach sunset". */
   visualQuery: z.string().optional(),
+  /** Which of the project's up to 2 voices narrates this scene. Only
+   *  meaningful when `voice2` is set (dialogue/Q&A mode) — single-voice
+   *  projects leave every scene on "A". */
+  speaker: z.enum(["A", "B"]).default("A"),
 });
 export type TemplateSceneType = z.infer<typeof TemplateScene>;
 
@@ -49,6 +53,16 @@ export const TemplateScriptSchema = z.object({
     name: z.string().min(1).default("vi-VN-HoaiMyNeural"),
     speed: z.number().min(0.5).max(2.0).default(1),
   }),
+  /** Second voice for dialogue/Q&A-style scripts — scenes with speaker:"B"
+   *  use this instead of `voice`. Absent/null means single-voice mode. */
+  voice2: z
+    .object({
+      provider: z.enum(["omnivoice", "edge", "piper", "supertonic"]),
+      name: z.string().min(1),
+      speed: z.number().min(0.5).max(2.0).default(1),
+    })
+    .nullable()
+    .optional(),
   /** Output aspect for every scene (templates render a matching composition). */
   aspect: z.enum(["9:16", "16:9", "1:1"]).default("9:16"),
   // High ceiling, not a real target — the actual constraint for how many

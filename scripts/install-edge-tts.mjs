@@ -34,6 +34,14 @@ const CUSTOM_PIPER_VOICES = [
 ];
 const CUSTOM_PIPER_VOICES_BACKEND_URL = "https://aivideostudioaibackend.onrender.com";
 
+// Deliberate, narrow exception to the "Piper is desktop-only" rule below:
+// this is the app's default voice (see DEFAULT_VOICE_ID in voice-catalog.ts)
+// and must work on the web build too, not just desktop. Limited to exactly
+// one voice to keep the added memory/process risk on Render's free 512MB
+// tier as small as possible — do not grow this list without re-checking
+// Render memory headroom (see the free-tier OOM history for this service).
+const PRODUCTION_PIPER_VOICES = ["ngochuyen"];
+
 function quoteIfNeeded(value) {
   return typeof value === "string" && value.includes(" ") && !value.startsWith('"') ? `"${value}"` : value;
 }
@@ -79,15 +87,24 @@ function findPython() {
 }
 
 function installPiperVoices() {
-  // Piper is a desktop-app-only feature (local CPU voices for the installed
-  // .exe) — it has no reason to run during a Render deploy, and doing so
-  // there added real risk: pip-installing piper-tts plus downloading 3
-  // voice models (15-90MB each, from Hugging Face) inside the production
-  // build step, which can slow down or outright break a deploy that
-  // previously had no such network dependency. Skip it outright in that
-  // environment; the desktop build's own first-run setup handles this.
+  // Piper is mostly a desktop-app-only feature (local CPU voices for the
+  // installed .exe) — running the full setup during a Render deploy added
+  // real risk: pip-installing piper-tts plus downloading 3 voice models
+  // (15-90MB each, from Hugging Face) inside the production build step,
+  // which can slow down or outright break a deploy that previously had no
+  // such network dependency. Skip that part in that environment; the
+  // desktop build's own first-run setup handles it. We still need
+  // piper-tts itself installed on the server when PRODUCTION_PIPER_VOICES
+  // is non-empty (the default voice depends on it) — see downloadCustomPiperVoices.
   if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
-    console.log("Skipping Piper voice setup (server/production environment — desktop-only feature).");
+    if (PRODUCTION_PIPER_VOICES.length === 0) {
+      console.log("Skipping Piper voice setup (server/production environment — desktop-only feature).");
+      return;
+    }
+    console.log(`Server environment: installing piper-tts for production-enabled voice(s): ${PRODUCTION_PIPER_VOICES.join(", ")}`);
+    if (!run(pythonBin, ["-m", "pip", "install", "piper-tts"])) {
+      console.error("Failed to install piper-tts — the default voice will fall back to Edge TTS.");
+    }
     return;
   }
   console.log("Ensuring piper-tts is installed");
@@ -109,12 +126,15 @@ function installPiperVoices() {
 }
 
 async function downloadCustomPiperVoices() {
-  // Same server-only skip as installPiperVoices() — desktop-only feature.
-  if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
+  // Same server-only skip as installPiperVoices() — desktop-only feature,
+  // except for PRODUCTION_PIPER_VOICES which the web build also needs.
+  const isServerEnv = process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production";
+  const voicesToDownload = isServerEnv ? PRODUCTION_PIPER_VOICES : CUSTOM_PIPER_VOICES;
+  if (isServerEnv && voicesToDownload.length === 0) {
     console.log("Skipping custom Piper voice pack (server/production environment — desktop-only feature).");
     return;
   }
-  for (const voice of CUSTOM_PIPER_VOICES) {
+  for (const voice of voicesToDownload) {
     const modelPath = join(piperVoicesDir, `${voice}.onnx`);
     const configPath = join(piperVoicesDir, `${voice}.onnx.json`);
     if (existsSync(modelPath) && existsSync(configPath)) {

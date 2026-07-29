@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
@@ -49,6 +49,15 @@ export const PIPER_VOICES_DIR = resolve(".piper-voices");
 export function localPiperEspeakDataDir(): string | undefined {
   const win = resolve(".edge-tts-venv", "Lib", "site-packages", "piper", "espeak-ng-data");
   if (existsSync(win)) return win;
+  // Linux venvs (Render) use "lib/pythonX.Y/site-packages" instead of "Lib" —
+  // the minor version varies by build image, so find whichever exists.
+  const libDir = resolve(".edge-tts-venv", "lib");
+  if (existsSync(libDir)) {
+    for (const entry of readdirSync(libDir)) {
+      const candidate = resolve(libDir, entry, "site-packages", "piper", "espeak-ng-data");
+      if (existsSync(candidate)) return candidate;
+    }
+  }
   return undefined;
 }
 

@@ -119,6 +119,18 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
     voiceName: script.voice.name,
     speed: script.voice.speed,
   });
+  // Dialogue/Q&A mode: a second voice for scenes tagged speaker "B" (see
+  // template-script-schema.ts). Absent in single-voice projects, in which
+  // case every scene is speaker "A" and only ttsClient above is used.
+  const ttsClient2 = script.voice2
+    ? createTtsClient(cfg, {
+        provider: script.voice2.provider ?? cfg.ttsProvider,
+        voiceName: script.voice2.name,
+        speed: script.voice2.speed,
+      })
+    : null;
+  const ttsClientFor = (scene: TemplateScript["scenes"][number]) =>
+    scene.speaker === "B" && ttsClient2 ? ttsClient2 : ttsClient;
   const limit = pLimit(cfg.ttsConcurrency);
   const voiceDir = join(outputDir, "voice");
   await mkdir(voiceDir, { recursive: true });
@@ -131,7 +143,8 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   // disk from a prior run, so the output never changed to match the newly
   // selected voice. Clearing stale scene files when the voice signature
   // changes makes the reuse optimization voice-aware.
-  const voiceSignature = `${effectiveTtsProvider}:${script.voice.name}:${script.voice.speed}`;
+  const voice2Signature = script.voice2 ? `:${script.voice2.provider}:${script.voice2.name}:${script.voice2.speed}` : "";
+  const voiceSignature = `${effectiveTtsProvider}:chunked-v2:${script.voice.name}:${script.voice.speed}${voice2Signature}`;
   const voiceSignaturePath = join(voiceDir, ".voice-signature");
   const previousSignature = existsSync(voiceSignaturePath) ? await readFile(voiceSignaturePath, "utf8") : null;
   if (previousSignature !== voiceSignature) {
@@ -157,7 +170,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
           return { id: scene.id, path: out, durationSec: dur };
         }
         log.info(`  TTS scene ${scene.id} (${scene.voiceText.length} chars)...`);
-        await ttsClient.generate(scene.voiceText, out, srtOut);
+        await ttsClientFor(scene).generate(scene.voiceText, out, srtOut);
         const dur = await getDurationSec(out);
         log.info(`  scene ${scene.id}: ${dur.toFixed(2)}s`);
         reportTts();

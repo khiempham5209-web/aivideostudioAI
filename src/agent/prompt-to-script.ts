@@ -57,6 +57,12 @@ export interface GenerateScriptOptions {
   /** Where the affiliate video will be posted — only changes the CTA line's
    *  exact wording (plan section 7's rule engine). Ignored in "content" mode. */
   platform?: "tiktok_shop" | "shopee_aff" | "generic";
+  /** Second voice for dialogue/Q&A mode — providing both this and
+   *  secondVoiceName switches the script from single-narrator to an
+   *  alternating two-speaker Q&A format (see buildPrompt). Omit both for
+   *  the default single-voice behavior. */
+  secondVoiceProvider?: "edge" | "omnivoice" | "piper" | "supertonic";
+  secondVoiceName?: string;
 }
 
 export interface GeneratedScriptResult {
@@ -193,6 +199,7 @@ function buildPrompt(
   mode: "affiliate" | "content" = "content",
   platform: "tiktok_shop" | "shopee_aff" | "generic" = "generic",
   durationMode: "fixed" | "auto" = "fixed",
+  secondVoice?: { provider: "edge" | "omnivoice" | "piper" | "supertonic"; name: string },
 ): { text: string; minWords: number; maxWords: number } {
   // "Auto" only makes sense for content mode — affiliate always targets a
   // real, fixed ad length (60/90/120s), never "however long the topic needs".
@@ -277,11 +284,14 @@ Return ONLY valid JSON matching this exact structure:
     "source": { "url": "local://user-request", "domain": "local", "image": null },
     "channel": "${channel}"
   },
-  "voice": { "provider": "${voiceProvider}", "name": "${voiceName}", "speed": ${voiceSpeed} },
+  "voice": { "provider": "${voiceProvider}", "name": "${voiceName}", "speed": ${voiceSpeed} },${secondVoice ? `
+  "voice2": { "provider": "${secondVoice.provider}", "name": "${secondVoice.name}", "speed": ${voiceSpeed} },` : ""}
   "aspect": "9:16",
   "scenes": []
 }
-
+${secondVoice ? `
+DIALOGUE MODE (2 voices): this script is spoken by TWO people having a Q&A-style conversation, not one narrator. "voice" is speaker A, "voice2" is speaker B. Write it as an actual back-and-forth: speaker A asks/introduces, speaker B answers/reacts, and so on — not one person's monologue split in half. Every scene object MUST include a "speaker" field, either "A" or "B", matching who is talking in that scene's voiceText. Alternate speakers naturally as the conversation flows (a speaker can occasionally take two scenes in a row if the conversation genuinely calls for it, e.g. a longer answer), but the overall script must clearly read as a dialogue between two people, not a single voice with a label slapped on. The hook (first scene) and outro (last scene) still follow the usual hook/outro rules, just spoken by whichever speaker fits.
+` : ""}
 Scene rules:
 - Create ${minScenes} to ${maxScenes} scenes total${isAutoDuration ? " AT MOST" : ""}: first scene type "hook", last scene type "outro", the rest type "body".${isAutoDuration ? ` This is a ceiling, not a target — use as few of them as the topic genuinely needs (a trivial topic can be just hook + 1 body + outro = 3 scenes).` : ""}
 ${isAutoDuration
@@ -421,8 +431,11 @@ export async function generateScriptFromPrompt(
   const mode = options.mode ?? "content";
   const platform = options.platform ?? "generic";
   const durationMode = options.durationMode ?? "fixed";
+  const secondVoice = options.secondVoiceProvider && options.secondVoiceName
+    ? { provider: options.secondVoiceProvider, name: options.secondVoiceName }
+    : undefined;
 
-  const built = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts, mode, platform, durationMode);
+  const built = buildPrompt(prompt, channel, voiceProvider, voiceName, voiceSpeed, targetDurationSec, options.productFacts, mode, platform, durationMode, secondVoice);
 
   // Gemini 2.5 Flash occasionally drops a required field (seen: templateId
   // missing on every scene) on an otherwise-fine response — confirmed by
@@ -446,6 +459,17 @@ export async function generateScriptFromPrompt(
     }
   }
   if (!script) throw lastError;
+
+  // Force the authoritative voice selection rather than trusting the model's
+  // echo of it — it's asked to copy these fields verbatim into the JSON, but
+  // nothing should depend on that being exact. Scenes without a valid
+  // "speaker" (single-voice mode, or the model omitting it) default to "A"
+  // via the schema.
+  script.voice = { provider: voiceProvider, name: voiceName, speed: voiceSpeed };
+  script.voice2 = secondVoice ? { ...secondVoice, speed: voiceSpeed } : null;
+  if (!secondVoice) {
+    script.scenes = script.scenes.map((scene) => ({ ...scene, speaker: "A" }));
+  }
 
   // Affiliate mode is a short ad — a model that ignores the word-count
   // ceiling doesn't just run a bit long, it produces a 70s+ video where the

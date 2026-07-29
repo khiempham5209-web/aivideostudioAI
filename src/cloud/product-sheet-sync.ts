@@ -27,8 +27,8 @@ export interface SheetPushUpdate {
 }
 
 function config() {
-  const url = process.env.PRODUCT_SHEET_SYNC_URL;
-  const key = process.env.PRODUCT_SHEET_SECRET;
+  const url = process.env.PRODUCT_SHEET_SYNC_URL?.trim();
+  const key = process.env.PRODUCT_SHEET_SECRET?.trim();
   return { url, key };
 }
 

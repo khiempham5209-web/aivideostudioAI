@@ -18,6 +18,12 @@ export interface VoiceOption {
   description: string;
 }
 
+/** New projects and "create voice" flows fall back to this voice when the
+ *  caller doesn't pick one explicitly. Ngoc Huyen per user preference —
+ *  keep this in sync with the one Piper voice actually installed on the
+ *  server (see scripts/install-edge-tts.mjs's PRODUCTION_PIPER_VOICES). */
+export const DEFAULT_VOICE_ID = "piper-ngochuyen";
+
 export const VOICE_OPTIONS: VoiceOption[] = [
   {
     id: "edge-hoaimy-south-story",
@@ -696,7 +702,7 @@ export function getEffectiveVoiceOptions(): VoiceOption[] {
 
 export function findVoiceOption(idOrName?: string): VoiceOption {
   const options = getEffectiveVoiceOptions();
-  const fallback = options[0];
+  const fallback = options.find((voice) => voice.id === DEFAULT_VOICE_ID) ?? options[0];
   if (!idOrName) return fallback;
   return options.find((voice) => voice.id === idOrName || voice.name === idOrName) ?? fallback;
 }

@@ -28,6 +28,10 @@ export interface ProjectRecord {
   voice_id: string;
   voice_name: string;
   voice_speed: number;
+  /** Second voice for dialogue/Q&A-style scripts (see template-script-schema.ts's
+   *  `voice2`/scene `speaker`). Null means single-voice mode — the default. */
+  voice_2_id: string | null;
+  voice_2_name: string | null;
   aspect_ratio: string;
   target_duration_sec: number;
   /** "auto" means target_duration_sec is just a generous token-budget
@@ -186,6 +190,9 @@ export interface SceneRecord {
   /** AI-generated stock search keywords (2-4 English words) for this scene,
    *  from script generation — reused at render time for real Pexels matches. */
   visual_query: string | null;
+  /** Which of the project's up to 2 voices narrates this scene ("A" or "B") —
+   *  see ProjectRecord.voice_2_id. Null/"A" behaves the same as single-voice. */
+  speaker: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -266,6 +273,8 @@ db.exec(`
     voice_id TEXT NOT NULL,
     voice_name TEXT NOT NULL,
     voice_speed REAL NOT NULL,
+    voice_2_id TEXT,
+    voice_2_name TEXT,
     aspect_ratio TEXT NOT NULL DEFAULT '9:16',
     target_duration_sec INTEGER NOT NULL DEFAULT 120,
     duration_mode TEXT NOT NULL DEFAULT 'fixed',
@@ -367,6 +376,7 @@ db.exec(`
     source_end REAL,
     voice_duration_sec REAL,
     visual_query TEXT,
+    speaker TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -486,6 +496,9 @@ for (const statement of [
   "ALTER TABLE products ADD COLUMN fact_sheet_json TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_approved INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE scenes ADD COLUMN visual_query TEXT",
+  "ALTER TABLE projects ADD COLUMN voice_2_id TEXT",
+  "ALTER TABLE projects ADD COLUMN voice_2_name TEXT",
+  "ALTER TABLE scenes ADD COLUMN speaker TEXT",
 ]) {
   try {
     db.exec(statement);
@@ -586,6 +599,8 @@ async function initPostgresMirror() {
         voice_id TEXT NOT NULL,
         voice_name TEXT NOT NULL,
         voice_speed DOUBLE PRECISION NOT NULL,
+        voice_2_id TEXT,
+        voice_2_name TEXT,
         aspect_ratio TEXT NOT NULL DEFAULT '9:16',
         target_duration_sec INTEGER NOT NULL DEFAULT 120,
         duration_mode TEXT NOT NULL DEFAULT 'fixed',
@@ -693,6 +708,7 @@ async function initPostgresMirror() {
         source_end DOUBLE PRECISION,
         voice_duration_sec DOUBLE PRECISION,
         visual_query TEXT,
+        speaker TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -813,6 +829,9 @@ async function initPostgresMirror() {
     { label: "projects.review_status", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'` },
     { label: "projects.duration_mode", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS duration_mode TEXT NOT NULL DEFAULT 'fixed'` },
     { label: "projects.content_queue_row", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS content_queue_row INTEGER` },
+    { label: "projects.voice_2_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_2_id TEXT` },
+    { label: "projects.voice_2_name", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_2_name TEXT` },
+    { label: "scenes.speaker", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS speaker TEXT` },
     { label: "products.tiktok_product_id", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS tiktok_product_id TEXT` },
     { label: "products.media_urls", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS media_urls TEXT` },
     { label: "products.fact_sheet_json", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_json TEXT` },
@@ -910,7 +929,7 @@ function mirrorUpsert(table: string, row: DbRow, conflictKey: string) {
   );
 }
 
-async function loadPostgresIntoSqlite() {
+export async function loadPostgresIntoSqlite() {
   const pool = pgPool;
   if (!pool) return;
   await initPostgresMirror();
@@ -993,6 +1012,8 @@ export function createProject(data: {
   voiceId: string;
   voiceName: string;
   voiceSpeed: number;
+  voice2Id?: string | null;
+  voice2Name?: string | null;
   aspectRatio?: string;
   targetDurationSec?: number;
   durationMode?: "fixed" | "auto";
@@ -1011,6 +1032,8 @@ export function createProject(data: {
     voice_id: data.voiceId,
     voice_name: data.voiceName,
     voice_speed: data.voiceSpeed,
+    voice_2_id: data.voice2Id ?? null,
+    voice_2_name: data.voice2Name ?? null,
     aspect_ratio: data.aspectRatio && ["16:9", "9:16", "1:1"].includes(data.aspectRatio) ? data.aspectRatio : "9:16",
     target_duration_sec: data.targetDurationSec && data.targetDurationSec > 0 ? Math.round(data.targetDurationSec) : 120,
     duration_mode: data.durationMode === "auto" ? "auto" : "fixed",
@@ -1028,8 +1051,8 @@ export function createProject(data: {
   };
   db.prepare(`
     INSERT INTO projects
-    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, aspect_ratio, target_duration_sec, duration_mode, output_path, error_message, product_id, content_queue_row, mode, platform, review_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, title, topic, status, voice_id, voice_name, voice_speed, voice_2_id, voice_2_name, aspect_ratio, target_duration_sec, duration_mode, output_path, error_message, product_id, content_queue_row, mode, platform, review_status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     project.id,
     project.owner_email,
@@ -1039,6 +1062,8 @@ export function createProject(data: {
     project.voice_id,
     project.voice_name,
     project.voice_speed,
+    project.voice_2_id,
+    project.voice_2_name,
     project.aspect_ratio,
     project.target_duration_sec,
     project.duration_mode,
@@ -1390,15 +1415,15 @@ export function deleteAsset(assetId: string): AssetRecord | undefined {
 
 export function replaceProjectScenes(
   projectId: string,
-  scenes: Array<{ id: string; type: string; voiceText: string; templateId: string; visualQuery?: string }>,
+  scenes: Array<{ id: string; type: string; voiceText: string; templateId: string; visualQuery?: string; speaker?: string }>,
 ): SceneRecord[] {
   const created = nowIso();
   db.prepare("DELETE FROM scenes WHERE project_id = ?").run(projectId);
   void pgExec("DELETE FROM scenes WHERE project_id = $1", [projectId]);
   const insert = db.prepare(`
     INSERT INTO scenes
-    (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, visual_query, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, visual_query, speaker, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const rows = scenes.map((scene, index) => {
     const row: SceneRecord = {
@@ -1414,6 +1439,7 @@ export function replaceProjectScenes(
       source_end: null,
       voice_duration_sec: null,
       visual_query: scene.visualQuery ?? null,
+      speaker: scene.speaker ?? "A",
       created_at: created,
       updated_at: created,
     };
@@ -1429,6 +1455,7 @@ export function replaceProjectScenes(
       row.source_start,
       row.source_end,
       row.visual_query,
+      row.speaker,
       row.created_at,
       row.updated_at,
     );
@@ -1454,13 +1481,14 @@ export function addProjectScene(projectId: string, data: { voiceText: string; sc
     source_end: null,
     voice_duration_sec: null,
     visual_query: null,
+    speaker: "A",
     created_at: created,
     updated_at: created,
   };
   db.prepare(`
     INSERT INTO scenes
-    (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, project_id, scene_key, scene_order, scene_type, voice_text, template_id, source_asset_id, source_start, source_end, speaker, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.id,
     row.project_id,
@@ -1472,6 +1500,7 @@ export function addProjectScene(projectId: string, data: { voiceText: string; sc
     row.source_asset_id,
     row.source_start,
     row.source_end,
+    row.speaker,
     row.created_at,
     row.updated_at,
   );
@@ -1788,12 +1817,18 @@ export function deleteClipsForAsset(assetId: string) {
   void pgExec("DELETE FROM timeline_clips WHERE source_asset_id = $1", [assetId]);
 }
 
-export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "aspect_ratio" | "target_duration_sec" | "output_path" | "error_message">>) {
+export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "voice_2_id" | "voice_2_name" | "aspect_ratio" | "target_duration_sec" | "output_path" | "error_message">>) {
   const current = getProject(projectId);
   if (!current) return;
+  // voice_2_id/voice_2_name use "key present in data" rather than "??" so a
+  // caller can explicitly pass null to clear them (switching a project back
+  // to single-voice mode) — "??" would treat an explicit null the same as
+  // "not provided" and silently keep the old value instead of clearing it.
+  const voice2Id = "voice_2_id" in data ? data.voice_2_id ?? null : current.voice_2_id;
+  const voice2Name = "voice_2_name" in data ? data.voice_2_name ?? null : current.voice_2_name;
   db.prepare(`
     UPDATE projects
-    SET title = ?, topic = ?, status = ?, voice_id = ?, voice_name = ?, voice_speed = ?, aspect_ratio = ?, target_duration_sec = ?, output_path = ?, error_message = ?, updated_at = ?
+    SET title = ?, topic = ?, status = ?, voice_id = ?, voice_name = ?, voice_speed = ?, voice_2_id = ?, voice_2_name = ?, aspect_ratio = ?, target_duration_sec = ?, output_path = ?, error_message = ?, updated_at = ?
     WHERE id = ?
   `).run(
     data.title ?? current.title,
@@ -1802,6 +1837,8 @@ export function updateProject(projectId: string, data: Partial<Pick<ProjectRecor
     data.voice_id ?? current.voice_id,
     data.voice_name ?? current.voice_name,
     data.voice_speed ?? current.voice_speed,
+    voice2Id,
+    voice2Name,
     data.aspect_ratio ?? current.aspect_ratio,
     data.target_duration_sec ?? current.target_duration_sec,
     data.output_path ?? current.output_path,

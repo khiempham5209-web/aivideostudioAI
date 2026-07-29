@@ -9,7 +9,7 @@ import dotenv from "dotenv";
 import { generateScriptFromPrompt, generateProductFactSheet, generateProductConcepts, type ProductFactSheet } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
-import { findVoiceOption, getEffectiveVoiceOptions, VOICE_OPTIONS } from "./tts/voice-catalog.js";
+import { DEFAULT_VOICE_ID, findVoiceOption, getEffectiveVoiceOptions, VOICE_OPTIONS } from "./tts/voice-catalog.js";
 import { createTtsClient } from "./tts/tts-client.js";
 import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
@@ -29,6 +29,7 @@ import {
 } from "./cloud/product-sheet-sync.js";
 import {
   createProject,
+  loadPostgresIntoSqlite,
   createSession,
   createDeviceToken,
   getDeviceTokenEmail,
@@ -91,7 +92,6 @@ dotenv.config({ path: ".env.local" });
 
 const PORT = Number(process.env.API_PORT ?? process.env.PORT ?? 8787);
 const MAX_BODY_BYTES = 1024 * 1024;
-const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 const PUBLIC_DIR = resolve("public");
 const STORAGE_DIR = resolve("storage", "projects");
 const OUTPUT_DIR = resolve("output");
@@ -103,6 +103,13 @@ const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL?.replace(/\/+$/, "") ?? "";
 const STORAGE_QUOTA_BYTES = Number(process.env.STORAGE_QUOTA_BYTES ?? 50 * 1024 * 1024 * 1024);
 const APP_ENV = process.env.APP_ENV ?? process.env.NODE_ENV ?? "development";
 const IS_PRODUCTION = APP_ENV === "production";
+// 512MB matches Vercel/Render's own request-body ceiling, so the web build
+// still needs it (and pushes larger files through R2 direct-upload instead —
+// see handleCreateDirectAssetUpload). The desktop build has no such proxy in
+// front of it and the file is already sitting on local disk, so there's no
+// reason to cap a plain local re-save at the same size — use a much larger
+// ceiling there just as a sanity guard against a runaway request.
+const MAX_UPLOAD_BYTES = IS_PRODUCTION ? 512 * 1024 * 1024 : 20 * 1024 * 1024 * 1024;
 // Fixed, not env-driven: this is always where the real deployed backend
 // lives — the desktop build's self-update check compares against this,
 // not against APP_PUBLIC_URL (which is self-referential per environment).
@@ -150,6 +157,8 @@ interface CreateVideoBody {
   voiceId?: string;
   voiceName?: string;
   voiceSpeed?: number;
+  /** Second voice for dialogue/Q&A mode — omit/empty for single-voice (default). */
+  voice2Id?: string;
   folderName?: string;
   ratio?: string;
   durationSec?: number;
@@ -938,8 +947,9 @@ async function generateProjectScript(project: NonNullable<ReturnType<typeof getP
     // treat any product-linked project as affiliate regardless of the stored
     // default, so old projects don't silently lose affiliate script rules.
     const mode = project.mode === "affiliate" || project.product_id ? "affiliate" : "content";
+    const secondVoice = project.voice_2_id ? findVoiceOption(project.voice_2_id) : undefined;
     const generated = await generateScriptFromPrompt(project.topic, {
-      voiceProvider: "edge",
+      voiceProvider: findVoiceOption(project.voice_id).provider,
       voiceName: project.voice_name,
       voiceSpeed: project.voice_speed,
       targetDurationSec: project.target_duration_sec,
@@ -948,6 +958,8 @@ async function generateProjectScript(project: NonNullable<ReturnType<typeof getP
       mode,
       platform: project.platform,
       productFacts: product ? buildProductFacts(product) : undefined,
+      secondVoiceProvider: secondVoice?.provider,
+      secondVoiceName: secondVoice?.runtimeVoiceName,
     });
     return { ...generated, usedFallback: false as const, fallbackReason: null as string | null };
   } catch (error) {
@@ -989,8 +1001,10 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       // well for Pexels search but the scene can still be given an
       // image/video assigned by hand instead.
       visualQuery: scene.visual_query || scene.voice_text.slice(0, 80),
+      speaker: scene.speaker === "B" ? "B" : "A",
     };
   });
+  const voice2Option = project.voice_2_id ? findVoiceOption(project.voice_2_id) : undefined;
   const script = {
     version: "1.0",
     renderer: "hyperframes",
@@ -1004,6 +1018,9 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       name: project.voice_name || "vi-VN-HoaiMyNeural",
       speed: project.voice_speed || 1,
     },
+    voice2: voice2Option
+      ? { provider: voice2Option.provider, name: voice2Option.runtimeVoiceName, speed: project.voice_speed || 1 }
+      : null,
     aspect: project.aspect_ratio || "9:16",
     scenes: scriptScenes,
   };
@@ -1341,6 +1358,15 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     });
     return;
   }
+  const secondVoice = typeof body.voice2Id === "string" && body.voice2Id.trim() ? findVoiceOption(body.voice2Id.trim()) : undefined;
+  if (secondVoice && secondVoice.status !== "ready") {
+    sendJson(res, 400, {
+      error: "Second voice preset is not ready",
+      voice: secondVoice,
+      nextStep: "Enable an OmniVoice / voice-clone API before using this preset.",
+    });
+    return;
+  }
   const ratio = typeof body.ratio === "string" && ["16:9", "9:16", "1:1"].includes(body.ratio) ? body.ratio : undefined;
   const durationSec = Number(body.durationSec);
   let productId: string | undefined;
@@ -1362,6 +1388,8 @@ async function handleCreateProject(req: IncomingMessage, res: ServerResponse) {
     voiceId: selectedVoice.id,
     voiceName: selectedVoice.runtimeVoiceName,
     voiceSpeed: body.voiceSpeed ?? 1,
+    voice2Id: secondVoice?.id ?? null,
+    voice2Name: secondVoice?.runtimeVoiceName ?? null,
     aspectRatio: ratio,
     targetDurationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : undefined,
     durationMode,
@@ -2001,6 +2029,8 @@ function buildDesktopConfigPayload(user: { email: string; name: string; picture:
     ttsSpeed: process.env.TTS_SPEED ?? "",
     edgeTtsMode: process.env.EDGE_TTS_MODE ?? "edge-first",
     channelName: process.env.CHANNEL_NAME ?? "",
+    productSheetSyncUrl: process.env.PRODUCT_SHEET_SYNC_URL ?? "",
+    productSheetSecret: process.env.PRODUCT_SHEET_SECRET ?? "",
     pexelsApiKey: process.env.PEXELS_API_KEY ?? "",
     // Needed so the desktop instance can actually fetch media that was
     // uploaded/created via the web app (stored in R2, not on this machine) —
@@ -2080,6 +2110,8 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       `TTS_VOICE_NAME=${str("ttsVoiceName")}`,
       `TTS_SPEED=${str("ttsSpeed")}`,
       `CHANNEL_NAME=${str("channelName")}`,
+      `PRODUCT_SHEET_SYNC_URL=${str("productSheetSyncUrl")}`,
+      `PRODUCT_SHEET_SECRET=${str("productSheetSecret")}`,
       `R2_ACCOUNT_ID=${str("r2AccountId")}`,
       `R2_ACCESS_KEY_ID=${str("r2AccessKeyId")}`,
       `R2_SECRET_ACCESS_KEY=${str("r2SecretAccessKey")}`,
@@ -2105,6 +2137,26 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       spawn(process.execPath, [distEntry], { cwd: resolve("."), detached: true, stdio: "ignore", windowsHide: true }).unref();
       process.exit(0);
     }, 1000);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, 500, { error: message });
+  }
+}
+
+/** Local-desktop-only: pulls the latest data down from the Postgres mirror
+ *  into the local SQLite DB on demand (projects created on the web, etc.)
+ *  without touching .env.local or restarting the process — unlike
+ *  handleDesktopReceiveConfig, no config/account actually changed here, so
+ *  a full reconnect handshake + restart was never actually necessary just
+ *  to see new data appear. */
+async function handleDesktopRefreshData(req: IncomingMessage, res: ServerResponse) {
+  if (IS_PRODUCTION) {
+    sendJson(res, 403, { error: "Only available on the local desktop build" });
+    return;
+  }
+  try {
+    await loadPostgresIntoSqlite();
+    sendJson(res, 200, { ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     sendJson(res, 500, { error: message });
@@ -2138,6 +2190,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     if (req.method === "GET" && url.pathname === "/api/desktop/sync-config") {
       const token = url.searchParams.get("token") ?? "";
       await handleDesktopSyncConfig(req, res, token);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/desktop/refresh-data") {
+      await handleDesktopRefreshData(req, res);
       return;
     }
 
@@ -2216,9 +2273,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === "GET" && url.pathname === "/api/voices") {
       const effectiveVoices = getEffectiveVoiceOptions();
+      const preferredDefault = effectiveVoices.find((voice) => voice.id === DEFAULT_VOICE_ID && voice.status === "ready");
       sendJson(res, 200, {
         voices: effectiveVoices,
-        defaultVoice: effectiveVoices[0].id,
+        defaultVoice: (preferredDefault ?? effectiveVoices[0]).id,
         defaultSpeed: 1,
         readyProviders: ["edge"],
       });
@@ -2683,11 +2741,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const selectedVoice = typeof (body as { voiceId?: unknown }).voiceId === "string"
         ? findVoiceOption((body as { voiceId: string }).voiceId)
         : undefined;
+      // "voice2Id" present (even as "") means the caller is deliberately
+      // setting/clearing the second voice — "" clears it back to single-voice
+      // mode. Absent means "leave whatever this project already has alone".
+      const rawVoice2Id = (body as { voice2Id?: unknown }).voice2Id;
+      const voice2Provided = typeof rawVoice2Id === "string";
+      const secondVoice = voice2Provided && rawVoice2Id.trim() ? findVoiceOption(rawVoice2Id.trim()) : undefined;
       const ratio = typeof (body as { ratio?: unknown }).ratio === "string" && ["16:9", "9:16", "1:1"].includes((body as { ratio: string }).ratio)
         ? (body as { ratio: string }).ratio
         : undefined;
       const durationSecRaw = Number((body as { durationSec?: unknown }).durationSec);
-      updateProject(project.id, {
+      const updatePayload: Parameters<typeof updateProject>[1] = {
         title: typeof (body as { title?: unknown }).title === "string" ? (body as { title: string }).title.trim() : undefined,
         topic: typeof (body as { topic?: unknown }).topic === "string" ? (body as { topic: string }).topic.trim() : undefined,
         voice_id: selectedVoice?.status === "ready" ? selectedVoice.id : undefined,
@@ -2695,7 +2759,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         voice_speed: typeof (body as { voiceSpeed?: unknown }).voiceSpeed === "number" ? (body as { voiceSpeed: number }).voiceSpeed : undefined,
         aspect_ratio: ratio,
         target_duration_sec: Number.isFinite(durationSecRaw) && durationSecRaw > 0 ? Math.round(durationSecRaw) : undefined,
-      });
+      };
+      if (voice2Provided && (!rawVoice2Id.trim() || secondVoice?.status === "ready")) {
+        updatePayload.voice_2_id = secondVoice?.id ?? null;
+        updatePayload.voice_2_name = secondVoice?.runtimeVoiceName ?? null;
+      }
+      updateProject(project.id, updatePayload);
       sendJson(res, 200, { ok: true, project: getProject(project.id) });
       return;
     }

@@ -5,6 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FFMPEG_BIN, PIPER_PYTHON, PIPER_VOICES_DIR, localPiperEspeakDataDir } from "../utils/binaries.js";
 import { EdgeTtsClient } from "./edge-client.js";
+import { VOICE_OPTIONS } from "./voice-catalog.js";
+
+/** Edge TTS fallback voice, matched by gender so a mid-render Piper failure
+ *  doesn't swap in a voice of the wrong gender for the rest of the file —
+ *  that mismatch was previously showing up as "the video randomly has 2
+ *  different voices". */
+function edgeFallbackVoiceFor(piperVoiceId: string): string {
+  const gender = VOICE_OPTIONS.find((v) => v.provider === "piper" && v.name === piperVoiceId)?.gender;
+  return gender === "male" ? "vi-VN-NamMinhNeural" : "vi-VN-HoaiMyNeural";
+}
 
 export interface PiperOpts {
   /** Piper voice id, e.g. "vi_VN-vivos-x_low" — matches the .onnx filename in PIPER_VOICES_DIR. */
@@ -70,6 +80,48 @@ function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv
   });
 }
 
+function splitForPiper(text: string): string[] {
+  const normalized = text
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return [];
+
+  const sentences = normalized.match(/[^.!?。！？\n]+[.!?。！？]?/g) ?? [normalized];
+  const chunks: string[] = [];
+  for (const sentence of sentences.map((s) => s.trim()).filter(Boolean)) {
+    if (sentence.length <= 180) {
+      chunks.push(sentence);
+      continue;
+    }
+
+    let current = "";
+    for (const part of sentence.split(/([,;:，；：])/)) {
+      const next = `${current}${part}`.trim();
+      if (current && next.length > 180) {
+        chunks.push(current.trim());
+        current = part.trim();
+      } else {
+        current = next;
+      }
+    }
+    if (current) chunks.push(current.trim());
+  }
+  return chunks;
+}
+
+async function concatWavs(inputPaths: string[], outPath: string): Promise<void> {
+  if (inputPaths.length === 1) return;
+  const listPath = `${outPath}.list.txt`;
+  const escapeForConcatList = (p: string) => p.replace(/'/g, "'\\''");
+  await writeFile(listPath, inputPaths.map((p) => `file '${escapeForConcatList(p)}'`).join("\n"), "utf-8");
+  try {
+    await run(FFMPEG_BIN, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outPath]);
+  } finally {
+    await rm(listPath, { force: true });
+  }
+}
+
 export class PiperClient {
   private voiceId: string;
 
@@ -83,6 +135,7 @@ export class PiperClient {
       throw new Error(`Piper voice model not found: ${modelPath} (run npm run postinstall to download it)`);
     }
 
+    await writeFile(`${audioOutPath}.txt`, text.normalize("NFC"), "utf-8");
     const wavPath = `${audioOutPath}.piper.wav`;
     const espeakDataDir = ensureEspeakDataDir();
     const env: NodeJS.ProcessEnv = { ...process.env };
@@ -97,7 +150,19 @@ export class PiperClient {
     env.PYTHONIOENCODING = "utf-8";
 
     try {
-      await run(PIPER_PYTHON, ["-m", "piper", "--model", modelPath, "--output_file", wavPath], { env, stdin: text });
+      const chunks = splitForPiper(text);
+      if (!chunks.length) throw new Error("No text provided for Piper TTS");
+
+      if (chunks.length === 1) {
+        await run(PIPER_PYTHON, ["-m", "piper", "--model", modelPath, "--output_file", wavPath], { env, stdin: chunks[0] });
+      } else {
+        const wavParts = chunks.map((_, index) => `${audioOutPath}.piper.part-${index}.wav`);
+        for (let index = 0; index < chunks.length; index++) {
+          await run(PIPER_PYTHON, ["-m", "piper", "--model", modelPath, "--output_file", wavParts[index]], { env, stdin: chunks[index] });
+        }
+        await concatWavs(wavParts, wavPath);
+        await Promise.all(wavParts.map((part) => rm(part, { force: true })));
+      }
       await run(FFMPEG_BIN, ["-y", "-i", wavPath, "-codec:a", "libmp3lame", "-qscale:a", "4", audioOutPath]);
       await rm(wavPath, { force: true });
     } catch (error) {
@@ -106,9 +171,10 @@ export class PiperClient {
       // PYTHONIOENCODING mismatch above, now fixed at the source. This
       // fallback stays as a safety net for any other unexpected failure so
       // one bad scene doesn't kill the whole render, not as the primary fix.
-      console.warn(`Piper TTS failed for this text, falling back to Edge TTS: ${error instanceof Error ? error.message.split("\n")[0] : error}`);
+      const fallbackVoice = edgeFallbackVoiceFor(this.voiceId);
+      console.warn(`Piper TTS failed for this text, falling back to Edge TTS (${fallbackVoice}): ${error instanceof Error ? error.message.split("\n")[0] : error}`);
       await rm(wavPath, { force: true });
-      const fallback = new EdgeTtsClient({ voice: "vi-VN-HoaiMyNeural" });
+      const fallback = new EdgeTtsClient({ voice: fallbackVoice });
       await fallback.generate(text, audioOutPath, srtOutPath);
       return;
     }

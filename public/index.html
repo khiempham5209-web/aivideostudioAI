@@ -1260,15 +1260,16 @@
               <button class="btn" id="profileButton" type="button" title="Tài khoản">👤</button>
               <div id="profileDropdown" style="display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:200px;background:var(--panel,#111722);border:1px solid rgba(148,163,184,.25);border-radius:10px;padding:8px;z-index:60;box-shadow:0 20px 50px rgba(0,0,0,.4);">
                 <div id="userButton" class="tiny" data-page="account" title="Xem Tài khoản & gói" style="padding:8px;margin-bottom:8px;border-bottom:1px solid rgba(148,163,184,.25);text-align:center;font-weight:700;color:var(--text);cursor:pointer;border-radius:6px;">Chưa đăng nhập</div>
-                <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;">Cài đặt AI/API</button>
+                <button class="btn" data-page="ai-settings" style="width:100%;margin-bottom:6px;text-align:left;">Cài đặt AI/API</button>
                 <div style="margin:2px 0 6px;padding-top:6px;border-top:1px solid rgba(148,163,184,.25);">
                   <div class="tiny" style="padding:2px 8px 6px;color:var(--muted,#94a3b8);font-weight:700;">Công cụ nâng cao</div>
                   <div id="advancedToolsNav" style="display:flex;flex-direction:column;gap:4px;"></div>
                 </div>
-                <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;">Tùy chỉnh menu</button>
-                <button class="btn" id="desktopDownloadButton" type="button" style="width:100%;margin-bottom:6px;display:none;">⬇️ Tải app cho Windows</button>
-                <button class="btn" id="desktopResyncButton" type="button" style="width:100%;margin-bottom:6px;display:none;">🔄 Đồng bộ lại tài khoản web</button>
-                <button class="btn" id="logoutButton" style="width:100%;">Đăng xuất</button>
+                <button class="btn" id="openNavCustomizeButton" type="button" style="width:100%;margin-bottom:6px;text-align:left;">Tùy chỉnh menu</button>
+                <button class="btn" id="desktopDownloadButton" type="button" style="width:100%;margin-bottom:6px;display:none;text-align:left;">⬇️ Tải app cho Windows</button>
+                <button class="btn" id="desktopRequestAppButton" type="button" style="width:100%;margin-bottom:6px;display:none;text-align:left;" title="Tải dữ liệu mới nhất từ web (dự án, sản phẩm...) mà không cần đăng nhập/kết nối lại">🔁 Request APP (lấy dữ liệu mới nhất)</button>
+                <button class="btn" id="desktopResyncButton" type="button" style="width:100%;margin-bottom:6px;display:none;text-align:left;" title="Chỉ dùng khi đổi tài khoản hoặc cấu hình API key — không cần cho việc lấy dự án mới">🔄 Đồng bộ lại tài khoản web</button>
+                <button class="btn" id="logoutButton" style="width:100%;text-align:left;">Đăng xuất</button>
               </div>
             </div>
           </div>
@@ -1432,6 +1433,15 @@
               <div class="panel-head"><h3>Điều chỉnh giọng</h3></div>
               <div class="panel-body field-stack">
                 <div><label for="voiceName">Giọng đang chọn</label><select id="voiceName"></select><p class="tiny" id="selectedVoiceMeta" style="margin-top:8px;"></p></div>
+                <div>
+                  <label for="voiceMode">Số giọng dùng trong voice</label>
+                  <select id="voiceMode">
+                    <option value="1">1 giọng (dùng xuyên suốt)</option>
+                    <option value="2">2 giọng (hỏi - đáp / đối thoại)</option>
+                  </select>
+                  <p class="tiny">Chọn "2 giọng" khi kịch bản là dạng hỏi-đáp/đối thoại giữa 2 người — AI sẽ tự chia lời thoại cho từng giọng.</p>
+                </div>
+                <div id="voiceName2Wrap" style="display:none;"><label for="voiceName2">Giọng thứ 2 (người trả lời)</label><select id="voiceName2"></select></div>
                 <div><label for="speed">Tốc độ</label><input id="speed" type="range" min="0.5" max="2" step="0.05" value="1" /></div>
                 <div><label for="pitch">Pitch</label><input id="pitch" type="range" min="-12" max="12" step="1" value="0" /></div>
                 <div><label for="volume">Âm lượng</label><input id="volume" type="range" min="0" max="150" step="5" value="100" /></div>
@@ -1672,7 +1682,11 @@
     </div>
 
     <script>
-      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [], assetCategory: "all", selectedAssetId: "", previewFit: "contain" };
+      const state = { projects: [], voices: [], assets: [], activeProjectId: "", activeJobId: "", currentJob: null, selectedVoiceId: "", voiceMode: "1", selectedVoice2Id: "", pollTimer: 0, user: null, stats: null, settings: null, scenes: [], editingSceneId: "", editingSceneMode: "add", selectedTimelineSceneId: "", selectedTimelineAssetId: "", lastVideoPath: "", lastAudioPath: "", saveDirectoryHandle: null, pendingUploadKind: "", timelineTracks: [], timelineClips: [], selectedClipId: "", timelineZoom: 100, timelinePlayhead: 0, voicePreviewUrl: "", jobs: [], assetCategory: "all", selectedAssetId: "", previewFit: "contain" };
+      // "1 giọng" mode omits voice2Id entirely (single-voice, unchanged from before this feature existed).
+      function activeVoice2Id() {
+        return state.voiceMode === "2" ? state.selectedVoice2Id || "" : "";
+      }
       const ASPECT_CSS = { "16:9": "16/9", "9:16": "9/16", "1:1": "1/1" };
       const ASPECT_PX = { "16:9": "1920×1080", "9:16": "1080×1920", "1:1": "1080×1080" };
       const $ = (s) => document.querySelector(s);
@@ -1826,6 +1840,7 @@
         if (page === "ai-settings") loadSettingsStatus().catch(showError);
         if (page === "music") renderMusicLibrary();
         if (page === "assets") renderAssetLibrary();
+        if (page === "voice") refreshVoicePageStatus().catch(showError);
         if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
         if (page === "products") { loadProducts().catch(showError); loadContentQueue().catch(() => {}); }
         if (page === "create") loadProducts().catch(showError);
@@ -2011,6 +2026,7 @@
                 productId: product.id,
                 mode: "affiliate",
                 voiceId: state.selectedVoiceId,
+                voice2Id: activeVoice2Id(),
                 voiceSpeed: Number($("#speed")?.value) || 1,
                 ratio: "9:16",
                 durationSec: activeDurationSec(),
@@ -2408,12 +2424,18 @@
       function renderVoices() {
         $("#voiceTotal").textContent = `${state.voices.length} preset`;
         $("#voiceName").innerHTML = "";
+        if ($("#voiceName2")) $("#voiceName2").innerHTML = "";
         state.voices.forEach((v) => {
+          const label_ = `${v.label} - ${label(v.gender)} - ${label(v.region)} - ${label(v.tone)}`;
           const opt = document.createElement("option");
           opt.value = v.id;
           opt.disabled = v.status !== "ready";
-          opt.textContent = `${v.label} - ${label(v.gender)} - ${label(v.region)} - ${label(v.tone)}`;
+          opt.textContent = label_;
           $("#voiceName").appendChild(opt);
+          if ($("#voiceName2")) {
+            const opt2 = opt.cloneNode(true);
+            $("#voiceName2").appendChild(opt2);
+          }
         });
         $("#voiceList").innerHTML = "";
         state.voices.filter(voiceMatches).forEach((v) => {
@@ -2425,6 +2447,7 @@
           $("#voiceList").appendChild(item);
         });
         chooseVoice(state.selectedVoiceId || state.voices.find((v) => v.status === "ready")?.id || "");
+        if ($("#voiceName2")) chooseVoice2(state.selectedVoice2Id || state.voices.find((v) => v.status === "ready")?.id || "");
       }
 
       function chooseVoice(id) {
@@ -2433,6 +2456,11 @@
         if ($("#voiceName").value !== id) $("#voiceName").value = id;
         $("#selectedVoiceMeta").textContent = v ? `${v.description || ""} | ${v.provider} | ${v.name}` : "Chưa chọn giọng đọc.";
         $$(".voice").forEach((el) => el.classList.remove("selected"));
+      }
+
+      function chooseVoice2(id) {
+        state.selectedVoice2Id = id;
+        if ($("#voiceName2") && $("#voiceName2").value !== id) $("#voiceName2").value = id;
       }
 
 
@@ -3428,16 +3456,32 @@
         });
       }
 
+      function jobProgressHtml(job, fallback = "Đang xử lý") {
+        const p = Math.max(0, Math.min(100, Number(job?.progress || 0)));
+        const step = job?.current_step || fallback;
+        const updated = job?.updated_at ? `<div class="tiny" style="margin-top:6px;">Cập nhật: ${formatDateTime(job.updated_at)}</div>` : "";
+        return `
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+              <strong>${step}</strong>
+              <span class="pill warn">${p}%</span>
+            </div>
+            <div class="bar"><span style="width:${p}%;"></span></div>
+            ${updated}
+          </div>`;
+      }
+
       function renderVoiceOutputs() {
         const audioAssets = projectAudioAssets();
         const currentJob = state.currentJob;
         if ($("#audioJobStatus")) {
-          $("#audioJobStatus").innerHTML = audioAssets.length
-            ? `Đã có ${audioAssets.length} MP3 trong dự án. Có thể nghe, tải hoặc dùng khi xuất video.`
-            : state.lastAudioPath
-              ? `Đã tạo xong MP3: ${state.lastAudioPath}`
-              : currentJob?.status === "running" || currentJob?.status === "queued"
-                ? `Đang tạo voice MP3: ${currentJob.current_step || "Đang xử lý"} (${currentJob.progress || 0}%).`
+          const isActiveVoiceJob = currentJob?.status === "running" || currentJob?.status === "queued";
+          $("#audioJobStatus").innerHTML = isActiveVoiceJob
+            ? jobProgressHtml(currentJob, "Đang tạo voice MP3")
+            : audioAssets.length
+              ? `Đã có ${audioAssets.length} MP3 trong dự án. Có thể nghe, tải hoặc dùng khi xuất video.`
+              : state.lastAudioPath
+                ? `Đã tạo xong MP3: ${state.lastAudioPath}`
                 : currentJob?.status === "failed"
                   ? `Tạo MP3 lỗi: ${currentJob.error_message || "Không rõ lỗi."}`
                   : "Chưa tạo voice MP3 cho dự án này. Chọn voice rồi bấm Tạo voice MP3 từ kịch bản.";
@@ -3608,7 +3652,7 @@
           $("#audioJobStatus").innerHTML = job.audio_path
             ? `Đã tạo xong MP3: ${job.audio_path}`
             : job.status === "running"
-              ? `Đang xử lý: ${job.current_step || "Đang tạo"} (${job.progress || 0}%)`
+              ? jobProgressHtml(job, "Đang tạo voice MP3")
               : "Chưa tạo voice MP3 cho dự án này.";
         }
         const links = [["Tải/Xem Video MP4", job.video_path], ["Nghe/Tải Audio MP3", job.audio_path], ["Script JSON", job.script_path]].filter((x) => x[1]).map(([name, path]) => `<a class="btn" href="${fileUrl(path)}" target="_blank" download>${name}</a><span class="tiny">${path}</span>`);
@@ -3646,6 +3690,14 @@
       async function loadProjects() {
         const data = await api("/api/projects");
         state.projects = data.projects || [];
+        if (state.activeProjectId) {
+          const active = state.projects.find((project) => project.id === state.activeProjectId);
+          if (active) {
+            state.activeProject = active;
+            state.activeJobId = active.latestJob ? active.latestJob.id : state.activeJobId;
+            if (active.latestJob) setJob(active, active.latestJob);
+          }
+        }
         renderProjects();
         renderDashboard();
         syncProjectControls();
@@ -3700,7 +3752,22 @@
         const data = await api(`/api/projects/${projectId}/assets`);
         state.assets = data.assets || [];
         renderAssetsRich(state.assets);
+        renderVoiceOutputs();
         renderTimelineScenes((state.scenes || []).map((s, i) => ({ ...s, label: `Scene ${i + 1}` })));
+      }
+
+      async function refreshVoicePageStatus() {
+        if (!state.activeProjectId) {
+          renderVoiceOutputs();
+          return;
+        }
+        await loadProjects();
+        if (state.activeJobId) {
+          const data = await api(`/api/render-jobs/${state.activeJobId}`);
+          setJob(data.project, data.job);
+        }
+        await loadAssets(state.activeProjectId);
+        renderVoiceOutputs();
       }
 
       async function loadScenes(projectId) {
@@ -4114,7 +4181,10 @@
           lastErrorDetail = { message, page: document.querySelector(".page.active")?.id || "", time: new Date() };
           renderServerErrorDropdown();
           if (/request entity too large|request body is too large|payload too large/i.test(message)) {
-            toast("File upload quá lớn khi đi qua Vercel. Cần cắm R2 direct upload để upload MP4 lớn ổn định.");
+            const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+            toast(isLocal
+              ? "File quá lớn cho một lượt upload. Thử lại hoặc chọn file nhỏ hơn."
+              : "File upload quá lớn khi đi qua Vercel. Cần cắm R2 direct upload để upload MP4 lớn ổn định.");
           } else {
             toast(message);
           }
@@ -4228,6 +4298,12 @@
       ["language", "style"].forEach((id) => $(`#${id}`)?.addEventListener("change", updateCreatePreview));
       ["genderFilter", "regionFilter", "toneFilter"].forEach((id) => $(`#${id}`).addEventListener("change", renderVoices));
       $("#voiceName").addEventListener("change", () => chooseVoice($("#voiceName").value));
+      $("#voiceName2")?.addEventListener("change", () => chooseVoice2($("#voiceName2").value));
+      $("#voiceMode")?.addEventListener("change", () => {
+        state.voiceMode = $("#voiceMode").value;
+        const wrap = $("#voiceName2Wrap");
+        if (wrap) wrap.style.display = state.voiceMode === "2" ? "block" : "none";
+      });
       $("#activeProjectSelect").addEventListener("change", () => {
         const project = state.projects.find((p) => p.id === $("#activeProjectSelect").value);
         if (project) selectProject(project);
@@ -4442,6 +4518,7 @@
             projectName: $("#projectName").value,
             prompt: promptValue,
             voiceId: state.selectedVoiceId,
+            voice2Id: activeVoice2Id(),
             voiceSpeed: Number($("#speed").value),
             ratio: activeRatio(),
             durationSec: activeDurationSec(),
@@ -4980,7 +5057,7 @@
           await api(`/api/projects/${state.activeProjectId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1) }),
+            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() }),
           });
           const data = await api(`/api/projects/${state.activeProjectId}/approve-content`, { method: "POST" });
           if (data.sheetWarning) {
@@ -5110,7 +5187,7 @@
           await api(`/api/projects/${state.activeProjectId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1) }),
+            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() }),
           });
           $("#audioJobStatus").innerHTML = "Đang tạo voice MP3 từ kịch bản đã chỉnh...";
           const data = await api(`/api/projects/${state.activeProjectId}/audio`, { method: "POST" });
@@ -5147,7 +5224,7 @@
         await api(`/api/projects/${state.activeProjectId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1) }),
+          body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() }),
         }).then(async () => {
           await loadProjects();
           toast("Đã lưu giọng đọc vào dự án.");
@@ -5427,6 +5504,22 @@
         window.open(`${productionUrl}/?desktopProvision=1&port=${encodeURIComponent(port)}`, "_blank");
       }
 
+      async function requestAppRefresh() {
+        const button = $("#desktopRequestAppButton");
+        if (button) { button.disabled = true; button.textContent = "🔁 Đang lấy dữ liệu mới nhất..."; }
+        try {
+          await api("/api/desktop/refresh-data", { method: "POST" });
+          await loadProjects();
+          await loadProducts().catch(() => {});
+          await loadContentQueue().catch(() => {});
+          toast("✓ Đã lấy dữ liệu mới nhất từ web.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          if (button) { button.disabled = false; button.textContent = "🔁 Request APP (lấy dữ liệu mới nhất)"; }
+        }
+      }
+
       function wireDesktopConnectButton() {
         const button = $("#desktopConnectButton");
         if (button) button.addEventListener("click", openDesktopConnectPage);
@@ -5440,6 +5533,11 @@
         if (isLocal && resyncButton) {
           resyncButton.style.display = "block";
           resyncButton.addEventListener("click", openDesktopConnectPage);
+        }
+        const requestAppButton = $("#desktopRequestAppButton");
+        if (isLocal && requestAppButton) {
+          requestAppButton.style.display = "block";
+          requestAppButton.addEventListener("click", requestAppRefresh);
         }
       }
 

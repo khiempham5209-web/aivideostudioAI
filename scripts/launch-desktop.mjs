@@ -87,6 +87,8 @@ async function autoSyncConfig() {
       `TTS_VOICE_NAME=${str("ttsVoiceName")}`,
       `TTS_SPEED=${str("ttsSpeed")}`,
       `CHANNEL_NAME=${str("channelName")}`,
+      `PRODUCT_SHEET_SYNC_URL=${str("productSheetSyncUrl")}`,
+      `PRODUCT_SHEET_SECRET=${str("productSheetSecret")}`,
       `R2_ACCOUNT_ID=${str("r2AccountId")}`,
       `R2_ACCESS_KEY_ID=${str("r2AccessKeyId")}`,
       `R2_SECRET_ACCESS_KEY=${str("r2SecretAccessKey")}`,
