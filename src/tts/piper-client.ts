@@ -63,26 +63,27 @@ const PIPER_WARMUP_PREFIX = "À. ";
 const execFileAsync = promisify(execFile);
 
 /** Finds where real speech starts in a Piper-rendered wav that begins with
- *  PIPER_WARMUP_PREFIX — the end of the first silence gap of least
- *  MIN_GAP_SEC (the pause after the filler word). Falls back to 0 (no trim)
- *  if no such gap is found, so a detection hiccup never eats real audio.
- *  Backs off SAFETY_MARGIN_SEC from the detected point on purpose: the
- *  silencedetect threshold can trigger right as the next word's quiet
- *  onset consonant/vowel begins, and cutting exactly there was observed to
- *  shave the leading edge off the real first word — landing a bit earlier,
- *  still inside the silent gap, costs nothing but a few extra ms of quiet. */
+ *  PIPER_WARMUP_PREFIX — the MIDPOINT of the first silence gap of at least
+ *  MIN_GAP_SEC (the pause after the filler word), not its end. The gap's
+ *  length varies scene to scene (depends on the phonetic context Piper
+ *  gives the trailing period), so cutting near its end is only as safe as
+ *  the shortest gap seen in testing — cutting at the midpoint instead
+ *  scales with however long this specific gap actually turned out to be,
+ *  leaving a safety margin on BOTH sides regardless. Falls back to 0 (no
+ *  trim) if no gap is found, so a detection hiccup never eats real audio. */
 async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
   const MIN_GAP_SEC = 0.12;
-  const SAFETY_MARGIN_SEC = 0.1;
   try {
     const { stderr } = await execFileAsync(FFMPEG_BIN, [
       "-i", wavPath,
       "-af", `silencedetect=noise=-30dB:d=${MIN_GAP_SEC}`,
       "-f", "null", "-",
     ], { windowsHide: true });
-    const match = stderr.match(/silence_end:\s*([\d.]+)/);
+    const match = stderr.match(/silence_start:\s*([\d.]+)[\s\S]*?silence_end:\s*([\d.]+)/);
     if (!match) return 0;
-    return Math.max(0, parseFloat(match[1]) - SAFETY_MARGIN_SEC);
+    const start = parseFloat(match[1]);
+    const end = parseFloat(match[2]);
+    return (start + end) / 2;
   } catch {
     return 0;
   }

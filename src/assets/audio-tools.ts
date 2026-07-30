@@ -78,16 +78,6 @@ export async function concatWithSilence(
   outPath: string,
 ): Promise<void> {
   if (inputPaths.length === 0) throw new Error("concatWithSilence: empty inputPaths");
-  if (inputPaths.length === 1) {
-    // No concat needed — just normalize the single file
-    await run(FFMPEG_BIN, [
-      "-y", "-i", inputPaths[0],
-      "-ar", "44100", "-ac", "1",
-      "-c:a", "libmp3lame", "-b:a", "192k",
-      outPath,
-    ]);
-    return;
-  }
 
   const tmp = await mkdtemp(join(tmpdir(), "concat-"));
   try {
@@ -120,7 +110,16 @@ export async function concatWithSilence(
     await normalize(silencePath, silenceSegPath);
 
     const escapeForConcatList = (p: string) => p.replace(/'/g, "'\\''");
-    const listLines: string[] = [];
+    // A leading silence segment before scene 0 too (not just between scenes)
+    // — the final mp3 encode below always carries a small (~20-25ms) LAME
+    // encoder-delay header no matter what, and not every player that opens
+    // the exported MP3 directly (outside this app) honors that gapless
+    // metadata correctly. A real silent pad at the very start means even a
+    // player that mishandles it still lands well before the first real word,
+    // instead of clipping into it — this was showing up as "missing the
+    // first word/letter", most noticeably on scene 0 (no adjacent gap into
+    // the previous scene's tail to absorb the same slack from).
+    const listLines: string[] = [`file '${escapeForConcatList(silenceSegPath)}'`];
     for (let i = 0; i < inputPaths.length; i++) {
       const segPath = join(tmp, `seg-${i}.wav`);
       await normalize(inputPaths[i], segPath);
