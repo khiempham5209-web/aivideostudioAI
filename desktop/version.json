@@ -1,5 +1,5 @@
 {
-  "version": "1.1.7",
+  "version": "1.1.8",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Sua loi Piper (giong local) bi mat/nuot chu dau tien trong moi cau. Sua loi cau thoai co ngoac kep de bi loi giong. Giam loi console flash khi tao voice. Voice Library dang bang de xem, them chon du an ngay o trang Kich ban va Giong doc."
+  "notes": "Sua tiep loi mat chu dau tien: them khoang lang an toan o dau file voice.mp3 (phong truong hop trinh phat xu ly sai encoder delay cua MP3), va cai thien do chinh xac cat dem trong Piper."
 }
