@@ -1,5 +1,5 @@
 {
-  "version": "1.1.8",
+  "version": "1.1.9",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Sua tiep loi mat chu dau tien: them khoang lang an toan o dau file voice.mp3 (phong truong hop trinh phat xu ly sai encoder delay cua MP3), va cai thien do chinh xac cat dem trong Piper."
+  "notes": "Them nut tai danh sach thoi gian tung scene (.txt) o trang Giong doc AI - liet ke moi scene kem khung gio bat dau/ket thuc that trong voice.mp3, de doi chieu khi edit."
 }
