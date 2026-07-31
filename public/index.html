@@ -1794,7 +1794,7 @@
           $("#regenerateButton").insertAdjacentHTML("afterend", `<button class="btn primary" id="createAudioButton" type="button">🎬 Xuất video (MP4)</button>`);
         }
         if (!$("#voiceAudioPreview")) {
-          $("#previewVoiceButton").insertAdjacentHTML("afterend", `<div class="field-stack"><label>MP3 đã tạo từ kịch bản</label><div class="empty" id="audioJobStatus" style="text-align:left;">Chưa tạo voice MP3 cho dự án này.</div><audio id="voiceAudioPreview" controls style="display:none;width:100%;"></audio><div class="top-actions"><button class="btn primary" id="createVoiceMp3Button" type="button">Tạo voice MP3 từ kịch bản</button><button class="btn" id="openExportFromVoiceButton" type="button">Mở màn Edit video</button></div><div id="voiceOutputList" class="field-stack"></div></div>`);
+          $("#previewVoiceButton").insertAdjacentHTML("afterend", `<div class="field-stack"><label>MP3 đã tạo từ kịch bản</label><div class="empty" id="audioJobStatus" style="text-align:left;">Chưa tạo voice MP3 cho dự án này.</div><audio id="voiceAudioPreview" controls style="display:none;width:100%;"></audio><div class="top-actions"><button class="btn primary" id="createVoiceMp3Button" type="button">Tạo voice MP3 từ kịch bản</button><button class="btn" id="openExportFromVoiceButton" type="button">Mở màn Edit video</button><button class="btn" id="downloadSceneTimelineButton" type="button" title="Tải file .txt liệt kê từng scene kèm thời gian bắt đầu/kết thúc trong voice.mp3 — để edit dễ hơn">📄 Tải thời gian scene (.txt)</button></div><div id="voiceOutputList" class="field-stack"></div></div>`);
         }
         if (!$("#workflowStatus")) {
           $("#sceneList").insertAdjacentHTML("beforebegin", `<div class="empty" id="workflowStatus" style="margin-bottom:12px;text-align:left;">Bước hiện tại: tạo hoặc chọn project, kiểm tra scene, sau đó bấm 🎬 Xuất video (MP4).</div>`);
@@ -5324,6 +5324,28 @@
         await startProjectAudioJob();
       });
       $("#openExportFromVoiceButton").addEventListener("click", () => switchPage("timeline"));
+      $("#downloadSceneTimelineButton").addEventListener("click", async () => {
+        if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
+        try {
+          const res = await fetch(`/api/projects/${state.activeProjectId}/scene-timeline`, { credentials: "include" });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${res.status}`);
+          }
+          const blob = await res.blob();
+          const disposition = res.headers.get("Content-Disposition") || "";
+          const filenameMatch = disposition.match(/filename="([^"]+)"/);
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = filenameMatch ? filenameMatch[1] : "thoi-gian-scene.txt";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+        } catch (error) {
+          showError(error);
+        }
+      });
       $("#saveVoiceToProjectButton").addEventListener("click", async () => {
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
         await api(`/api/projects/${state.activeProjectId}`, {

@@ -2711,6 +2711,49 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
+    const sceneTimelineMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/scene-timeline$/);
+    if (req.method === "GET" && sceneTimelineMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, sceneTimelineMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const scenes = listScenes(project.id);
+      const missingDurations = scenes.filter((s) => !s.voice_duration_sec).length;
+      if (scenes.length === 0 || missingDurations === scenes.length) {
+        sendJson(res, 400, { error: "Chưa có voice MP3 nào cho dự án này — tạo voice trước." });
+        return;
+      }
+      const formatMmSs = (sec: number) => {
+        const total = Math.max(0, Math.round(sec));
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      };
+      // Matches the actual timing inside the exported voice.mp3: a leading
+      // silence pad before scene 1, then each scene's real (TTS-measured)
+      // duration followed by the same inter-scene gap — see SCENE_GAP_SEC
+      // and the leading pad in concatWithSilence (audio-tools.ts).
+      const SCENE_GAP_SEC = 0.3;
+      let cursor = SCENE_GAP_SEC;
+      const lines = scenes.map((scene, index) => {
+        const duration = scene.voice_duration_sec || 0;
+        const start = cursor;
+        const end = cursor + duration;
+        cursor = end + SCENE_GAP_SEC;
+        return `Scene ${index + 1} (${formatMmSs(start)} - ${formatMmSs(end)}): ${scene.voice_text}`;
+      });
+      const body = lines.join("\n\n");
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${sanitizeFileName(project.title || "voice")}-thoi-gian-scene.txt"`,
+      });
+      res.end(body);
+      return;
+    }
+
     const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
     if (req.method === "GET" && projectMatch) {
       const user = requireUser(req, res);
