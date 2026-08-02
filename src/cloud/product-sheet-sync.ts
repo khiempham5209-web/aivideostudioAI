@@ -137,3 +137,19 @@ export async function fetchApprovedContentQueue(): Promise<ApprovedContentItem[]
 export async function markContentQueueDone(row: number, videoLink?: string): Promise<void> {
   await postAction("markContentDone", { row, videoLink });
 }
+
+export interface ContentQueueRowScript {
+  kichBan: string;
+  trangThai?: string;
+}
+
+/** Re-reads the current "Kịch bản" cell for a row the user may have edited
+ *  directly in the Sheet after the AI first wrote it — used by the Voice
+ *  page's "Lấy nội dung có sẵn từ Google Sheet" button so approving a
+ *  project always uses the latest text in the Sheet, not a stale local
+ *  copy from generation time. */
+export async function fetchContentQueueRowScript(row: number): Promise<ContentQueueRowScript> {
+  const data = await postAction<{ item?: ContentQueueRowScript }>("getContentQueueRow", { row });
+  if (!data.item || !data.item.kichBan?.trim()) throw new Error("Chưa có kịch bản nào trên Sheet cho dự án này.");
+  return data.item;
+}

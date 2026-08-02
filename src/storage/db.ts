@@ -140,6 +140,7 @@ export interface UserSettingsRecord {
   ui_scale: number;
   storage_mode: string;
   save_root: string | null;
+  nav_config: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -327,6 +328,7 @@ db.exec(`
     ui_scale REAL NOT NULL DEFAULT 1,
     storage_mode TEXT NOT NULL DEFAULT 'server',
     save_root TEXT,
+    nav_config TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(email) REFERENCES users(email)
@@ -470,6 +472,7 @@ for (const statement of [
   "ALTER TABLE user_settings ADD COLUMN ui_scale REAL NOT NULL DEFAULT 1",
   "ALTER TABLE user_settings ADD COLUMN storage_mode TEXT NOT NULL DEFAULT 'server'",
   "ALTER TABLE user_settings ADD COLUMN save_root TEXT",
+  "ALTER TABLE user_settings ADD COLUMN nav_config TEXT",
   "ALTER TABLE timeline_clips ADD COLUMN sub_font_size REAL NOT NULL DEFAULT 16",
   "ALTER TABLE timeline_clips ADD COLUMN sub_color TEXT NOT NULL DEFAULT '#ffffff'",
   "ALTER TABLE timeline_clips ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
@@ -656,6 +659,7 @@ async function initPostgresMirror() {
         ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1,
         storage_mode TEXT NOT NULL DEFAULT 'server',
         save_root TEXT,
+        nav_config TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -840,6 +844,7 @@ async function initPostgresMirror() {
     { label: "user_settings.ui_scale", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1` },
     { label: "user_settings.storage_mode", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server'` },
     { label: "user_settings.save_root", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS save_root TEXT` },
+    { label: "user_settings.nav_config", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS nav_config TEXT` },
     { label: "render_jobs.script_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS script_path TEXT` },
     { label: "render_jobs.video_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS video_path TEXT` },
     { label: "render_jobs.audio_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT` },
@@ -2115,12 +2120,12 @@ export function getUserSettings(email: string): UserSettingsRecord {
 
 export function updateUserSettings(
   email: string,
-  data: Partial<Pick<UserSettingsRecord, "storage_quota_bytes" | "credits" | "default_language" | "default_ratio" | "default_quality" | "theme" | "ui_scale" | "storage_mode" | "save_root">>,
+  data: Partial<Pick<UserSettingsRecord, "storage_quota_bytes" | "credits" | "default_language" | "default_ratio" | "default_quality" | "theme" | "ui_scale" | "storage_mode" | "save_root" | "nav_config">>,
 ): UserSettingsRecord {
   const current = getUserSettings(email);
   db.prepare(`
     UPDATE user_settings
-    SET storage_quota_bytes = ?, credits = ?, default_language = ?, default_ratio = ?, default_quality = ?, theme = ?, ui_scale = ?, storage_mode = ?, save_root = ?, updated_at = ?
+    SET storage_quota_bytes = ?, credits = ?, default_language = ?, default_ratio = ?, default_quality = ?, theme = ?, ui_scale = ?, storage_mode = ?, save_root = ?, nav_config = ?, updated_at = ?
     WHERE email = ?
   `).run(
     data.storage_quota_bytes ?? current.storage_quota_bytes,
@@ -2132,6 +2137,7 @@ export function updateUserSettings(
     data.ui_scale ?? current.ui_scale,
     data.storage_mode ?? current.storage_mode,
     data.save_root === undefined ? current.save_root : data.save_root,
+    data.nav_config === undefined ? current.nav_config : data.nav_config,
     nowIso(),
     email,
   );

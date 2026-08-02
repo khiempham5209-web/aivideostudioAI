@@ -702,6 +702,79 @@
         gap: 10px;
       }
 
+      .project-picker-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .project-picker-card {
+        position: relative;
+        border: 1px solid var(--line-2);
+        border-radius: 10px;
+        background: rgba(21, 28, 41, 0.88);
+        padding: 10px 12px;
+        cursor: pointer;
+        text-align: left;
+        min-width: 0;
+      }
+
+      .project-picker-card.active {
+        border-color: #a78bfa;
+        box-shadow: 0 0 0 1px #a78bfa;
+      }
+
+      .project-picker-card strong {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-right: 16px;
+      }
+
+      .project-picker-remove {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        font-size: 12px;
+        color: var(--muted, #94a3b8);
+        cursor: pointer;
+        line-height: 1;
+      }
+
+      .project-picker-remove:hover {
+        color: #fca5a5;
+      }
+
+      .project-picker-empty {
+        border: 1px dashed var(--line-2);
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-height: 74px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted, #94a3b8);
+        font-size: 12px;
+        cursor: default;
+      }
+
+      .bulk-voice-apply-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .bulk-voice-apply-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line-2);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-weight: 400;
+      }
+
       .media-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
@@ -1224,7 +1297,7 @@
         <div class="panel-head">
           <div>
             <h3>Điều chỉnh thanh công cụ</h3>
-            <p class="tiny">Sắp xếp lại thứ tự hoặc đổi tên các mục trên sidebar. Lưu riêng trên trình duyệt này.</p>
+            <p class="tiny">Sắp xếp lại thứ tự hoặc đổi tên các mục trên sidebar. Lưu vào tài khoản — dùng chung cho cả web và app.</p>
           </div>
           <button class="btn" id="closeNavCustomizeButton" type="button">Đóng</button>
         </div>
@@ -1422,7 +1495,7 @@
         <section class="page" id="script">
           <div class="page-head">
             <div><h2>Kịch bản AI</h2><p class="muted">Tiêu đề, hook, Scene 1..N, sửa tay, regenerate, thêm/xóa cảnh.</p></div>
-            <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="pasteTextButton" type="button">📋 Dán văn bản</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
+            <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="pasteTextButton" type="button">📋 Dán văn bản</button><button class="btn" id="fetchSheetContentButton" type="button" style="display:none;" title="Lấy đúng nội dung mới nhất bạn đã viết/sửa trực tiếp trong Google Sheet (cột Kịch bản) — thay các cảnh hiện tại, khỏi copy dán tay.">📥 Chọn nội dung có sẵn (từ Google Sheet)</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
           </div>
           <div class="panel" style="margin-bottom:16px;">
             <div class="panel-body field-stack">
@@ -1796,6 +1869,25 @@
         if (!$("#voiceAudioPreview")) {
           $("#previewVoiceButton").insertAdjacentHTML("afterend", `<div class="field-stack"><label>MP3 đã tạo từ kịch bản</label><div class="empty" id="audioJobStatus" style="text-align:left;">Chưa tạo voice MP3 cho dự án này.</div><audio id="voiceAudioPreview" controls style="display:none;width:100%;"></audio><div class="top-actions"><button class="btn primary" id="createVoiceMp3Button" type="button">Tạo voice MP3 từ kịch bản</button><button class="btn" id="openExportFromVoiceButton" type="button">Mở màn Edit video</button><button class="btn" id="downloadSceneTimelineButton" type="button" title="Tải file .txt liệt kê từng scene kèm thời gian bắt đầu/kết thúc trong voice.mp3 — để edit dễ hơn">📄 Tải thời gian scene (.txt)</button></div><div id="voiceOutputList" class="field-stack"></div></div>`);
         }
+        // Bulk voice: apply the currently-configured giọng/tốc độ/pitch/âm
+        // lượng to several projects at once. Purely additive — untouched
+        // (unchecked) leaves the single-project flow above exactly as before.
+        if (!$("#bulkVoiceApplyPanel")) {
+          $("#voicePreviewPlayer").insertAdjacentHTML("afterend", `<div class="field-stack" id="bulkVoiceApplyPanel"><label>Áp dụng cấu hình vào dự án nào?</label><div class="bulk-voice-apply-list" id="bulkVoiceApplyList"></div><div id="bulkVoiceResultsList" class="field-stack"></div></div>`);
+        }
+        if (!$("#scriptProjectPicker")) {
+          $("#scriptPageProjectSelect")?.insertAdjacentHTML("afterend", `<div class="project-picker-row" id="scriptProjectPicker"></div>`);
+        }
+        if (!$("#voiceProjectPicker")) {
+          $("#voicePageProjectSelect")?.insertAdjacentHTML("afterend", `<div class="project-picker-row" id="voiceProjectPicker"></div>`);
+        }
+        if (!$("#timelineProjectSelect")) {
+          document.querySelector("#timeline .ai-edit-card")?.insertAdjacentHTML("beforebegin", `<div class="panel" style="margin-bottom:12px;"><div class="panel-body field-stack"><label for="timelineProjectSelect">Dự án đang chỉnh sửa</label><select id="timelineProjectSelect"><option value="">Chọn dự án để thao tác</option></select></div></div>`);
+          $("#timelineProjectSelect")?.addEventListener("change", () => {
+            const project = state.projects.find((p) => p.id === $("#timelineProjectSelect").value);
+            if (project) selectProject(project, { skipPageSwitch: true });
+          });
+        }
         if (!$("#workflowStatus")) {
           $("#sceneList").insertAdjacentHTML("beforebegin", `<div class="empty" id="workflowStatus" style="margin-bottom:12px;text-align:left;">Bước hiện tại: tạo hoặc chọn project, kiểm tra scene, sau đó bấm 🎬 Xuất video (MP4).</div>`);
         }
@@ -1944,6 +2036,21 @@
         }
         if (!resp.ok) throw data;
         return data;
+      }
+
+      // Runs `worker` over `items` with at most `limit` in flight at once —
+      // used by the bulk kịch bản/voice buttons so a big batch doesn't blast
+      // every AI/TTS call at the same time (rate limits, slow local machine).
+      // Each item is independent: an error on one doesn't stop the others.
+      async function runWithConcurrencyLimit(items, limit, worker) {
+        let index = 0;
+        async function next() {
+          while (index < items.length) {
+            const current = index++;
+            await worker(items[current], current);
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next));
       }
 
       function toast(message) {
@@ -2224,6 +2331,10 @@
           $("#voicePageProjectSelect").innerHTML = options;
           $("#voicePageProjectSelect").value = state.activeProjectId || "";
         }
+        if ($("#timelineProjectSelect")) {
+          $("#timelineProjectSelect").innerHTML = options;
+          $("#timelineProjectSelect").value = state.activeProjectId || "";
+        }
         const project = activeProject();
         if ($("#activeProjectBanner")) {
           $("#activeProjectBanner").innerHTML = project
@@ -2234,6 +2345,101 @@
           $("#exportFolderName").value = (project.title || "untitled-video").toLowerCase().replace(/[^a-z0-9\u00C0-\u1EF9]+/gi, "-").replace(/^-|-$/g, "");
         }
         updateCreatePreview();
+        renderAllProjectPickers();
+        renderBulkVoiceApplyList();
+      }
+
+      function formatDuration(sec) {
+        const total = Math.max(0, Math.round(sec || 0));
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      }
+
+      // 4 \u00F4 c\u1ED1 \u0111\u1ECBnh, KH\u00D4NG t\u1EF1 \u0111i\u1EC1n m\u1EB7c \u0111\u1ECBnh \u2014 tr\u1ED1ng cho t\u1EDBi khi t\u1EF1 tay ch\u1ECDn
+      // qua dropdown ho\u1EB7c b\u1EA5m 1 d\u1EF1 \u00E1n. Ch\u1ECDn 1 d\u1EF1 \u00E1n ch\u01B0a c\u00F3 trong 4 \u00F4 th\u00EC n\u00F3
+      // v\u00E0o \u0111\u00FAng \u00F4 tr\u1ED1ng \u0111\u1EA7u ti\u00EAn (1\u21924) v\u00E0 \u0111\u1EE9ng y\u00EAn \u1EDF \u0111\u00F3; b\u1EA5m "\u2715" tr\u00EAn th\u1EBB \u0111\u1EC3
+      // b\u1ECF d\u1EF1 \u00E1n \u0111\u00F3 ra kh\u1ECFi \u00F4 (kh\u00F4ng x\u00F3a d\u1EF1 \u00E1n, ch\u1EC9 b\u1ECF kh\u1ECFi danh s\u00E1ch hi\u1EC7n).
+      function ensurePickedSlots() {
+        if (!Array.isArray(state.pickedProjectSlots) || state.pickedProjectSlots.length !== 4) {
+          state.pickedProjectSlots = [null, null, null, null];
+        }
+        return state.pickedProjectSlots;
+      }
+
+      function addProjectToSlots(projectId) {
+        const slots = ensurePickedSlots();
+        if (slots.includes(projectId)) return;
+        const emptyIndex = slots.indexOf(null);
+        if (emptyIndex === -1) return;
+        slots[emptyIndex] = projectId;
+      }
+
+      function removeProjectFromSlots(projectId) {
+        const slots = ensurePickedSlots();
+        const idx = slots.indexOf(projectId);
+        if (idx !== -1) slots[idx] = null;
+      }
+
+      // Same card markup reused for both pickers (K\u1ECBch b\u1EA3n AI, T\u1EA1o voice) \u2014
+      // sits next to the original <select>, which stays visible and is still
+      // the thing that actually drives selection for the full project list.
+      function renderProjectPickerInto(containerId) {
+        const container = $(`#${containerId}`);
+        if (!container) return;
+        const slots = ensurePickedSlots();
+        const byId = new Map((state.projects || []).map((p) => [p.id, p]));
+        container.innerHTML = slots.map((id) => {
+          const p = id ? byId.get(id) : null;
+          if (!p) return `<div class="project-picker-empty">Ch\u01B0a ch\u1ECDn</div>`;
+          return `
+            <button type="button" class="project-picker-card${p.id === state.activeProjectId ? " active" : ""}" data-project-id="${p.id}">
+              <span class="project-picker-remove" data-remove-id="${p.id}">\u2715</span>
+              <strong>${p.title || p.topic || "Untitled video"}</strong>
+              <span class="pill ${p.status === "completed" ? "ok" : "warn"}" style="margin:4px 0;display:inline-block;">${label(p.status)}</span>
+              <p class="tiny" style="margin:0;">${p.sceneCount || 0} scene \u00B7 ${p.wordCount || 0} t\u1EEB \u00B7 ${formatDuration(p.estimatedDurationSec)}</p>
+            </button>
+          `;
+        }).join("");
+        container.querySelectorAll("[data-project-id]").forEach((btn) => {
+          btn.addEventListener("click", (event) => {
+            if (event.target.dataset.removeId) return;
+            const project = byId.get(btn.dataset.projectId);
+            if (project) selectProject(project, { skipPageSwitch: true });
+          });
+        });
+        container.querySelectorAll("[data-remove-id]").forEach((x) => {
+          x.addEventListener("click", (event) => {
+            event.stopPropagation();
+            removeProjectFromSlots(x.dataset.removeId);
+            renderAllProjectPickers();
+            renderBulkVoiceApplyList();
+          });
+        });
+      }
+
+      function renderAllProjectPickers() {
+        renderProjectPickerInto("scriptProjectPicker");
+        renderProjectPickerInto("voiceProjectPicker");
+      }
+
+      // Ch\u1EC9 li\u1EC7t k\u00EA \u0111\u00FAng c\u00E1c d\u1EF1 \u00E1n \u0111ang n\u1EB1m trong 4 \u00F4 \u0111\u00E3 ch\u1ECDn \u1EDF tr\u00EAn \u2014 kh\u00F4ng
+      // fill h\u1EBFt to\u00E0n b\u1ED9 danh s\u00E1ch d\u1EF1 \u00E1n.
+      function renderBulkVoiceApplyList() {
+        const list = $("#bulkVoiceApplyList");
+        if (!list) return;
+        const slots = ensurePickedSlots();
+        const byId = new Map((state.projects || []).map((p) => [p.id, p]));
+        const projects = slots.map((id) => (id ? byId.get(id) : null)).filter(Boolean);
+        const checkedIds = new Set($$(".bulk-voice-apply-check:checked").map((cb) => cb.dataset.projectId));
+        list.innerHTML = projects.length
+          ? projects.map((p) => `
+            <label class="bulk-voice-apply-item">
+              <input type="checkbox" class="bulk-voice-apply-check" data-project-id="${p.id}" style="width:auto;" ${checkedIds.has(p.id) ? "checked" : ""}>
+              ${p.title || p.topic || "Untitled video"} <span class="tiny">(${p.sceneCount || 0} scene)</span>
+            </label>
+          `).join("")
+          : '<p class="tiny">Ch\u01B0a ch\u1ECDn d\u1EF1 \u00E1n n\u00E0o \u1EDF tr\u00EAn.</p>';
       }
 
       function activeRatio() {
@@ -2462,6 +2668,7 @@
         state.activeProjectId = project.id;
         state.activeProject = project;
         state.activeJobId = project.latestJob ? project.latestJob.id : "";
+        addProjectToSlots(project.id);
         $("#projectName").value = project.title || "";
         $("#prompt").value = project.topic || $("#prompt").value;
         $("#scriptTitle").textContent = `Tiêu đề: ${project.title || "Untitled video"}`;
@@ -2480,8 +2687,9 @@
 
       function updateApproveContentPanel() {
         const panel = $("#approveContentPanel");
-        if (!panel) return;
-        panel.style.display = state.activeProject?.content_queue_row ? "block" : "none";
+        if (panel) panel.style.display = state.activeProject?.content_queue_row ? "block" : "none";
+        const fetchButton = $("#fetchSheetContentButton");
+        if (fetchButton) fetchButton.style.display = state.activeProject?.content_queue_row ? "" : "none";
       }
 
       function voiceMatches(v) {
@@ -3816,6 +4024,20 @@
         $("#settingsStorageMode").value = data.settings.storage_mode || "server";
         $("#settingsSaveRoot").value = data.settings.save_root || "";
         applyUiSettings(data.settings);
+        // Nav customization (đổi tên/sắp xếp menu) is per-account, synced via
+        // Postgres — not just localStorage — so it follows the user between
+        // the web app and the desktop exe instead of staying stuck on 1 máy.
+        if (typeof data.settings.nav_config === "string" && data.settings.nav_config.trim()) {
+          try {
+            const parsed = JSON.parse(data.settings.nav_config);
+            if (Array.isArray(parsed)) {
+              localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(parsed));
+              applyNavConfig();
+            }
+          } catch {
+            // Ignore corrupt server value — keep whatever's in localStorage/defaults.
+          }
+        }
       }
 
       async function loadVoices() {
@@ -4490,6 +4712,20 @@
           </div>`).join("");
       }
 
+      async function syncNavConfigToServer(config) {
+        try {
+          await api("/api/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ navConfig: JSON.stringify(config) }),
+          });
+        } catch (error) {
+          // Best-effort — the local change already applied via localStorage;
+          // just means it won't follow to the other device this time.
+          console.error("Failed to sync menu customization to account:", error);
+        }
+      }
+
       $("#openNavCustomizeButton")?.addEventListener("click", () => {
         renderNavCustomizeModal();
         $("#navCustomizeModal").classList.add("show");
@@ -4507,6 +4743,7 @@
         [config[idx], config[swapWith]] = [config[swapWith], config[idx]];
         localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(config));
         renderNavCustomizeModal();
+        syncNavConfigToServer(config);
       });
       $("#saveNavCustomizeButton")?.addEventListener("click", () => {
         const config = getNavConfig();
@@ -4517,13 +4754,15 @@
         localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(config));
         applyNavConfig();
         $("#navCustomizeModal").classList.remove("show");
-        toast("Đã lưu tùy chỉnh thanh công cụ.");
+        toast("Đã lưu tùy chỉnh thanh công cụ — áp dụng cho cả web và app.");
+        syncNavConfigToServer(config);
       });
       $("#resetNavCustomizeButton")?.addEventListener("click", () => {
         localStorage.removeItem(NAV_STORAGE_KEY);
         renderNavCustomizeModal();
         applyNavConfig();
         toast("Đã đặt lại thanh công cụ về mặc định.");
+        syncNavConfigToServer(DEFAULT_NAV_ITEMS.map((item) => ({ ...item })));
       });
       applyNavConfig();
 
@@ -5153,6 +5392,45 @@
         if ($("#contentQueueTabPanel")) $("#contentQueueTabPanel").style.display = tab === "content" ? "block" : "none";
       });
 
+      async function fetchSheetContentIntoProject(projectId, existingScenes) {
+        const data = await api(`/api/projects/${projectId}/content-queue-script`);
+        const chunks = splitPastedTextIntoScenes(data.kichBan || "");
+        if (!chunks.length) throw { error: "Chưa có kịch bản nào trên Sheet cho dự án này." };
+        for (const scene of existingScenes) {
+          await api(`/api/scenes/${scene.id}`, { method: "DELETE" });
+        }
+        for (const voiceText of chunks) {
+          await api(`/api/projects/${projectId}/scenes`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ voiceText }),
+          });
+        }
+        return chunks.length;
+      }
+
+      $("#fetchSheetContentButton")?.addEventListener("click", async () => {
+        const button = $("#fetchSheetContentButton");
+        if (!state.activeProjectId) return;
+        const existing = state.scenes || [];
+        if (existing.length && !confirm(`Dự án này đang có ${existing.length} cảnh — lấy nội dung mới từ Google Sheet sẽ XÓA các cảnh này và thay bằng nội dung mới nhất trên Sheet. Tiếp tục?`)) {
+          return;
+        }
+        button.disabled = true;
+        button.textContent = "Đang lấy nội dung...";
+        try {
+          const count = await fetchSheetContentIntoProject(state.activeProjectId, existing);
+          await loadScenes(state.activeProjectId);
+          await loadProjects();
+          toast(`Đã lấy ${count} cảnh từ Google Sheet — qua màn Giọng đọc AI để chọn giọng và tạo voice.`);
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "📥 Chọn nội dung có sẵn (từ Google Sheet)";
+        }
+      });
+
       $("#approveContentButton")?.addEventListener("click", async () => {
         const button = $("#approveContentButton");
         if (!state.activeProjectId) return;
@@ -5320,8 +5598,71 @@
           $("#createAudioButton").disabled = false;
         }
       });
+      // Starts voice for exactly 1 project and polls ITS OWN job until it
+      // finishes, updating that project's own result row only.
+      async function runBulkVoiceJobForProject(project, voiceConfig) {
+        const rowStatus = () => document.querySelector(`[data-bulk-voice-result-status="${project.id}"]`);
+        try {
+          await api(`/api/projects/${project.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(voiceConfig),
+          });
+          const endpoint = project.content_queue_row ? `/api/projects/${project.id}/approve-content` : `/api/projects/${project.id}/audio`;
+          const data = await api(endpoint, { method: "POST" });
+          const jobId = data.job?.id;
+          if (!jobId) return true;
+          while (true) {
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+            const job = (await api(`/api/render-jobs/${jobId}`)).job;
+            if (["completed", "failed", "cancelled"].includes(job.status)) return job.status === "completed";
+            if (rowStatus()) rowStatus().textContent = `⏳ ${job.current_step || "Đang xử lý"} (${job.progress || 0}%)`;
+          }
+        } catch (error) {
+          if (rowStatus()) rowStatus().textContent = `❌ ${error?.error || error?.message || "Lỗi"}`;
+          return false;
+        }
+      }
+
+      function bulkVoiceResultRowHtml(project) {
+        return `<div class="asset-row" data-bulk-voice-result="${project.id}"><div><strong>${project.title || project.topic || "Untitled video"}</strong><p class="tiny" data-bulk-voice-result-status="${project.id}">⏳ Đang bắt đầu...</p></div></div>`;
+      }
+
+      $("#bulkVoiceResultsList")?.addEventListener("click", (event) => {
+        if (!event.target.classList.contains("open-bulk-voice-edit")) return;
+        const project = state.projects.find((p) => p.id === event.target.dataset.projectId);
+        if (!project) return;
+        selectProject(project, { skipPageSwitch: true });
+        switchPage("timeline");
+      });
+
       $("#createVoiceMp3Button").addEventListener("click", async () => {
-        await startProjectAudioJob();
+        const checkedIds = $$(".bulk-voice-apply-check:checked").map((cb) => cb.dataset.projectId);
+        if (!checkedIds.length) {
+          await startProjectAudioJob();
+          return;
+        }
+        const projects = state.projects.filter((p) => checkedIds.includes(p.id));
+        const voiceConfig = { voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() };
+        const button = $("#createVoiceMp3Button");
+        button.disabled = true;
+        const resultsList = $("#bulkVoiceResultsList");
+        if (resultsList) resultsList.innerHTML = projects.map(bulkVoiceResultRowHtml).join("");
+        await Promise.all(projects.map(async (project) => {
+          const ok = await runBulkVoiceJobForProject(project, voiceConfig);
+          const row = document.querySelector(`[data-bulk-voice-result="${project.id}"]`);
+          if (!row) return;
+          if (ok) {
+            const assets = (await api(`/api/projects/${project.id}/assets`)).assets || [];
+            const audio = assets.filter((a) => a.type === "audio").slice(-1)[0];
+            row.innerHTML = `<div><strong>${project.title || project.topic || "Untitled video"}</strong>${audio ? `<audio controls src="${fileUrl(audio.file_path)}" style="width:100%;margin-top:8px;"></audio>` : '<p class="tiny">Xong nhưng không tìm thấy file MP3.</p>'}</div><div class="field-stack"><button class="btn open-bulk-voice-edit" data-project-id="${project.id}" type="button">Mở Edit video với voice này</button></div>`;
+          } else {
+            row.innerHTML = `<div><strong>${project.title || project.topic || "Untitled video"}</strong><p class="tiny">❌ Lỗi khi tạo voice cho dự án này.</p></div>`;
+          }
+        }));
+        button.disabled = false;
+        await loadProjects();
+        toast(`Đã xử lý xong ${projects.length} dự án.`);
       });
       $("#openExportFromVoiceButton").addEventListener("click", () => switchPage("timeline"));
       $("#downloadSceneTimelineButton").addEventListener("click", async () => {

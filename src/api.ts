@@ -19,6 +19,7 @@ import { fetchMedia } from "./assets/image-fetcher.js";
 import { fetchShopeeGallery } from "./assets/shopee-gallery.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, r2Uri, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import {
+  fetchContentQueueRowScript,
   fetchPendingContentQueue,
   fetchProductsFromSheet,
   isProductSheetConfigured,
@@ -1468,6 +1469,11 @@ async function handleGenerateProjectScript(req: IncomingMessage, res: ServerResp
     sendJson(res, 404, { error: "Project not found" });
     return;
   }
+  const runningJob = getLatestJobForProject(projectId);
+  if (runningJob && (runningJob.status === "queued" || runningJob.status === "running")) {
+    sendJson(res, 409, { error: "Dự án đang tạo voice/video — đợi xong rồi mới tạo kịch bản mới, tránh mất đồng bộ với voice đang chạy.", job: runningJob });
+    return;
+  }
   const body = await readJsonBody(req).catch(() => ({}) as Record<string, unknown>);
   const aiProvider = (body as { aiProvider?: unknown }).aiProvider === "openai" ? "openai" : "gemini";
   updateProject(projectId, { status: "generating_script", error_message: null });
@@ -1565,6 +1571,30 @@ async function handleApproveContentProject(req: IncomingMessage, res: ServerResp
     return;
   }
   sendJson(res, 202, { ok: true, job });
+}
+
+/** Re-fetches the "Kịch bản" cell for a project's linked content-queue row
+ *  straight from the Sheet — lets the Voice page pull in edits the user made
+ *  directly in Google Sheets after the AI first generated the script, instead
+ *  of the user having to copy/paste that text back into the app by hand. */
+async function handleFetchContentQueueScript(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  if (!project.content_queue_row) {
+    sendJson(res, 400, { error: "Dự án này không gắn với hàng đợi nội dung nào" });
+    return;
+  }
+  try {
+    const item = await fetchContentQueueRowScript(project.content_queue_row);
+    sendJson(res, 200, { ok: true, ...item });
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 function productToJson(p: ReturnType<typeof getProduct>) {
@@ -2471,6 +2501,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         save_root: typeof (body as { saveRoot?: unknown }).saveRoot === "string"
           ? ((body as { saveRoot: string }).saveRoot.trim() || null)
           : undefined,
+        nav_config: typeof (body as { navConfig?: unknown }).navConfig === "string"
+          ? ((body as { navConfig: string }).navConfig.trim() || null)
+          : undefined,
       });
       sendJson(res, 200, { ok: true, settings });
       return;
@@ -2581,10 +2614,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const user = requireUser(req, res);
       if (!user) return;
       sendJson(res, 200, {
-        projects: listProjects(user.email).map((project) => ({
-          ...project,
-          latestJob: getLatestJobForProject(project.id),
-        })),
+        projects: listProjects(user.email).map((project) => {
+          const scenes = listScenes(project.id);
+          const wordCount = scenes.reduce((sum, s) => sum + s.voice_text.trim().split(/\s+/).filter(Boolean).length, 0);
+          return {
+            ...project,
+            latestJob: getLatestJobForProject(project.id),
+            sceneCount: scenes.length,
+            wordCount,
+            // Same 2.5 words/sec Vietnamese-TTS estimate used when planning
+            // script length in prompt-to-script.ts — kept consistent so the
+            // duration shown on a project card matches what generation aims for.
+            estimatedDurationSec: Math.round(wordCount / 2.5),
+          };
+        }),
       });
       return;
     }
@@ -2613,6 +2656,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const approveContentMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/approve-content$/);
     if (req.method === "POST" && approveContentMatch) {
       await handleApproveContentProject(req, res, approveContentMatch[1]);
+      return;
+    }
+    const contentQueueScriptMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/content-queue-script$/);
+    if (req.method === "GET" && contentQueueScriptMatch) {
+      await handleFetchContentQueueScript(req, res, contentQueueScriptMatch[1]);
       return;
     }
     const factSheetMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/fact-sheet$/);
