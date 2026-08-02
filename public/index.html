@@ -2360,11 +2360,28 @@
       // qua dropdown ho\u1EB7c b\u1EA5m 1 d\u1EF1 \u00E1n. Ch\u1ECDn 1 d\u1EF1 \u00E1n ch\u01B0a c\u00F3 trong 4 \u00F4 th\u00EC n\u00F3
       // v\u00E0o \u0111\u00FAng \u00F4 tr\u1ED1ng \u0111\u1EA7u ti\u00EAn (1\u21924) v\u00E0 \u0111\u1EE9ng y\u00EAn \u1EDF \u0111\u00F3; b\u1EA5m "\u2715" tr\u00EAn th\u1EBB \u0111\u1EC3
       // b\u1ECF d\u1EF1 \u00E1n \u0111\u00F3 ra kh\u1ECFi \u00F4 (kh\u00F4ng x\u00F3a d\u1EF1 \u00E1n, ch\u1EC9 b\u1ECF kh\u1ECFi danh s\u00E1ch hi\u1EC7n).
+      const PICKED_SLOTS_KEY = "avs_picked_project_slots_v1";
+
       function ensurePickedSlots() {
         if (!Array.isArray(state.pickedProjectSlots) || state.pickedProjectSlots.length !== 4) {
-          state.pickedProjectSlots = [null, null, null, null];
+          let saved = null;
+          try {
+            saved = JSON.parse(localStorage.getItem(PICKED_SLOTS_KEY) || "null");
+          } catch {
+            // Ignore corrupt localStorage value — fall back to empty slots below.
+          }
+          state.pickedProjectSlots = Array.isArray(saved) && saved.length === 4 ? saved : [null, null, null, null];
         }
         return state.pickedProjectSlots;
+      }
+
+      function savePickedSlots() {
+        try {
+          localStorage.setItem(PICKED_SLOTS_KEY, JSON.stringify(state.pickedProjectSlots));
+        } catch {
+          // Best-effort — losing the saved slots on a storage failure is not
+          // worse than the previous in-memory-only behavior.
+        }
       }
 
       function addProjectToSlots(projectId) {
@@ -2373,12 +2390,16 @@
         const emptyIndex = slots.indexOf(null);
         if (emptyIndex === -1) return;
         slots[emptyIndex] = projectId;
+        savePickedSlots();
       }
 
       function removeProjectFromSlots(projectId) {
         const slots = ensurePickedSlots();
         const idx = slots.indexOf(projectId);
-        if (idx !== -1) slots[idx] = null;
+        if (idx !== -1) {
+          slots[idx] = null;
+          savePickedSlots();
+        }
       }
 
       // Same card markup reused for both pickers (K\u1ECBch b\u1EA3n AI, T\u1EA1o voice) \u2014

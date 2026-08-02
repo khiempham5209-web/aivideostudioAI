@@ -91,7 +91,16 @@ export async function concatWithSilence(
       silencePath,
     ]);
 
-    const FADE_SEC = 0.008; // 8ms — inaudible
+    // 8ms used to be applied here, but each scene's audio already starts
+    // essentially AT real speech (Piper's own warmup-filler trim in
+    // piper-client.ts cuts right to the onset) — a fade-in from silence
+    // landing exactly on a fast Vietnamese plosive/stop consonant (đ/t/k...)
+    // shaves off the attack transient that makes the consonant recognizable,
+    // which is what was being reported as "missing/muffled first word" even
+    // though no audio was literally deleted. 2.5ms is long enough to still
+    // smooth the sample-value discontinuity (avoids the "pét" click) without
+    // eating a meaningful slice of a fast consonant's onset.
+    const FADE_SEC = 0.0025;
     const normalize = (inputPath: string, segPath: string) =>
       run(FFMPEG_BIN, [
         "-y", "-i", inputPath,
