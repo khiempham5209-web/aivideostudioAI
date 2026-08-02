@@ -1,5 +1,5 @@
 {
-  "version": "1.1.9",
+  "version": "1.1.10",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Them nut tai danh sach thoi gian tung scene (.txt) o trang Giong doc AI - liet ke moi scene kem khung gio bat dau/ket thuc that trong voice.mp3, de doi chieu khi edit."
+  "notes": "Dong bo ten/thu tu menu qua tai khoan (thay vi tung may rieng), lay lai noi dung Kich ban tu Google Sheet khi da sua tay, chan tao kich ban moi khi dang tao voice, va them 4 o chon nhanh du an + tao voice hang loat o man Giong doc AI."
 }
