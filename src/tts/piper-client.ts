@@ -89,6 +89,55 @@ async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
   }
 }
 
+/** Finds where real speech ENDS in an already-lead-trimmed wav — Piper
+ *  leaves a variable amount of trailing silence after the last word
+ *  (depends on the sentence's ending punctuation/prosody), which used to be
+ *  kept in full and then stacked on top of the fixed SCENE_GAP_SEC pause in
+ *  concatWithSilence(). That made the gap before the NEXT scene swing
+ *  anywhere from ~50ms to 700ms+ instead of a steady ~300ms — audible as an
+ *  unpredictably long pause right before the next scene starts, which reads
+ *  as the next scene's opening word being late/dropped even though nothing
+ *  was actually deleted. Trimming the tail here too means concatWithSilence
+ *  is the ONLY source of inter-scene silence, so every gap is the same
+ *  length.
+ *
+ *  Cuts at the LAST detected silence run's start (plus a small safety pad),
+ *  but ONLY when whatever follows that run to end-of-file is short enough
+ *  (<150ms) to plausibly be encoder/vocal-decay noise rather than another
+ *  real word — real Vietnamese syllables take longer than that to say.
+ *  Measured empirically on real renders: that trailing residual after the
+ *  final pause is consistently ~50-70ms. If it's longer, there may be real
+ *  speech after the last detected pause (e.g. the pause was mid-sentence,
+ *  not the final one) — return null (no trim) rather than risk cutting the
+ *  scene's actual last word. */
+async function detectSpeechEnd(wavPath: string): Promise<number | null> {
+  const MIN_TAIL_SILENCE_SEC = 0.15;
+  const TAIL_SAFETY_PAD_SEC = 0.08;
+  const MAX_TRAILING_ARTIFACT_SEC = 0.15;
+  try {
+    const { stderr } = await execFileAsync(FFMPEG_BIN, [
+      "-i", wavPath,
+      "-af", `silencedetect=noise=-30dB:d=${MIN_TAIL_SILENCE_SEC}`,
+      "-f", "null", "-",
+    ], { windowsHide: true });
+    const durationMatch = stderr.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
+    if (!durationMatch) return null;
+    const totalDuration = parseInt(durationMatch[1], 10) * 3600 + parseInt(durationMatch[2], 10) * 60 + parseFloat(durationMatch[3]);
+    const starts = [...stderr.matchAll(/silence_start:\s*([\d.]+)/g)].map((m) => parseFloat(m[1]));
+    const ends = [...stderr.matchAll(/silence_end:\s*([\d.]+)/g)].map((m) => parseFloat(m[1]));
+    if (!starts.length) return null;
+    const lastStart = starts[starts.length - 1];
+    // If the last run is "closed" (has a matching end), whatever comes after
+    // it to EOF is the residual to check; if it's unclosed (silence runs to
+    // EOF), the residual is 0.
+    const residualAfterSilence = ends.length >= starts.length ? totalDuration - ends[ends.length - 1] : 0;
+    if (residualAfterSilence > MAX_TRAILING_ARTIFACT_SEC) return null;
+    return lastStart + TAIL_SAFETY_PAD_SEC;
+  } catch {
+    return null;
+  }
+}
+
 function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv; stdin?: string } = {}): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(command, args, { env: options.env, windowsHide: true });
@@ -201,6 +250,13 @@ export class PiperClient {
       const cutSec = await detectSpeechStartAfterFiller(rawWavPath);
       await run(FFMPEG_BIN, ["-y", "-i", rawWavPath, "-ss", cutSec.toFixed(3), "-c", "copy", outWavPath]);
       await rm(rawWavPath, { force: true });
+
+      const tailEndSec = await detectSpeechEnd(outWavPath);
+      if (tailEndSec !== null) {
+        const tailTrimmedPath = `${outWavPath}.tailtrim.wav`;
+        await run(FFMPEG_BIN, ["-y", "-i", outWavPath, "-to", tailEndSec.toFixed(3), "-c", "copy", tailTrimmedPath]);
+        await rename(tailTrimmedPath, outWavPath);
+      }
     };
 
     const synthesizeOnce = async () => {
