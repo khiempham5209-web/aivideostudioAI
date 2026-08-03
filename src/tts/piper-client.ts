@@ -63,16 +63,25 @@ const PIPER_WARMUP_PREFIX = "À. ";
 const execFileAsync = promisify(execFile);
 
 /** Finds where real speech starts in a Piper-rendered wav that begins with
- *  PIPER_WARMUP_PREFIX — the MIDPOINT of the first silence gap of at least
- *  MIN_GAP_SEC (the pause after the filler word), not its end. The gap's
- *  length varies scene to scene (depends on the phonetic context Piper
- *  gives the trailing period), so cutting near its end is only as safe as
- *  the shortest gap seen in testing — cutting at the midpoint instead
- *  scales with however long this specific gap actually turned out to be,
- *  leaving a safety margin on BOTH sides regardless. Falls back to 0 (no
- *  trim) if no gap is found, so a detection hiccup never eats real audio. */
+ *  PIPER_WARMUP_PREFIX.
+ *
+ *  Used to cut at the MIDPOINT of the first silence gap of at least
+ *  MIN_GAP_SEC (the pause after the filler word) on the theory that the
+ *  midpoint is safely inside silence on both sides. Measured against real
+ *  renders, that was wrong: ffmpeg's reported silence_end lines up closely
+ *  (~10ms) with where speech actually reaches full volume, but the
+ *  amplitude ramps up gradually starting well BEFORE silence_end — cutting
+ *  at the midpoint keeps that whole quiet ramp-up (a real render measured
+ *  ~290ms of near-inaudible audio between the midpoint and silence_end).
+ *  That faint, mumbled lead-in is what was being reported as "the first
+ *  word is missing" — the word wasn't deleted, it was just barely audible
+ *  for its first ~300ms. Cutting at silence_end (plus a tiny buffer)
+ *  removes that quiet ramp entirely, so the scene starts right at full
+ *  volume. Falls back to 0 (no trim) if no gap is found, so a detection
+ *  hiccup never eats real audio. */
 async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
   const MIN_GAP_SEC = 0.12;
+  const END_SAFETY_PAD_SEC = 0.02;
   try {
     const { stderr } = await execFileAsync(FFMPEG_BIN, [
       "-i", wavPath,
@@ -81,9 +90,8 @@ async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
     ], { windowsHide: true });
     const match = stderr.match(/silence_start:\s*([\d.]+)[\s\S]*?silence_end:\s*([\d.]+)/);
     if (!match) return 0;
-    const start = parseFloat(match[1]);
     const end = parseFloat(match[2]);
-    return (start + end) / 2;
+    return end + END_SAFETY_PAD_SEC;
   } catch {
     return 0;
   }
