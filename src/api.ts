@@ -46,6 +46,7 @@ import {
   deleteScene,
   deleteTrack,
   getAsset,
+  getAssetByFilePath,
   getUserSettings,
   getSession,
   getClip,
@@ -1278,6 +1279,7 @@ function startAudioJob(projectId: string, jobId: string) {
           fileName: `voiceover-${timestampForPath()}.mp3`,
           mimeType: "audio/mpeg",
           filePath: paths.audio,
+          localPath: localPaths.audio,
           fileSize: audioInfo.size,
           duration,
         });
@@ -2396,6 +2398,24 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         if (!isUserFile(user.email, path)) {
           sendJson(res, 403, { error: "File does not belong to the current user" });
           return;
+        }
+        // Desktop only: every render writes locally before uploading to R2
+        // (see publishResultPaths) — if that local copy is still on disk,
+        // serve it directly instead of redirecting playback out to R2 over
+        // the network. Real-time streaming from R2 was showing up as
+        // dropped/garbled audio at whatever point network latency hit
+        // during playback — a plain local disk read has no such risk.
+        // Falls through to the R2 redirect on web (no reliable local disk)
+        // or if the local copy is missing.
+        if (!IS_PRODUCTION) {
+          const asset = getAssetByFilePath(path);
+          if (asset?.local_path) {
+            const localExists = await stat(asset.local_path).then((info) => info.isFile()).catch(() => false);
+            if (localExists) {
+              await sendFileByPath(req, res, asset.local_path, req.method === "HEAD", []);
+              return;
+            }
+          }
         }
         const url = await signedR2Url(path, 900);
         res.writeHead(302, { Location: url, "Cache-Control": "private, max-age=0, no-store" });

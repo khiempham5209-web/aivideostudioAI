@@ -169,6 +169,7 @@ export interface AssetRecord {
   file_name: string;
   mime_type: string;
   file_path: string;
+  local_path: string | null;
   file_size: number;
   duration: number | null;
   created_at: string;
@@ -359,6 +360,7 @@ db.exec(`
     file_name TEXT NOT NULL,
     mime_type TEXT NOT NULL,
     file_path TEXT NOT NULL,
+    local_path TEXT,
     file_size INTEGER NOT NULL,
     duration REAL,
     created_at TEXT NOT NULL,
@@ -484,6 +486,7 @@ for (const statement of [
   "ALTER TABLE timeline_tracks ADD COLUMN sub_bg_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.55)'",
   "ALTER TABLE timeline_tracks ADD COLUMN sub_font_family TEXT NOT NULL DEFAULT 'Segoe UI, Arial, sans-serif'",
   "ALTER TABLE scenes ADD COLUMN voice_duration_sec REAL",
+  "ALTER TABLE assets ADD COLUMN local_path TEXT",
   "ALTER TABLE products ADD COLUMN image_url TEXT",
   "ALTER TABLE products ADD COLUMN category TEXT",
   "ALTER TABLE products ADD COLUMN rating TEXT",
@@ -692,6 +695,7 @@ async function initPostgresMirror() {
         file_name TEXT NOT NULL,
         mime_type TEXT NOT NULL,
         file_path TEXT NOT NULL,
+        local_path TEXT,
         file_size BIGINT NOT NULL,
         duration DOUBLE PRECISION,
         created_at TEXT NOT NULL
@@ -849,6 +853,7 @@ async function initPostgresMirror() {
     { label: "render_jobs.video_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS video_path TEXT` },
     { label: "render_jobs.audio_path", sql: `ALTER TABLE render_jobs ADD COLUMN IF NOT EXISTS audio_path TEXT` },
     { label: "assets.duration", sql: `ALTER TABLE assets ADD COLUMN IF NOT EXISTS duration DOUBLE PRECISION` },
+    { label: "assets.local_path", sql: `ALTER TABLE assets ADD COLUMN IF NOT EXISTS local_path TEXT` },
     { label: "scenes.source_asset_id", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_asset_id TEXT` },
     { label: "scenes.source_start", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_start DOUBLE PRECISION` },
     { label: "scenes.source_end", sql: `ALTER TABLE scenes ADD COLUMN IF NOT EXISTS source_end DOUBLE PRECISION` },
@@ -1366,6 +1371,7 @@ export function createAsset(data: {
   fileName: string;
   mimeType: string;
   filePath: string;
+  localPath?: string | null;
   fileSize: number;
   duration?: number | null;
 }): AssetRecord {
@@ -1376,14 +1382,15 @@ export function createAsset(data: {
     file_name: data.fileName,
     mime_type: data.mimeType,
     file_path: data.filePath,
+    local_path: data.localPath ?? null,
     file_size: data.fileSize,
     duration: data.duration ?? null,
     created_at: nowIso(),
   };
   db.prepare(`
     INSERT INTO assets
-    (id, project_id, type, file_name, mime_type, file_path, file_size, duration, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, project_id, type, file_name, mime_type, file_path, local_path, file_size, duration, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     asset.id,
     asset.project_id,
@@ -1391,6 +1398,7 @@ export function createAsset(data: {
     asset.file_name,
     asset.mime_type,
     asset.file_path,
+    asset.local_path,
     asset.file_size,
     asset.duration,
     asset.created_at,
@@ -1405,6 +1413,13 @@ export function listAssets(projectId: string): AssetRecord[] {
 
 export function getAsset(assetId: string): AssetRecord | undefined {
   return db.prepare("SELECT * FROM assets WHERE id = ?").get(assetId) as AssetRecord | undefined;
+}
+
+/** Looks up an asset by its stored (possibly r2://) file_path — used to find
+ *  a still-on-disk local copy to serve directly instead of redirecting
+ *  playback out to R2 over the network. */
+export function getAssetByFilePath(filePath: string): AssetRecord | undefined {
+  return db.prepare("SELECT * FROM assets WHERE file_path = ? ORDER BY created_at DESC LIMIT 1").get(filePath) as AssetRecord | undefined;
 }
 
 export function deleteAsset(assetId: string): AssetRecord | undefined {
