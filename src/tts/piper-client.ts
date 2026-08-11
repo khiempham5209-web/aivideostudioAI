@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { FFMPEG_BIN, PIPER_PYTHON, PIPER_VOICES_DIR, localPiperEspeakDataDir } from "../utils/binaries.js";
+import { FFMPEG_BIN, PIPER_BIN, PIPER_VOICES_DIR, localPiperEspeakDataDir } from "../utils/binaries.js";
+import { getDurationSec } from "../assets/audio-tools.js";
 import { EdgeTtsClient } from "./edge-client.js";
 import { VOICE_OPTIONS } from "./voice-catalog.js";
 
@@ -51,37 +52,59 @@ function ensureEspeakDataDir(): string | undefined {
 // entire sequential TTS queue (TTS_CONCURRENCY defaults to 1) forever.
 const PIPER_TIMEOUT_MS = 60_000;
 
-// Piper clips/attenuates the very first syllable of whatever text a given
-// invocation synthesizes — confirmed by ear and by waveform: the same
-// sentence's first word renders at full volume when it's NOT the first
-// thing spoken (e.g., appearing a second time later in the same input),
-// but is short/quiet when it IS the first thing spoken. Prepending this
-// throwaway filler (never shown to the user, never in subtitles) sacrifices
-// itself to the clipping artifact instead of a real word — the trailing
-// silence after it is then detected and trimmed off in trimLeadingFiller().
-const PIPER_WARMUP_PREFIX = "À. ";
+// HISTORICAL — kept only because the fix below took several rounds to find,
+// and the earlier dead ends are worth not repeating:
+//
+// Piper clipped/attenuated (and, separately, measurably RUSHED — see next
+// paragraph) the very first syllable of whatever text a given invocation
+// synthesized. The original fix was to prepend a throwaway "À." filler
+// before the real text and cut it off after synthesis (trimLeadingFiller/
+// detectSpeechStartAfterFiller below), sacrificing the filler to the
+// clipping artifact instead of a real word. That was invoked via
+// `python -m piper` with the text piped over stdin.
+//
+// The real root cause turned out to be that invocation method, not
+// anything inherent to the Piper model: synthesizing "Sau khi rời công
+// ty," as the first thing spoken via `python -m piper` + stdin measured
+// 887ms; the IDENTICAL phrase via the `piper` console-script binary with
+// `-i <textfile>` (no filler at all) measured 1061ms — matching a 1060ms
+// benchmark of the same words synthesized NOT-first (mid-utterance, after
+// a real sentence). The stdin module path was rushing/compressing
+// whatever it spoke first by ~16%; the file-based console-script path
+// doesn't do that at all. Switching to the console script (PIPER_BIN)
+// eliminated the need for the warmup filler, the per-sentence chunking
+// that existed to limit each chunk's exposure to this bug, and the
+// concatWavs() stitching between chunks — the console script's own
+// `--sentence-silence` flag also handles multi-sentence pacing natively
+// in a single call, more naturally than manually gluing separately
+// synthesized sentences together with zero gap ever did.
 const execFileAsync = promisify(execFile);
+const SENTENCE_SILENCE_SEC = 0.3;
 
-/** Finds where real speech starts in a Piper-rendered wav that begins with
- *  PIPER_WARMUP_PREFIX.
+/** Finds where real speech starts in a Piper-rendered wav — there's
+ *  typically a short natural lead-in silence before the console script's
+ *  output settles into real speech; this trims it so concatWithSilence's
+ *  fixed inter-scene gap is the only source of silence between scenes
+ *  instead of that gap stacking on top of a variable natural lead-in.
+ *  Cuts just after the first silence gap of at least MIN_GAP_SEC. Falls
+ *  back to 0 (no trim) if no such gap is found, so a detection hiccup
+ *  never eats real audio.
  *
- *  Used to cut at the MIDPOINT of the first silence gap of at least
- *  MIN_GAP_SEC (the pause after the filler word) on the theory that the
- *  midpoint is safely inside silence on both sides. Measured against real
- *  renders, that was wrong: ffmpeg's reported silence_end lines up closely
- *  (~10ms) with where speech actually reaches full volume, but the
- *  amplitude ramps up gradually starting well BEFORE silence_end — cutting
- *  at the midpoint keeps that whole quiet ramp-up (a real render measured
- *  ~290ms of near-inaudible audio between the midpoint and silence_end).
- *  That faint, mumbled lead-in is what was being reported as "the first
- *  word is missing" — the word wasn't deleted, it was just barely audible
- *  for its first ~300ms. Cutting at silence_end (plus a tiny buffer)
- *  removes that quiet ramp entirely, so the scene starts right at full
- *  volume. Falls back to 0 (no trim) if no gap is found, so a detection
- *  hiccup never eats real audio. */
-async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
+ *  Bug that shipped once and produced ~227-byte (silent) mp3s for entire
+ *  scenes: text with no leading pause at all (speech starts right at t=0,
+ *  e.g. no comma near the start) has NO qualifying gap near the beginning —
+ *  the only gap silencedetect finds anywhere in the file is the TRAILING
+ *  silence at the very end. The old version took whatever gap regex found
+ *  FIRST in the stderr text unconditionally, so it grabbed that trailing
+ *  gap, treated its end as "where real speech starts", and cut from
+ *  (near end-of-file) to end-of-file — discarding essentially the entire
+ *  scene. MAX_LEADING_START_SEC below rejects any candidate gap that
+ *  doesn't actually start near the beginning of the file, exactly the
+ *  distinction that was missing. */
+async function detectLeadingSilence(wavPath: string): Promise<number> {
   const MIN_GAP_SEC = 0.12;
   const END_SAFETY_PAD_SEC = 0.02;
+  const MAX_LEADING_START_SEC = 0.5;
   try {
     const { stderr } = await execFileAsync(FFMPEG_BIN, [
       "-i", wavPath,
@@ -90,6 +113,8 @@ async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
     ], { windowsHide: true });
     const match = stderr.match(/silence_start:\s*([\d.]+)[\s\S]*?silence_end:\s*([\d.]+)/);
     if (!match) return 0;
+    const start = parseFloat(match[1]);
+    if (start > MAX_LEADING_START_SEC) return 0;
     const end = parseFloat(match[2]);
     return end + END_SAFETY_PAD_SEC;
   } catch {
@@ -117,7 +142,18 @@ async function detectSpeechStartAfterFiller(wavPath: string): Promise<number> {
  *  final pause is consistently ~50-70ms. If it's longer, there may be real
  *  speech after the last detected pause (e.g. the pause was mid-sentence,
  *  not the final one) — return null (no trim) rather than risk cutting the
- *  scene's actual last word. */
+ *  scene's actual last word.
+ *
+ *  A `silenceremove`-filter-based rewrite was tried here (letting ffmpeg
+ *  find+trim the trailing run in one pass instead of hand-parsing
+ *  `silencedetect` stderr) but was caught by a direct before/after duration
+ *  check on a real multi-clause scene before it ever reached the running
+ *  app: ffmpeg's `stop_periods=1` matches the FIRST qualifying silence run
+ *  after speech starts, not the last one — on a 9.5s three-clause sentence
+ *  it matched the comma pause after clause 1 and discarded the remaining
+ *  7.4s (two whole clauses) as if it were trailing silence. Do not swap
+ *  this implementation for that filter without re-verifying that behavior
+ *  on ffmpeg's actual installed version. */
 async function detectSpeechEnd(wavPath: string): Promise<number | null> {
   const MIN_TAIL_SILENCE_SEC = 0.15;
   const TAIL_SAFETY_PAD_SEC = 0.08;
@@ -177,48 +213,6 @@ function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv
   });
 }
 
-function splitForPiper(text: string): string[] {
-  const normalized = text
-    .normalize("NFC")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) return [];
-
-  const sentences = normalized.match(/[^.!?。！？\n]+[.!?。！？]?/g) ?? [normalized];
-  const chunks: string[] = [];
-  for (const sentence of sentences.map((s) => s.trim()).filter(Boolean)) {
-    if (sentence.length <= 180) {
-      chunks.push(sentence);
-      continue;
-    }
-
-    let current = "";
-    for (const part of sentence.split(/([,;:，；：])/)) {
-      const next = `${current}${part}`.trim();
-      if (current && next.length > 180) {
-        chunks.push(current.trim());
-        current = part.trim();
-      } else {
-        current = next;
-      }
-    }
-    if (current) chunks.push(current.trim());
-  }
-  return chunks;
-}
-
-async function concatWavs(inputPaths: string[], outPath: string): Promise<void> {
-  if (inputPaths.length === 1) return;
-  const listPath = `${outPath}.list.txt`;
-  const escapeForConcatList = (p: string) => p.replace(/'/g, "'\\''");
-  await writeFile(listPath, inputPaths.map((p) => `file '${escapeForConcatList(p)}'`).join("\n"), "utf-8");
-  try {
-    await run(FFMPEG_BIN, ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outPath]);
-  } finally {
-    await rm(listPath, { force: true });
-  }
-}
-
 export class PiperClient {
   private voiceId: string;
 
@@ -232,55 +226,60 @@ export class PiperClient {
       throw new Error(`Piper voice model not found: ${modelPath} (run npm run postinstall to download it)`);
     }
 
-    await writeFile(`${audioOutPath}.txt`, text.normalize("NFC"), "utf-8");
+    const textPath = `${audioOutPath}.txt`;
+    const normalizedText = text.normalize("NFC").trim();
+    if (!normalizedText) throw new Error("No text provided for Piper TTS");
+    await writeFile(textPath, normalizedText, "utf-8");
     const wavPath = `${audioOutPath}.piper.wav`;
     const espeakDataDir = ensureEspeakDataDir();
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (espeakDataDir) env.ESPEAK_DATA_PATH = espeakDataDir;
-    // Without this, Python's stdin on Windows decodes under the system
-    // codepage instead of UTF-8, mangling multi-byte characters (e.g. the
-    // curly quotes "..." U+201C/U+201D) into invalid lone surrogates and
-    // crashing piper's espeak-ng phonemizer with UnicodeEncodeError. This
-    // was previously misdiagnosed as an unfixable espeak-ng bug on certain
-    // Vietnamese words — it's actually this encoding mismatch.
     env.PYTHONUTF8 = "1";
     env.PYTHONIOENCODING = "utf-8";
 
-    // Each chunk is its own fresh Piper invocation, so each one independently
-    // needs the warm-up-prefix + trim treatment (see PIPER_WARMUP_PREFIX) —
-    // not just the first chunk of the whole scene.
-    const synthesizeTrimmedChunk = async (chunkText: string, outWavPath: string) => {
-      const rawWavPath = `${outWavPath}.raw.wav`;
-      await run(PIPER_PYTHON, ["-m", "piper", "--model", modelPath, "--output_file", rawWavPath], {
-        env,
-        stdin: `${PIPER_WARMUP_PREFIX}${chunkText}`,
-      });
-      const cutSec = await detectSpeechStartAfterFiller(rawWavPath);
-      await run(FFMPEG_BIN, ["-y", "-i", rawWavPath, "-ss", cutSec.toFixed(3), "-c", "copy", outWavPath]);
+    const synthesizeOnce = async () => {
+      const rawWavPath = `${wavPath}.raw.wav`;
+      await run(PIPER_BIN, [
+        "-m", modelPath,
+        "-i", textPath,
+        "-f", rawWavPath,
+        "--sentence-silence", String(SENTENCE_SILENCE_SEC),
+      ], { env });
+      const rawDurationSec = await getDurationSec(rawWavPath);
+
+      const cutSec = await detectLeadingSilence(rawWavPath);
+      if (cutSec > 0) {
+        await run(FFMPEG_BIN, ["-y", "-i", rawWavPath, "-ss", cutSec.toFixed(3), "-c", "copy", wavPath]);
+      } else {
+        await run(FFMPEG_BIN, ["-y", "-i", rawWavPath, "-c", "copy", wavPath]);
+      }
+
+      const tailEndSec = await detectSpeechEnd(wavPath);
+      if (tailEndSec !== null) {
+        const tailTrimmedPath = `${wavPath}.tailtrim.wav`;
+        await run(FFMPEG_BIN, ["-y", "-i", wavPath, "-to", tailEndSec.toFixed(3), "-c", "copy", tailTrimmedPath]);
+        await rename(tailTrimmedPath, wavPath);
+      }
+
+      // Safety net: the leading/trailing trim heuristics above are each
+      // independently designed to fall back to "no trim" when uncertain,
+      // but a bug in either (one already shipped once — see
+      // detectLeadingSilence's comment — and produced ~227-byte silent
+      // mp3s for entire scenes) can still make it through undetected for
+      // some input. Checking the combined result's duration against the
+      // untrimmed original here catches ANY such bug, known or not, rather
+      // than relying on each individual heuristic being bug-free: losing
+      // more than 70% of the raw audio is never a legitimate trim (leading
+      // + trailing silence realistically cost a few hundred ms, not the
+      // bulk of the clip), so fall back to the untrimmed raw audio instead
+      // of shipping a near-empty scene.
+      const trimmedDurationSec = await getDurationSec(wavPath);
+      if (trimmedDurationSec < rawDurationSec * 0.3) {
+        console.warn(`Piper trim discarded ${(rawDurationSec - trimmedDurationSec).toFixed(2)}s of a ${rawDurationSec.toFixed(2)}s clip (>70%) — using untrimmed audio instead for "${normalizedText.slice(0, 60)}"`);
+        await run(FFMPEG_BIN, ["-y", "-i", rawWavPath, "-c", "copy", wavPath]);
+      }
       await rm(rawWavPath, { force: true });
 
-      const tailEndSec = await detectSpeechEnd(outWavPath);
-      if (tailEndSec !== null) {
-        const tailTrimmedPath = `${outWavPath}.tailtrim.wav`;
-        await run(FFMPEG_BIN, ["-y", "-i", outWavPath, "-to", tailEndSec.toFixed(3), "-c", "copy", tailTrimmedPath]);
-        await rename(tailTrimmedPath, outWavPath);
-      }
-    };
-
-    const synthesizeOnce = async () => {
-      const chunks = splitForPiper(text);
-      if (!chunks.length) throw new Error("No text provided for Piper TTS");
-
-      const wavParts = chunks.map((_, index) => `${audioOutPath}.piper.part-${index}.wav`);
-      for (let index = 0; index < chunks.length; index++) {
-        await synthesizeTrimmedChunk(chunks[index], wavParts[index]);
-      }
-      if (wavParts.length === 1) {
-        await rename(wavParts[0], wavPath);
-      } else {
-        await concatWavs(wavParts, wavPath);
-        await Promise.all(wavParts.map((part) => rm(part, { force: true })));
-      }
       await run(FFMPEG_BIN, ["-y", "-i", wavPath, "-codec:a", "libmp3lame", "-qscale:a", "4", audioOutPath]);
       await rm(wavPath, { force: true });
     };
@@ -307,11 +306,13 @@ export class PiperClient {
       const fallbackVoice = edgeFallbackVoiceFor(this.voiceId);
       console.warn(`Piper TTS failed twice for this text, falling back to Edge TTS (${fallbackVoice}): ${error instanceof Error ? error.message : error}`);
       await rm(wavPath, { force: true }).catch(() => {});
+      await rm(textPath, { force: true }).catch(() => {});
       const fallback = new EdgeTtsClient({ voice: fallbackVoice });
       await fallback.generate(text, audioOutPath, srtOutPath);
       return;
     }
 
+    await rm(textPath, { force: true }).catch(() => {});
     if (srtOutPath) {
       await writeFile(srtOutPath, "", "utf-8");
     }

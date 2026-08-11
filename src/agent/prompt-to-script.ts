@@ -19,7 +19,7 @@ dotenv.config({ path: ".env.local" });
 // metadata.channel (z.string().min(1)) and silently discards the real AI
 // script for the generic fallback script instead.
 const CHANNEL_NAME = process.env.CHANNEL_NAME || "Khiempham AI";
-const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+export const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 // The scene-count cap lives in one place now: TemplateScriptSchema itself
 // (src/render/template-script-schema.ts). Reuse it as-is rather than
@@ -367,7 +367,7 @@ function trimScriptToWordBudget(script: TemplateScript, maxWords: number): Templ
 
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
-async function callGemini(promptText: string, model: string, maxOutputTokens: number): Promise<string> {
+export async function callGemini(promptText: string, model: string, maxOutputTokens: number): Promise<string> {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY in .env.local");
   }

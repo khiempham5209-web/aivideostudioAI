@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { callGemini, DEFAULT_MODEL } from "../agent/prompt-to-script.js";
 
 /**
  * Free-license stock media (Pexels — no attribution required, personal or
@@ -83,6 +84,34 @@ async function downloadTo(url: string, targetPath: string): Promise<void> {
   if (!res.ok) throw new Error(`Pexels download failed: HTTP ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
   await writeFile(targetPath, buffer);
+}
+
+/**
+ * Derives a short English Pexels search phrase from a scene's (often
+ * Vietnamese) narration text via Gemini. Only AI-script-generated scenes
+ * came with a pre-written English `visualQuery` (see prompt-to-script.ts);
+ * manually-written/pasted scenes — most real usage — had none, and the
+ * caller used to fall back to the raw Vietnamese narration text as the
+ * "query" itself, which Pexels' search essentially never matches against.
+ * That silently made the whole Pexels-footage feature a no-op for
+ * hand-written scripts, functioning only for the one specific script-entry
+ * path that happens to produce English keywords. This closes that gap so
+ * the same real-footage matching works regardless of how the scene's text
+ * was created. Returns null (not a thrown error) on any failure — a missed
+ * Pexels match is expected/handled downstream (falls back to the AI-drawn
+ * template), so this must never be the thing that breaks a render. */
+export async function deriveVisualQuery(voiceText: string): Promise<string | null> {
+  if (!process.env.GEMINI_API_KEY || !voiceText.trim()) return null;
+  try {
+    const prompt = `Give 2-4 concrete English keywords describing a stock photo/video that would visually match this narration line (concrete and visual, not abstract — e.g. "person writing at desk" not "feeling overwhelmed"). Narration: "${voiceText.trim().slice(0, 300)}"\n\nRespond as JSON: {"query": "keyword keyword keyword"}`;
+    const raw = await callGemini(prompt, DEFAULT_MODEL, 200);
+    const parsed = JSON.parse(raw) as { query?: string };
+    const query = parsed.query?.trim();
+    return query || null;
+  } catch (error) {
+    console.warn(`Pexels visualQuery derivation failed: ${error instanceof Error ? error.message : error}`);
+    return null;
+  }
 }
 
 /**

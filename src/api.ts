@@ -998,11 +998,12 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       templateId: fallback.templateId,
       inputs: fallback.inputs,
       // Prefer the AI-generated English stock-search keywords saved at script
-      // generation time (real Pexels matches). Manually-added scenes have no
-      // visual_query — fall back to the raw narration text, which works less
-      // well for Pexels search but the scene can still be given an
-      // image/video assigned by hand instead.
-      visualQuery: scene.visual_query || scene.voice_text.slice(0, 80),
+      // generation time. Manually-added scenes have no visual_query — leave
+      // it unset rather than falling back to the raw (often Vietnamese)
+      // narration text, which Pexels' search essentially never matches
+      // against; template-pipeline.ts derives a real English query from the
+      // narration text itself when this is empty.
+      visualQuery: scene.visual_query || undefined,
       speaker: scene.speaker === "B" ? "B" : "A",
     };
   });

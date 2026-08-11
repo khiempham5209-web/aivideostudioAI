@@ -15,7 +15,7 @@ import {
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "../assets/sfx-selector.js";
 import { composeTemplate } from "./template-composer.js";
 import { cutFootageToDuration, fitClipToDuration, imageToKenBurnsClip, concatVideos, muxAudioOntoVideo } from "./video-tools.js";
-import { fetchPexelsMedia, isPexelsConfigured } from "../assets/pexels-client.js";
+import { fetchPexelsMedia, isPexelsConfigured, deriveVisualQuery } from "../assets/pexels-client.js";
 import { log } from "../utils/logger.js";
 
 const TOTAL_STEPS = 8;
@@ -147,14 +147,26 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
 
   // The reuse check below (`if (existsSync(out))`) is what lets a retried
   // job skip scenes it already synthesized — but it only checks file
-  // existence, not which voice made the file. Without this guard, switching
-  // a project's voice and re-generating silently kept reusing the OLD
-  // voice's audio for every scene that happened to already have an mp3 on
-  // disk from a prior run, so the output never changed to match the newly
-  // selected voice. Clearing stale scene files when the voice signature
-  // changes makes the reuse optimization voice-aware.
+  // existence, not which voice (or which version of the TTS pipeline) made
+  // the file. Without this guard, switching a project's voice and
+  // re-generating silently kept reusing the OLD voice's audio for every
+  // scene that happened to already have an mp3 on disk from a prior run, so
+  // the output never changed to match the newly selected voice. Clearing
+  // stale scene files when this signature changes makes the reuse
+  // optimization voice-aware.
+  //
+  // The "chunked-vN" segment is a manual cache-buster for changes to HOW a
+  // scene gets synthesized (not just which voice) — e.g. splitForPiper's
+  // rewrite from one-Piper-call-per-sentence to greedily packing sentences
+  // into fewer calls (v3) changed the actual audio for scenes with multiple
+  // sentences even though the voice itself didn't change. Bump this number
+  // any time piper-client.ts's synthesis/trim/chunking logic changes, or
+  // every regenerate on every already-rendered project keeps silently
+  // reusing pre-fix audio forever — this is what made two separate rounds
+  // of "still broken" reports in the same day turn out to be untested old
+  // audio, not the fix actually failing.
   const voice2Signature = script.voice2 ? `:${script.voice2.provider}:${script.voice2.name}:${script.voice2.speed}` : "";
-  const voiceSignature = `${effectiveTtsProvider}:chunked-v2:${script.voice.name}:${script.voice.speed}${voice2Signature}`;
+  const voiceSignature = `${effectiveTtsProvider}:chunked-v6:${script.voice.name}:${script.voice.speed}${voice2Signature}`;
   const voiceSignaturePath = join(voiceDir, ".voice-signature");
   const previousSignature = existsSync(voiceSignaturePath) ? await readFile(voiceSignaturePath, "utf8") : null;
   if (previousSignature !== voiceSignature) {
@@ -194,9 +206,30 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const voiceRawMp3 = join(outputDir, "voice-raw.mp3");
   const voiceWithSfxMp3 = join(outputDir, "voice-with-sfx.mp3");
   const voiceMp3 = join(outputDir, "voice.mp3");
-  await concatWithSilence(sceneAudio.map((a) => a.path), SCENE_GAP_SEC, voiceRawMp3);
+  const { leadingSilenceSec, segmentDurationsSec } = await concatWithSilence(
+    sceneAudio.map((a) => a.path),
+    SCENE_GAP_SEC,
+    voiceRawMp3,
+  );
 
-  let cursor = 0;
+  // concatWithSilence measured each segment's duration off its own
+  // post-resample, post-fade WAV — the exact bytes that ended up in
+  // voiceRawMp3 — which differs slightly from each scene's pre-concat mp3
+  // duration (that mp3 gets decoded, resampled and re-encoded on its way
+  // into the concat). Overwrite durationSec here so every downstream use
+  // (subtitle end times below, and the per-scene video duration further
+  // down) is measured against what's actually in the audio file instead of
+  // an estimate that drifts a few ms further off it each scene — by the
+  // back half of a 90+ scene render that drift was over a second.
+  sceneAudio.forEach((a, i) => {
+    a.durationSec = segmentDurationsSec[i];
+  });
+
+  // concatWithSilence also pads `leadingSilenceSec` of silence before the
+  // very first segment (not just between segments) — a cursor starting at 0
+  // ignored that pad entirely, making every scene's subtitle start early by
+  // exactly that amount.
+  let cursor = leadingSilenceSec;
   const sceneStarts: Record<string, number> = {};
   for (const a of sceneAudio) {
     sceneStarts[a.id] = cursor;
@@ -323,21 +356,31 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
       log.info(`  scene ${scene.id}: footage ${footageIndex + 1} @ ${startSec.toFixed(2)}s → ${visualDur.toFixed(2)}s`);
       footageCursor += visualDur;
       fittedClips.push(fitClip);
-    } else if (isPexelsConfigured() && scene.visualQuery) {
-      const pexels = existsSync(fitClip) ? null : await fetchPexelsMedia(scene.visualQuery, script.aspect, pexelsCacheDir);
+    } else if (isPexelsConfigured()) {
+      // AI-script-generated scenes already carry an English visualQuery
+      // (see prompt-to-script.ts's prompt). Manually-written/pasted scenes
+      // — the common case — had none, and used to get skipped straight to
+      // the AI-drawn template as if Pexels weren't configured at all.
+      // Deriving one here from the (often Vietnamese) narration text means
+      // real stock footage is attempted regardless of how the scene's text
+      // was created, not just for the one script-entry path. Only spend the
+      // Gemini call when actually about to fetch — a REUSE hit below skips
+      // it entirely.
+      const visualQuery = existsSync(fitClip) ? null : scene.visualQuery || (await deriveVisualQuery(scene.voiceText));
+      const pexels = visualQuery ? await fetchPexelsMedia(visualQuery, script.aspect, pexelsCacheDir) : null;
       if (existsSync(fitClip)) {
-        log.info(`  scene ${scene.id}: REUSE Pexels clip`);
+        log.info(`  scene ${scene.id}: REUSE Pexels/template clip`);
         fittedClips.push(fitClip);
       } else if (pexels?.type === "video") {
         await cutFootageToDuration(pexels.path, 0, visualDur, fitClip, script.aspect, RENDER_FPS);
-        log.info(`  scene ${scene.id}: Pexels video "${scene.visualQuery}" -> ${visualDur.toFixed(2)}s`);
+        log.info(`  scene ${scene.id}: Pexels video "${visualQuery}" -> ${visualDur.toFixed(2)}s`);
         fittedClips.push(fitClip);
       } else if (pexels?.type === "image") {
         await imageToKenBurnsClip(pexels.path, visualDur, fitClip, script.aspect, RENDER_FPS);
-        log.info(`  scene ${scene.id}: Pexels photo "${scene.visualQuery}" (Ken Burns) -> ${visualDur.toFixed(2)}s`);
+        log.info(`  scene ${scene.id}: Pexels photo "${visualQuery}" (Ken Burns) -> ${visualDur.toFixed(2)}s`);
         fittedClips.push(fitClip);
       } else {
-        log.info(`  scene ${scene.id}: no Pexels match for "${scene.visualQuery}", falling back to AI template`);
+        log.info(`  scene ${scene.id}: no Pexels match for "${visualQuery ?? "(no query)"}", falling back to AI template`);
         if (existsSync(rawClip)) {
           log.info(`  scene ${scene.id}: REUSE clip — delete to force re-render`);
         } else {

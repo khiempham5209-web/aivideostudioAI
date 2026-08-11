@@ -3,7 +3,7 @@
 // scripts/hidden-launch.vbs, which suppresses the console window; running
 // this script directly with `node` will still show a console.
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, openSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +13,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const LOG_DIR = join(ROOT, "logs");
 const LOG_FILE = join(LOG_DIR, "desktop-launcher.log");
+// The server itself used to run with stdio: "ignore" — every console.log/
+// console.warn from api.ts (including error detail from TTS/render
+// failures) vanished with no way to see it after the fact, since the
+// hidden-launch.vbs path shows no console window either. Redirecting to a
+// plain file here means a real diagnosis is possible after something goes
+// wrong instead of having to blind-guess or manually reproduce.
+const SERVER_LOG_FILE = join(LOG_DIR, "server.log");
 
 function log(message) {
   try {
@@ -175,10 +182,20 @@ async function main() {
   }
 
   log(`Spawning server: node ${distEntry}`);
+  // Cap the log at ~10MB by starting a fresh file instead of appending
+  // forever — this process can stay running for weeks between restarts.
+  try {
+    if (existsSync(SERVER_LOG_FILE) && statSync(SERVER_LOG_FILE).size > 10 * 1024 * 1024) {
+      writeFileSync(SERVER_LOG_FILE, "", "utf8");
+    }
+  } catch {
+    // best-effort — an oversized log is better than a launch failure
+  }
+  const serverLogFd = openSync(SERVER_LOG_FILE, "a");
   const child = spawn(process.execPath, [distEntry], {
     cwd: ROOT,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", serverLogFd, serverLogFd],
     windowsHide: true,
   });
   child.unref();

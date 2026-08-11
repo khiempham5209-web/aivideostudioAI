@@ -42,6 +42,25 @@ export const EDGE_TTS_PYTHON = process.env.EDGE_TTS_PYTHON ?? localEdgeTtsPython
 export const PIPER_PYTHON = EDGE_TTS_PYTHON;
 export const PIPER_VOICES_DIR = resolve(".piper-voices");
 
+function localPiperBinary(): string | undefined {
+  const exe = resolve(".edge-tts-venv", "Scripts", "piper.exe");
+  const linux = resolve(".edge-tts-venv", "bin", "piper");
+  if (existsSync(exe)) return exe;
+  if (existsSync(linux)) return linux;
+  return undefined;
+}
+
+// The `piper` console-script entry point (installed alongside python in the
+// venv by pip), NOT `python -m piper`. Invoking the module via stdin text
+// measurably compresses/rushes the first thing it speaks in each call
+// (confirmed by direct A/B timing: the same phrase took 887ms via `python
+// -m piper` + stdin vs 1061ms via this console script + `-i` file input,
+// vs a 1060ms natural non-first-in-invocation benchmark) — the console
+// script's own `-i`/`-f` file-based flow doesn't have that problem, and
+// also exposes `--sentence-silence` so a whole multi-sentence scene can be
+// synthesized in one call instead of one call per sentence.
+export const PIPER_BIN = process.env.PIPER_BIN ?? localPiperBinary() ?? "piper";
+
 /** Where pip installed piper's bundled espeak-ng phoneme data. The piper
  *  binary/extension has a build-time-hardcoded fallback path that never
  *  matches a real install, so callers must always pass ESPEAK_DATA_PATH

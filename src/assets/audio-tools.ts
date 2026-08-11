@@ -72,11 +72,25 @@ export async function getDurationSec(path: string): Promise<number> {
  * normalize step still applies a tiny 8 ms fade-in/fade-out to smooth any
  * DC offset discontinuity at the boundary (avoids the "pét" clicking sound).
  */
+export interface ConcatWithSilenceResult {
+  /** Silence inserted before the very first segment (see comment below). */
+  leadingSilenceSec: number;
+  /** Exact duration of each input's own normalized WAV segment, in the same
+   *  order as `inputPaths` — this is what actually ends up in `outPath` for
+   *  that segment, measured directly off the WAV (lossless PCM, so this is
+   *  exact) rather than off the caller's pre-concat mp3. Callers computing
+   *  subtitle timings from durations measured on the pre-concat mp3 (which
+   *  goes through a decode→resample→re-encode round trip inside this
+   *  function) accumulate a few ms of drift per scene from that round trip
+   *  — by scene 90 that was over a second off. Use these instead. */
+  segmentDurationsSec: number[];
+}
+
 export async function concatWithSilence(
   inputPaths: string[],
   gapSec: number,
   outPath: string,
-): Promise<void> {
+): Promise<ConcatWithSilenceResult> {
   if (inputPaths.length === 0) throw new Error("concatWithSilence: empty inputPaths");
 
   const tmp = await mkdtemp(join(tmpdir(), "concat-"));
@@ -129,9 +143,11 @@ export async function concatWithSilence(
     // first word/letter", most noticeably on scene 0 (no adjacent gap into
     // the previous scene's tail to absorb the same slack from).
     const listLines: string[] = [`file '${escapeForConcatList(silenceSegPath)}'`];
+    const segmentDurationsSec: number[] = [];
     for (let i = 0; i < inputPaths.length; i++) {
       const segPath = join(tmp, `seg-${i}.wav`);
       await normalize(inputPaths[i], segPath);
+      segmentDurationsSec.push(await getDurationSec(segPath));
       listLines.push(`file '${escapeForConcatList(segPath)}'`);
       if (i < inputPaths.length - 1) {
         listLines.push(`file '${escapeForConcatList(silenceSegPath)}'`);
@@ -145,6 +161,8 @@ export async function concatWithSilence(
       "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100",
       outPath,
     ]);
+
+    return { leadingSilenceSec: gapSec, segmentDurationsSec };
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
