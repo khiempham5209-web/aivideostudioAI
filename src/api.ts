@@ -1902,6 +1902,10 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
 //     and fetches its image in the same pass.
 // Finishes with a normal sync so pass 2's newly-ID'd rows become real local
 // products and pass 1's fetched images get pushed out to the Sheet.
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -1924,6 +1928,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
       updateProduct(p.id, updates);
       localImagesUpdated++;
     }
+    await sleep(1200);
   }
 
   let newRowsFilled = 0;
@@ -1948,6 +1953,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
         product_name: row.product_name ? undefined : gallery.name,
         price_reference: gallery.price ? String(gallery.price) : undefined,
       });
+      await sleep(1200);
     }
     if (fills.length) newRowsFilled = await fillSheetRowFields(fills);
   } catch {
@@ -1978,6 +1984,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
       if (!row.product_name && gallery.name) fill.product_name = gallery.name;
       if (!row.price_reference && gallery.price) fill.price_reference = String(gallery.price);
       if (fill.image_url || fill.product_name || fill.price_reference) fills.push(fill);
+      await sleep(1500);
     }
     if (fills.length) staleRowsFilled = await fillSheetRowFields(fills);
   } catch {
