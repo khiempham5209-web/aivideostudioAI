@@ -841,6 +841,16 @@
     populatePriceRangeSelect();
     populateSortSelect();
 
+    // Fire-and-forget visit log for the owner's report — never blocks or
+    // delays rendering the page itself (same reasoning as the click
+    // tracker above: a slow/asleep backend must never be something the
+    // visitor waits on).
+    fetch("/api/public/visit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: location.pathname }),
+    }).catch(() => {});
+
     fetch("/api/public/products")
       .then((r) => r.json())
       .then((data) => {

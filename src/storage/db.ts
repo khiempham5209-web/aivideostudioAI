@@ -436,6 +436,12 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS page_views (
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    visited_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS timeline_clips (
     id TEXT PRIMARY KEY,
     track_id TEXT NOT NULL,
@@ -811,6 +817,14 @@ async function initPostgresMirror() {
         updated_at TEXT NOT NULL
       )`,
     },
+    {
+      label: "page_views",
+      sql: `CREATE TABLE IF NOT EXISTS page_views (
+        id TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        visited_at TEXT NOT NULL
+      )`,
+    },
     { label: "products.image_url", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT` },
     { label: "products.category", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT` },
     { label: "products.rating", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS rating TEXT` },
@@ -1142,6 +1156,36 @@ export function incrementProductClicks(id: string): void {
   db.prepare("UPDATE products SET landing_clicks = landing_clicks + 1 WHERE id = ?").run(id);
   const row = db.prepare("SELECT landing_clicks FROM products WHERE id = ?").get(id) as { landing_clicks: number } | undefined;
   if (row) void pgExec("UPDATE products SET landing_clicks = $1 WHERE id = $2", [row.landing_clicks, id]);
+}
+
+/** Logs one page visit (called from the public shop page on load — see
+ *  handlePublicPageView in api.ts). One row per visit rather than a single
+ *  running counter so the count can later be broken down by date/path
+ *  without a schema change. */
+export function logPageView(path: string): void {
+  const viewId = id("view");
+  const visitedAt = nowIso();
+  db.prepare("INSERT INTO page_views (id, path, visited_at) VALUES (?, ?, ?)").run(viewId, path, visitedAt);
+  void pgExec("INSERT INTO page_views (id, path, visited_at) VALUES ($1, $2, $3)", [viewId, path, visitedAt]);
+}
+
+/** Total page-view count. Prefers a live Postgres read (same reasoning as
+ *  listPublicProductsLive above: the process answering this request may not
+ *  be the same one that logged every visit, so its local mirror can lag) —
+ *  falls back to the local count if Postgres isn't configured or the query
+ *  fails. */
+export async function getPageViewCount(): Promise<number> {
+  const pool = pgPool;
+  if (pool) {
+    try {
+      const result = await pool.query("SELECT COUNT(*)::int AS count FROM page_views");
+      return result.rows[0]?.count ?? 0;
+    } catch (error) {
+      console.warn("Live Postgres page-view count failed, falling back to local mirror:", error instanceof Error ? error.message : String(error));
+    }
+  }
+  const row = db.prepare("SELECT COUNT(*) AS count FROM page_views").get() as { count: number };
+  return row.count;
 }
 
 export function createProduct(data: {

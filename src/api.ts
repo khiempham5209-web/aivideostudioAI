@@ -83,6 +83,8 @@ import {
   listPublicProducts,
   listPublicProductsLive,
   incrementProductClicks,
+  logPageView,
+  getPageViewCount,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -1856,6 +1858,23 @@ async function handlePublicProductClick(_req: IncomingMessage, res: ServerRespon
   sendJson(res, 200, { ok: true });
 }
 
+// Fire-and-forget, no auth (called from the public shop page itself), no
+// response body needed beyond a 200 — the page must not wait on this before
+// rendering, so keep it a single cheap insert with no other work.
+async function handlePublicPageView(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req).catch(() => ({}));
+  const path = typeof (body as { path?: unknown }).path === "string" ? (body as { path: string }).path.slice(0, 200) : "/";
+  logPageView(path);
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleGetSiteStats(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const totalVisits = await getPageViewCount();
+  sendJson(res, 200, { ok: true, totalVisits });
+}
+
 async function handleGoogleStart(req: IncomingMessage, res: ServerResponse) {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     sendJson(res, 501, {
@@ -2715,6 +2734,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const publicClickMatch = url.pathname.match(/^\/api\/public\/products\/([^/]+)\/click$/);
     if (req.method === "POST" && publicClickMatch) {
       await handlePublicProductClick(req, res, publicClickMatch[1]);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/public/visit") {
+      await handlePublicPageView(req, res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/site-stats") {
+      await handleGetSiteStats(req, res);
       return;
     }
 
