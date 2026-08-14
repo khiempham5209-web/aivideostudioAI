@@ -24,6 +24,8 @@ export interface SheetPushUpdate {
   tiktok_post_url?: string;
   views_clicks_orders?: string;
   commission?: string;
+  image_url?: string;
+  price_reference?: string;
 }
 
 function config() {

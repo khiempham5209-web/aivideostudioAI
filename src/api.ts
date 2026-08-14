@@ -1819,8 +1819,13 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
   let pushError: string | null = null;
   try {
     const local = listProducts(user.email);
+    // image_url/price_reference are data-enrichment fields (e.g. auto-fetched
+    // from the product's Shopee link), not render-progress fields like the
+    // rest of this push — a product still sitting at "Chưa tạo" can still
+    // have a freshly-fetched image worth pushing back, so it needs its own
+    // half of the filter rather than piggybacking on the progress check.
     const pushUpdates = local
-      .filter((p) => p.status !== "Chưa tạo" || p.video_file || p.tiktok_post_url)
+      .filter((p) => p.status !== "Chưa tạo" || p.video_file || p.tiktok_post_url || p.image_url || p.price_reference)
       .map((p) => ({
         item_id: p.item_id,
         status: p.status,
@@ -1828,6 +1833,8 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
         tiktok_post_url: p.tiktok_post_url ?? undefined,
         views_clicks_orders: p.views_clicks_orders ?? undefined,
         commission: p.commission ?? undefined,
+        image_url: p.image_url ?? undefined,
+        price_reference: p.price_reference ?? undefined,
       }));
     pushed = await pushProductUpdatesToSheet(pushUpdates);
   } catch (error) {
