@@ -85,6 +85,7 @@ import {
   incrementProductClicks,
   logPageView,
   getPageViewCount,
+  deletePostgresProductsById,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -1875,6 +1876,24 @@ async function handleGetSiteStats(req: IncomingMessage, res: ServerResponse) {
   sendJson(res, 200, { ok: true, totalVisits });
 }
 
+// One-off cleanup for Postgres-only "ghost" product rows — see
+// deletePostgresProductsById's comment for how these accumulate (a delete
+// mirrored to Postgres that silently failed). Takes explicit ids rather
+// than auto-detecting a diff server-side, so the caller stays in control of
+// exactly what gets removed from production data.
+async function handlePurgeGhostProducts(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const body = (await readJsonBody(req).catch(() => ({}))) as { ids?: unknown };
+  const ids = Array.isArray(body.ids) ? body.ids.filter((v): v is string => typeof v === "string") : [];
+  if (ids.length === 0) {
+    sendJson(res, 400, { error: "ids must be a non-empty array of product ids" });
+    return;
+  }
+  const deleted = await deletePostgresProductsById(ids);
+  sendJson(res, 200, { ok: true, deleted });
+}
+
 async function handleGoogleStart(req: IncomingMessage, res: ServerResponse) {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     sendJson(res, 501, {
@@ -2742,6 +2761,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "GET" && url.pathname === "/api/site-stats") {
       await handleGetSiteStats(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/products/purge-ghosts") {
+      await handlePurgeGhostProducts(req, res);
       return;
     }
 

@@ -913,6 +913,22 @@ let pgLastWriteError: string | null = null;
 let pgLastWriteErrorAt: string | null = null;
 let pgSchemaStepFailures: { label: string; error: string; at: string }[] = [];
 
+/** Deletes specific product rows directly from Postgres by id, bypassing
+ *  the normal delete path (deleteProduct only mirrors a delete to Postgres
+ *  when the LOCAL row existed and was actually removed — a row that only
+ *  exists in Postgres, e.g. because an earlier delete's fire-and-forget
+ *  pgExec mirror call failed silently while the local SQLite delete still
+ *  succeeded, can never be reached through it). Awaited (not the usual
+ *  fire-and-forget pgExec) since callers need to know it actually ran.
+ *  Returns how many rows were actually deleted. */
+export async function deletePostgresProductsById(ids: string[]): Promise<number> {
+  const pool = pgPool;
+  if (!pool || ids.length === 0) return 0;
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+  const result = await pool.query(`DELETE FROM products WHERE id IN (${placeholders})`, ids);
+  return result.rowCount ?? 0;
+}
+
 export function getPgWriteHealth() {
   return {
     configured: pgPool !== null,
