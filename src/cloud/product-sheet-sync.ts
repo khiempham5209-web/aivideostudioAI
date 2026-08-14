@@ -143,6 +143,8 @@ export interface SheetRowFill {
   row: number;
   item_id?: string;
   image_url?: string;
+  product_name?: string;
+  price_reference?: string;
 }
 
 /** Writes directly to a row by its sheet row number rather than matching by

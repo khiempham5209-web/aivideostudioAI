@@ -24,6 +24,7 @@ import {
   fetchProductsFromSheet,
   fetchRowsMissingItemId,
   fillSheetRowFields,
+  type SheetRowFill,
   isProductSheetConfigured,
   logProductClick,
   markContentQueueDone,
@@ -1909,12 +1910,19 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     return;
   }
 
-  const localMissing = listProducts(user.email).filter((p) => p.original_url && !p.image_url);
+  // image_url and price_reference are the two fields this can realistically
+  // backfill for an already-tracked product — product_name is required at
+  // creation time so it's never blank here the way a freshly-pasted Sheet
+  // row's can be (handled separately below).
+  const localMissing = listProducts(user.email).filter((p) => p.original_url && (!p.image_url || !p.price_reference));
   let localImagesUpdated = 0;
   for (const p of localMissing) {
     const gallery = await fetchShopeeGallery(p.original_url!);
-    if (gallery.imageUrls[0]) {
-      updateProduct(p.id, { image_url: gallery.imageUrls[0] });
+    const updates: { image_url?: string; price_reference?: string } = {};
+    if (!p.image_url && gallery.imageUrls[0]) updates.image_url = gallery.imageUrls[0];
+    if (!p.price_reference && gallery.price) updates.price_reference = String(gallery.price);
+    if (Object.keys(updates).length) {
+      updateProduct(p.id, updates);
       localImagesUpdated++;
     }
   }
@@ -1923,7 +1931,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
   let newRowsSkipped = 0;
   try {
     const missingIdRows = await fetchRowsMissingItemId();
-    const fills: { row: number; item_id?: string; image_url?: string }[] = [];
+    const fills: SheetRowFill[] = [];
     for (const row of missingIdRows) {
       const itemId = row.original_url ? deriveShopeeItemId(row.original_url) : null;
       if (!itemId) {
@@ -1931,7 +1939,16 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
         continue;
       }
       const gallery = await fetchShopeeGallery(row.original_url);
-      fills.push({ row: row.row, item_id: itemId, image_url: gallery.imageUrls[0] || undefined });
+      fills.push({
+        row: row.row,
+        item_id: itemId,
+        image_url: gallery.imageUrls[0] || undefined,
+        // Only fill product_name/price if the Sheet's own cell is still
+        // blank — a row that already has a name typed in (just missing an
+        // id) must not have it silently replaced by Shopee's listing title.
+        product_name: row.product_name ? undefined : gallery.name,
+        price_reference: gallery.price ? String(gallery.price) : undefined,
+      });
     }
     if (fills.length) newRowsFilled = await fillSheetRowFields(fills);
   } catch {

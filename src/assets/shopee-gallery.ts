@@ -3,6 +3,13 @@ import axios from "axios";
 export interface ShopeeGalleryResult {
   imageUrls: string[];
   videoUrls: string[];
+  /** Product title and current price, opportunistically read off the same
+   *  item-detail response the images/videos already come from — no extra
+   *  request. `price` is Shopee's raw integer (VND × 100000, their fixed-
+   *  point convention) converted down to plain VND; `undefined` if the
+   *  response didn't have a usable value rather than a guessed 0. */
+  name?: string;
+  price?: number;
 }
 
 /** Shopee product URLs come in two shapes:
@@ -71,7 +78,15 @@ export async function fetchShopeeGallery(productUrl: string): Promise<ShopeeGall
       }
     }
 
-    return { imageUrls, videoUrls };
+    const name = typeof data.name === "string" && data.name.trim() ? data.name.trim() : undefined;
+    // Shopee's price fields are all the same fixed-point integer (real VND
+    // × 100000); price_min is what's actually charged when a listing has
+    // variation-based pricing (price alone can be the lowest/a stale value
+    // on those), so prefer it and fall back to price for single-price items.
+    const rawPrice = data.price_min ?? data.price;
+    const price = typeof rawPrice === "number" && rawPrice > 0 ? Math.round(rawPrice / 100000) : undefined;
+
+    return { imageUrls, videoUrls, name, price };
   } catch (error) {
     console.error(`[shopee-gallery] fetch failed for ${productUrl}:`, error instanceof Error ? error.message : String(error));
     return { imageUrls: [], videoUrls: [] };
