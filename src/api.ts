@@ -1783,9 +1783,14 @@ async function handleDebugSheetRows(req: IncomingMessage, res: ServerResponse) {
   const wanted = idsParam ? new Set(idsParam.split(",").map((s) => s.trim())) : null;
   try {
     const rows = await fetchProductsFromSheet();
-    const filtered = wanted ? rows.filter((r) => wanted.has(r.item_id)) : rows;
+    // Apps Script returns a Sheet cell that looks like a plain number as a
+    // JS number, not a string (same quirk handled in handleSyncProducts) —
+    // item_id must be stringified before comparing against the query's
+    // string set, or every numeric-looking item_id silently matches nothing.
+    const filtered = wanted ? rows.filter((r) => wanted.has(String(r.item_id))) : rows;
     sendJson(res, 200, {
       ok: true,
+      totalRowsInSheet: rows.length,
       rows: filtered.map((r) => ({ item_id: r.item_id, product_name: r.product_name, image_url: r.image_url })),
     });
   } catch (error) {
