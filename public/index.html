@@ -1611,7 +1611,7 @@
           </div>
 
           <div id="productsTabPanel">
-            <div class="top-actions" style="margin-bottom:12px;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
+            <div class="top-actions" style="margin-bottom:12px;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn" id="autoFetchImagesButton" type="button">🖼️ Tự động lấy ảnh</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
             <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
             <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
               <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
@@ -5367,6 +5367,31 @@
         } finally {
           button.disabled = false;
           button.textContent = "🔄 Đồng bộ Google Sheet";
+        }
+      });
+
+      $("#autoFetchImagesButton")?.addEventListener("click", async () => {
+        const button = $("#autoFetchImagesButton");
+        const status = $("#productSyncStatus");
+        button.disabled = true;
+        button.textContent = "Đang lấy ảnh...";
+        const seq = ++productsRequestSeq;
+        try {
+          const data = await api("/api/products/auto-fetch-images", { method: "POST" });
+          if (seq === productsRequestSeq) {
+            state.products = data.products || [];
+            renderProducts();
+          }
+          if (status) {
+            status.style.display = "block";
+            status.textContent = `Đã lấy ảnh cho ${data.localImagesUpdated} sản phẩm, gán mã + ảnh cho ${data.newRowsFilled} dòng mới${data.newRowsSkipped ? ` (${data.newRowsSkipped} dòng bỏ qua vì thiếu link Shopee)` : ""}.`;
+          }
+          toast(data.pushError ? `Lấy ảnh xong nhưng ghi ngược lên Sheet lỗi: ${data.pushError}` : "Đã lấy ảnh và đồng bộ xong.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🖼️ Tự động lấy ảnh";
         }
       });
 

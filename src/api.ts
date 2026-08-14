@@ -16,12 +16,14 @@ import { toSlug } from "./utils/slug.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
 import { fetchMedia } from "./assets/image-fetcher.js";
-import { fetchShopeeGallery } from "./assets/shopee-gallery.js";
+import { fetchShopeeGallery, deriveShopeeItemId } from "./assets/shopee-gallery.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, r2Uri, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
 import {
   fetchContentQueueRowScript,
   fetchPendingContentQueue,
   fetchProductsFromSheet,
+  fetchRowsMissingItemId,
+  fillSheetRowFields,
   isProductSheetConfigured,
   logProductClick,
   markContentQueueDone,
@@ -1750,7 +1752,14 @@ async function handleFetchShopeeGallery(req: IncomingMessage, res: ServerRespons
     if (Array.isArray(parsed)) existing = parsed.filter((u): u is string => typeof u === "string");
   } catch { /* malformed row — start fresh */ }
   const merged = Array.from(new Set([...existing, ...gallery.imageUrls, ...gallery.videoUrls]));
-  const updated = updateProduct(productId, { media_urls: JSON.stringify(merged) });
+  // The cover thumbnail (image_url — what actually renders on the shop
+  // page's product card) is a separate field from this gallery and was
+  // never set by this endpoint, so a product could have a full media
+  // gallery and still show no image on the public site. Backfill it from
+  // the gallery's first real photo whenever it's still empty, without
+  // touching an image_url someone already set on purpose.
+  const imageUrlUpdate = !product.image_url && gallery.imageUrls[0] ? { image_url: gallery.imageUrls[0] } : {};
+  const updated = updateProduct(productId, { media_urls: JSON.stringify(merged), ...imageUrlUpdate });
   sendJson(res, 200, { ok: true, added: merged.length - existing.length, product: productToJson(updated) });
 }
 
@@ -1798,56 +1807,48 @@ async function handleDebugSheetRows(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
-  const user = requireUser(req, res);
-  if (!user) return;
-  if (!isProductSheetConfigured()) {
-    sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
-    return;
-  }
+// Shared by handleSyncProducts and handleAutoFetchImages — pull whatever the
+// Sheet currently has into the local DB, then push back the local fields the
+// app itself owns/enriches (render progress + fetched image/price). Throws
+// only for the pull half; a push failure is reported via pushError instead,
+// since pulled rows are already committed by the time push could fail and
+// must not be hidden from the caller.
+async function syncProductsWithSheet(ownerEmail: string): Promise<{ pulled: number; pushed: number; pushError: string | null }> {
   let pulled = 0;
-  try {
-    const sheetRows = await fetchProductsFromSheet();
-    // Google Sheets cells that look like plain numbers (e.g. a price typed as
-    // 16.901 with VN locale) come back from Apps Script as a JS number, not a
-    // string. Binding a raw number to a SQLite TEXT column triggers SQLite's
-    // own numeric-affinity formatting, which stringifies whole numbers with a
-    // trailing ".0" (16901 -> "16901.0"). Force everything to a clean string
-    // at the sync boundary so that quirk never reaches the database.
-    const asText = (v: unknown): string | undefined => {
-      if (v === undefined || v === null || v === "") return undefined;
-      return typeof v === "number" ? String(v) : String(v).trim();
-    };
-    for (const row of sheetRows) {
-      const itemId = asText(row.item_id);
-      if (!itemId) continue;
-      upsertProductFromSheet(user.email, {
-        item_id: itemId,
-        product_name: asText(row.product_name) ?? "",
-        shop_name: asText(row.shop_name),
-        original_url: asText(row.original_url),
-        affiliate_url: asText(row.affiliate_url),
-        variation: asText(row.variation),
-        price_reference: asText(row.price_reference),
-        commission_type: asText(row.commission_type),
-        key_points: asText(row.key_points),
-        image_url: asText(row.image_url),
-        category: asText(row.category),
-      });
-      pulled++;
-    }
-  } catch (error) {
-    sendJson(res, 502, { error: error instanceof Error ? error.message : "Đồng bộ Google Sheet thất bại (lấy dữ liệu)" });
-    return;
+  const sheetRows = await fetchProductsFromSheet();
+  // Google Sheets cells that look like plain numbers (e.g. a price typed as
+  // 16.901 with VN locale) come back from Apps Script as a JS number, not a
+  // string. Binding a raw number to a SQLite TEXT column triggers SQLite's
+  // own numeric-affinity formatting, which stringifies whole numbers with a
+  // trailing ".0" (16901 -> "16901.0"). Force everything to a clean string
+  // at the sync boundary so that quirk never reaches the database.
+  const asText = (v: unknown): string | undefined => {
+    if (v === undefined || v === null || v === "") return undefined;
+    return typeof v === "number" ? String(v) : String(v).trim();
+  };
+  for (const row of sheetRows) {
+    const itemId = asText(row.item_id);
+    if (!itemId) continue;
+    upsertProductFromSheet(ownerEmail, {
+      item_id: itemId,
+      product_name: asText(row.product_name) ?? "",
+      shop_name: asText(row.shop_name),
+      original_url: asText(row.original_url),
+      affiliate_url: asText(row.affiliate_url),
+      variation: asText(row.variation),
+      price_reference: asText(row.price_reference),
+      commission_type: asText(row.commission_type),
+      key_points: asText(row.key_points),
+      image_url: asText(row.image_url),
+      category: asText(row.category),
+    });
+    pulled++;
   }
-  // Pulled rows are already committed to the local DB above — a failure in
-  // this best-effort push-back must not hide products the user already has
-  // (previously a single try/catch around both steps threw the whole request
-  // to 502 on push failure, so the frontend never even saw the pulled data).
+
   let pushed = 0;
   let pushError: string | null = null;
   try {
-    const local = listProducts(user.email);
+    const local = listProducts(ownerEmail);
     // image_url/price_reference are data-enrichment fields (e.g. auto-fetched
     // from the product's Shopee link), not render-progress fields like the
     // rest of this push — a product still sitting at "Chưa tạo" can still
@@ -1869,7 +1870,90 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
   } catch (error) {
     pushError = error instanceof Error ? error.message : "Đẩy trạng thái lên Sheet thất bại";
   }
-  sendJson(res, 200, { ok: true, pulled, pushed, pushError, products: listProducts(user.email) });
+  return { pulled, pushed, pushError };
+}
+
+async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!isProductSheetConfigured()) {
+    sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
+    return;
+  }
+  let result: { pulled: number; pushed: number; pushError: string | null };
+  try {
+    result = await syncProductsWithSheet(user.email);
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : "Đồng bộ Google Sheet thất bại (lấy dữ liệu)" });
+    return;
+  }
+  sendJson(res, 200, { ok: true, ...result, products: listProducts(user.email) });
+}
+
+// The "Tự động lấy ảnh" button's handler. Two passes:
+//  1. Local products that already have a link but no cover image — fetch
+//     and set image_url directly (same gallery source as the per-product
+//     "Lấy toàn bộ ảnh/video" button, just automated across everything).
+//  2. Sheet rows with a link but no item_id yet (freshly pasted rows) —
+//     Sheet-only until now, invisible to every item_id-keyed path. Assigns
+//     a stable item_id straight from the Shopee URL (the same id
+//     deriveShopeeItemId always would, so re-running this is idempotent)
+//     and fetches its image in the same pass.
+// Finishes with a normal sync so pass 2's newly-ID'd rows become real local
+// products and pass 1's fetched images get pushed out to the Sheet.
+async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!isProductSheetConfigured()) {
+    sendJson(res, 400, { error: "Chưa cấu hình Google Sheet" });
+    return;
+  }
+
+  const localMissing = listProducts(user.email).filter((p) => p.original_url && !p.image_url);
+  let localImagesUpdated = 0;
+  for (const p of localMissing) {
+    const gallery = await fetchShopeeGallery(p.original_url!);
+    if (gallery.imageUrls[0]) {
+      updateProduct(p.id, { image_url: gallery.imageUrls[0] });
+      localImagesUpdated++;
+    }
+  }
+
+  let newRowsFilled = 0;
+  let newRowsSkipped = 0;
+  try {
+    const missingIdRows = await fetchRowsMissingItemId();
+    const fills: { row: number; item_id?: string; image_url?: string }[] = [];
+    for (const row of missingIdRows) {
+      const itemId = row.original_url ? deriveShopeeItemId(row.original_url) : null;
+      if (!itemId) {
+        newRowsSkipped++;
+        continue;
+      }
+      const gallery = await fetchShopeeGallery(row.original_url);
+      fills.push({ row: row.row, item_id: itemId, image_url: gallery.imageUrls[0] || undefined });
+    }
+    if (fills.length) newRowsFilled = await fillSheetRowFields(fills);
+  } catch {
+    // best-effort — pass 1's local backfill above still counts as progress
+    // even if the Sheet is unreachable for pass 2 right now.
+  }
+
+  let syncResult: { pulled: number; pushed: number; pushError: string | null } = { pulled: 0, pushed: 0, pushError: null };
+  try {
+    syncResult = await syncProductsWithSheet(user.email);
+  } catch (error) {
+    syncResult.pushError = error instanceof Error ? error.message : "Đồng bộ sau khi lấy ảnh thất bại";
+  }
+
+  sendJson(res, 200, {
+    ok: true,
+    localImagesUpdated,
+    newRowsFilled,
+    newRowsSkipped,
+    ...syncResult,
+    products: listProducts(user.email),
+  });
 }
 
 async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) {
@@ -2742,6 +2826,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "POST" && url.pathname === "/api/products/sync") {
       await handleSyncProducts(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/products/auto-fetch-images") {
+      await handleAutoFetchImages(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/products/debug-sheet-rows") {

@@ -17,6 +17,14 @@ function parseShopeeIds(url: string): { shopId: string; itemId: string } | null 
   return null;
 }
 
+/** The itemId half of parseShopeeIds, exposed for callers that need a
+ *  stable per-listing identifier (not the shopId, which repeats across a
+ *  shop's whole catalog) — e.g. assigning item_id to a freshly-pasted
+ *  product-sheet row that only has a link so far. */
+export function deriveShopeeItemId(url: string): string | null {
+  return parseShopeeIds(url)?.itemId ?? null;
+}
+
 const IMAGE_CDN_BASE = "https://down-vn.img.susercontent.com/file/";
 
 /** Shopee's own (undocumented, unofficial) item-detail endpoint — the same

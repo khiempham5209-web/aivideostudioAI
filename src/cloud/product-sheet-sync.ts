@@ -123,6 +123,37 @@ export async function fetchPendingContentQueue(): Promise<ContentQueueItem[]> {
   return data.items ?? [];
 }
 
+export interface SheetRowMissingItemId {
+  row: number;
+  product_name: string;
+  original_url: string;
+}
+
+/** Product-sheet rows that have a link/name but no item_id yet (freshly
+ *  pasted rows) — item_id is the key every other write path matches on, so
+ *  these are otherwise invisible to upsertProductFromSheet/pushProductUpdatesToSheet
+ *  entirely (the Apps Script's normal GET filters out any row with a blank
+ *  item_id — see the .gs code's doGet). */
+export async function fetchRowsMissingItemId(): Promise<SheetRowMissingItemId[]> {
+  const data = await postAction<{ rows?: SheetRowMissingItemId[] }>("listRowsMissingItemId");
+  return data.rows ?? [];
+}
+
+export interface SheetRowFill {
+  row: number;
+  item_id?: string;
+  image_url?: string;
+}
+
+/** Writes directly to a row by its sheet row number rather than matching by
+ *  item_id — the one path that can assign a brand-new row's item_id in the
+ *  first place, since matching by item_id is impossible before it has one. */
+export async function fillSheetRowFields(updates: SheetRowFill[]): Promise<number> {
+  if (!updates.length) return 0;
+  const data = await postAction<{ updated?: number }>("fillRowFields", { updates });
+  return data.updated ?? 0;
+}
+
 /** Writes the AI-generated script back to a row and flips its status to
  *  "Đã viết - Chờ duyệt" — the user reads/edits it directly in the Sheet,
  *  then flips Trạng thái to "Đã duyệt" themselves when it's ready for voice. */
