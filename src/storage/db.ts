@@ -1292,9 +1292,21 @@ export function deleteProduct(ownerEmail: string, id: string): boolean {
 }
 
 /** Upsert products pulled from the Google Sheet sync — only touches the
- *  input fields the Sheet owns (link/name/price/etc). Never overwrites
+ *  input fields the Sheet owns (link/name/etc). Never overwrites
  *  status/video_file/tiktok_post_url/commission — those are app-owned and
- *  pushed the other direction, so a sync-in can never clobber render progress. */
+ *  pushed the other direction, so a sync-in can never clobber render progress.
+ *
+ *  image_url and price_reference get the same "app-owned" protection for a
+ *  blank sheet cell specifically (unlike the other Sheet-owned fields below,
+ *  which a blank cell legitimately clears): these two can be auto-fetched by
+ *  the app itself (e.g. scraped from the product's Shopee link) before the
+ *  Sheet's own cell has that value yet. A sync always pulls before it pushes
+ *  in the same request (see handleSyncProducts) — with a plain `?? null`
+ *  here, that pull would silently wipe a same-request-pending push's data
+ *  before it ever reached the Sheet, discovered when a sync right after an
+ *  image backfill deleted the images it had just fetched. Falling back to
+ *  the existing local value instead of null means a blank cell is read as
+ *  "Sheet has nothing new to say about this field" rather than "clear it". */
 export function upsertProductFromSheet(ownerEmail: string, sheet: {
   item_id: string;
   product_name: string;
@@ -1318,10 +1330,10 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
       original_url: sheet.original_url ?? null,
       affiliate_url: sheet.affiliate_url ?? null,
       variation: sheet.variation ?? null,
-      price_reference: sheet.price_reference ?? null,
+      price_reference: sheet.price_reference ?? existing.price_reference,
       commission_type: sheet.commission_type ?? null,
       key_points: sheet.key_points ?? null,
-      image_url: sheet.image_url ?? null,
+      image_url: sheet.image_url ?? existing.image_url,
       category: sheet.category ?? null,
       updated_at: updated,
     };
