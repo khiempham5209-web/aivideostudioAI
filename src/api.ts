@@ -1769,6 +1769,30 @@ async function handleDeleteProduct(req: IncomingMessage, res: ServerResponse, pr
  *  status/result fields back — one button covers both directions, matching
  *  the "Sheet owns input, app owns output" split so neither side clobbers
  *  the other's fields. */
+// One-off diagnostic: shows exactly what fetchProductsFromSheet() reads
+// right now for a given set of item_ids, straight from the Apps Script GET
+// — no DB round-trip, so it can't be masked by upsertProductFromSheet's
+// "keep the local value" fallback for a blank cell. Needed because a normal
+// sync's local-DB state can look fine even if the Sheet itself never
+// actually received a push (that fallback protects local data either way).
+async function handleDebugSheetRows(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const url = new URL(req.url ?? "", "http://localhost");
+  const idsParam = url.searchParams.get("item_ids");
+  const wanted = idsParam ? new Set(idsParam.split(",").map((s) => s.trim())) : null;
+  try {
+    const rows = await fetchProductsFromSheet();
+    const filtered = wanted ? rows.filter((r) => wanted.has(r.item_id)) : rows;
+    sendJson(res, 200, {
+      ok: true,
+      rows: filtered.map((r) => ({ item_id: r.item_id, product_name: r.product_name, image_url: r.image_url })),
+    });
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : "Sheet read failed" });
+  }
+}
+
 async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -2713,6 +2737,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "POST" && url.pathname === "/api/products/sync") {
       await handleSyncProducts(req, res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/products/debug-sheet-rows") {
+      await handleDebugSheetRows(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/content-queue/pending") {
