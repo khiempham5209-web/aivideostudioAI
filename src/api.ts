@@ -1801,7 +1801,7 @@ async function handleDebugSheetRows(req: IncomingMessage, res: ServerResponse) {
     sendJson(res, 200, {
       ok: true,
       totalRowsInSheet: rows.length,
-      rows: filtered.map((r) => ({ item_id: r.item_id, product_name: r.product_name, image_url: r.image_url })),
+      rows: filtered.map((r) => ({ item_id: r.item_id, product_name: r.product_name, image_url: r.image_url, price_reference: r.price_reference, shop_name: r.shop_name })),
     });
   } catch (error) {
     sendJson(res, 502, { error: error instanceof Error ? error.message : "Sheet read failed" });
@@ -1910,17 +1910,16 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     return;
   }
 
-  // image_url and price_reference are the two fields this can realistically
-  // backfill for an already-tracked product — product_name is required at
-  // creation time so it's never blank here the way a freshly-pasted Sheet
-  // row's can be (handled separately below).
-  const localMissing = listProducts(user.email).filter((p) => p.original_url && (!p.image_url || !p.price_reference));
+  const localMissing = listProducts(user.email).filter(
+    (p) => p.original_url && (!p.image_url || !p.price_reference || !p.product_name),
+  );
   let localImagesUpdated = 0;
   for (const p of localMissing) {
     const gallery = await fetchShopeeGallery(p.original_url!);
-    const updates: { image_url?: string; price_reference?: string } = {};
+    const updates: { image_url?: string; price_reference?: string; product_name?: string } = {};
     if (!p.image_url && gallery.imageUrls[0]) updates.image_url = gallery.imageUrls[0];
     if (!p.price_reference && gallery.price) updates.price_reference = String(gallery.price);
+    if (!p.product_name && gallery.name) updates.product_name = gallery.name;
     if (Object.keys(updates).length) {
       updateProduct(p.id, updates);
       localImagesUpdated++;
@@ -1956,6 +1955,35 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     // even if the Sheet is unreachable for pass 2 right now.
   }
 
+  // Rows that already have an item_id (assigned in some earlier run) but
+  // whose gallery fetch came back empty at the time — e.g. a transient
+  // Shopee anti-bot block — never resurface via fetchRowsMissingItemId
+  // (it only looks at blank-item_id rows), so without this pass they'd be
+  // stuck without name/image/price forever. Retried by row number every
+  // run; harmless once actually filled since the per-field check below
+  // only sends fields that came back non-empty.
+  let staleRowsRetried = 0;
+  let staleRowsFilled = 0;
+  try {
+    const allRows = await fetchProductsFromSheet();
+    const staleRows = allRows.filter(
+      (r) => r.item_id && r.original_url && (!r.product_name || !r.image_url || !r.price_reference) && r._row,
+    );
+    const fills: SheetRowFill[] = [];
+    for (const row of staleRows) {
+      staleRowsRetried++;
+      const gallery = await fetchShopeeGallery(row.original_url!);
+      const fill: SheetRowFill = { row: row._row! };
+      if (!row.image_url && gallery.imageUrls[0]) fill.image_url = gallery.imageUrls[0];
+      if (!row.product_name && gallery.name) fill.product_name = gallery.name;
+      if (!row.price_reference && gallery.price) fill.price_reference = String(gallery.price);
+      if (fill.image_url || fill.product_name || fill.price_reference) fills.push(fill);
+    }
+    if (fills.length) staleRowsFilled = await fillSheetRowFields(fills);
+  } catch {
+    // best-effort
+  }
+
   let syncResult: { pulled: number; pushed: number; pushError: string | null } = { pulled: 0, pushed: 0, pushError: null };
   try {
     syncResult = await syncProductsWithSheet(user.email);
@@ -1968,6 +1996,8 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     localImagesUpdated,
     newRowsFilled,
     newRowsSkipped,
+    staleRowsRetried,
+    staleRowsFilled,
     ...syncResult,
     products: listProducts(user.email),
   });

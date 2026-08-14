@@ -4,6 +4,10 @@
 // no Google Cloud project, just a URL + shared secret the user controls.
 
 export interface SheetProductRow {
+  /** Sheet row number (1-based, header is row 1) — present on every row the
+   *  Apps Script's doGet returns, used to write back via fillRowFields
+   *  without needing to re-match by item_id. */
+  _row?: number;
   item_id: string;
   product_name: string;
   shop_name?: string;
