@@ -27,6 +27,7 @@ import {
   type SheetRowFill,
   isProductSheetConfigured,
   logProductClick,
+  logDailyVisit,
   markContentQueueDone,
   pushProductUpdatesToSheet,
   writeContentQueueResult,
@@ -2152,6 +2153,9 @@ async function handlePublicPageView(req: IncomingMessage, res: ServerResponse) {
   const path = typeof (body as { path?: unknown }).path === "string" ? (body as { path: string }).path.slice(0, 200) : "/";
   logPageView(path);
   sendJson(res, 200, { ok: true });
+  // Fired after the response so a slow/unreachable Apps Script never delays
+  // the visitor's page load — same fire-and-forget shape as logProductClick.
+  void logDailyVisit();
 }
 
 async function handleGetSiteStats(req: IncomingMessage, res: ServerResponse) {

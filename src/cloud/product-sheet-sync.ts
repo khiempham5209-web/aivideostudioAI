@@ -72,6 +72,26 @@ export async function logProductClick(itemId: string, productName: string): Prom
   }
 }
 
+/** Best-effort: bumps today's row in a "BaoCaoTruyCap" tab (auto-created by
+ *  the Apps Script) by 1 — one row per calendar day (VN time), incremented
+ *  in place rather than appended per-visit, so the tab stays a short daily
+ *  summary next to the per-event "BaoCaoClick" tab instead of growing one
+ *  row per page load. */
+export async function logDailyVisit(): Promise<void> {
+  const { url, key } = config();
+  if (!url || !key) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, action: "logDailyVisit" }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    // Best-effort — a visitor's page load must never fail because the report log is down.
+  }
+}
+
 export async function pushProductUpdatesToSheet(updates: SheetPushUpdate[]): Promise<number> {
   if (!updates.length) return 0;
   const { url, key } = config();
