@@ -1291,6 +1291,19 @@ export function deleteProduct(ownerEmail: string, id: string): boolean {
   return (result.changes ?? 0) > 0;
 }
 
+/** Bulk local-only delete by id — caller is responsible for the Postgres
+ *  mirror cleanup (via the awaited deletePostgresProductsById) since the
+ *  normal per-row deleteProduct's fire-and-forget mirror delete is exactly
+ *  what produced the 32 "ghost" Postgres rows earlier. */
+export function deleteProductsByIds(ownerEmail: string, ids: string[]): number {
+  if (!ids.length) return 0;
+  const placeholders = ids.map(() => "?").join(",");
+  const result = db
+    .prepare(`DELETE FROM products WHERE owner_email = ? AND id IN (${placeholders})`)
+    .run(ownerEmail, ...ids);
+  return result.changes ?? 0;
+}
+
 /** Upsert products pulled from the Google Sheet sync — only touches the
  *  input fields the Sheet owns (link/name/etc). Never overwrites
  *  status/video_file/tiktok_post_url/commission — those are app-owned and

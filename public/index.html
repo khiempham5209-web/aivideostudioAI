@@ -5359,7 +5359,7 @@
           }
           if (status) {
             status.style.display = "block";
-            status.textContent = `Đã lấy ${data.pulled} sản phẩm từ Sheet, đã ghi ngược ${data.pushed} trạng thái.`;
+            status.textContent = `Đã lấy ${data.pulled} sản phẩm từ Sheet, đã ghi ngược ${data.pushed} trạng thái.` + (data.pruned ? ` Đã dọn ${data.pruned} SKU trùng/rác.` : "");
           }
           toast(data.pushError ? `Đồng bộ xong (lấy dữ liệu OK) nhưng ghi ngược lên Sheet lỗi: ${data.pushError}` : "Đồng bộ Google Sheet xong.");
         } catch (error) {
@@ -5384,7 +5384,7 @@
           }
           if (status) {
             status.style.display = "block";
-            status.textContent = `Đã lấy ảnh cho ${data.localImagesUpdated} sản phẩm, gán mã + ảnh cho ${data.newRowsFilled} dòng mới${data.newRowsSkipped ? ` (${data.newRowsSkipped} dòng bỏ qua vì thiếu link Shopee)` : ""}.`;
+            status.textContent = `Đã lấy ảnh cho ${data.localImagesUpdated} sản phẩm, gán mã + ảnh cho ${data.newRowsFilled} dòng mới${data.newRowsSkipped ? ` (${data.newRowsSkipped} dòng bỏ qua vì thiếu link Shopee)` : ""}.` + (data.pruned ? ` Đã dọn ${data.pruned} SKU trùng/rác.` : "");
           }
           toast(data.pushError ? `Lấy ảnh xong nhưng ghi ngược lên Sheet lỗi: ${data.pushError}` : "Đã lấy ảnh và đồng bộ xong.");
         } catch (error) {

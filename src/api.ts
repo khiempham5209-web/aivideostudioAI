@@ -93,6 +93,7 @@ import {
   updateProduct,
   deleteProduct,
   upsertProductFromSheet,
+  deleteProductsByIds,
   type TimelineTrackType,
 } from "./storage/db.js";
 
@@ -1857,7 +1858,9 @@ async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse
 // only for the pull half; a push failure is reported via pushError instead,
 // since pulled rows are already committed by the time push could fail and
 // must not be hidden from the caller.
-async function syncProductsWithSheet(ownerEmail: string): Promise<{ pulled: number; pushed: number; pushError: string | null }> {
+async function syncProductsWithSheet(
+  ownerEmail: string,
+): Promise<{ pulled: number; pushed: number; pruned: number; pushError: string | null }> {
   let pulled = 0;
   const sheetRows = await fetchProductsFromSheet();
   // Google Sheets cells that look like plain numbers (e.g. a price typed as
@@ -1870,9 +1873,11 @@ async function syncProductsWithSheet(ownerEmail: string): Promise<{ pulled: numb
     if (v === undefined || v === null || v === "") return undefined;
     return typeof v === "number" ? String(v) : String(v).trim();
   };
+  const sheetItemIds = new Set<string>();
   for (const row of sheetRows) {
     const itemId = asText(row.item_id);
     if (!itemId) continue;
+    sheetItemIds.add(itemId);
     upsertProductFromSheet(ownerEmail, {
       item_id: itemId,
       product_name: asText(row.product_name) ?? "",
@@ -1887,6 +1892,32 @@ async function syncProductsWithSheet(ownerEmail: string): Promise<{ pulled: numb
       category: asText(row.category),
     });
     pulled++;
+  }
+
+  // A local product whose own item_id no longer exists in the Sheet is a
+  // stale duplicate ONLY when there's positive proof of that — its
+  // original_url resolves to a Shopee item_id that DOES currently exist in
+  // the Sheet under a different item_id (e.g. the user cleared an old
+  // placeholder like "Sp1" and the same product's row got reassigned a
+  // fresh Shopee-derived id elsewhere). A local product with no
+  // original_url (e.g. a manually-added TikTok-only product that was never
+  // meant to have a Sheet row at all) or whose derived id isn't in the
+  // Sheet is left alone — deleting those would be real data loss, not
+  // cleanup.
+  let pruned = 0;
+  if (sheetItemIds.size > 0) {
+    const staleIds = listProducts(ownerEmail)
+      .filter((p) => !sheetItemIds.has(p.item_id) && p.original_url)
+      .map((p) => {
+        const derivedId = deriveShopeeItemId(p.original_url!);
+        return derivedId && derivedId !== p.item_id && sheetItemIds.has(derivedId) ? p.id : null;
+      })
+      .filter((id): id is string => id !== null);
+    if (staleIds.length) {
+      deleteProductsByIds(ownerEmail, staleIds);
+      await deletePostgresProductsById(staleIds).catch(() => {});
+      pruned = staleIds.length;
+    }
   }
 
   let pushed = 0;
@@ -1914,7 +1945,7 @@ async function syncProductsWithSheet(ownerEmail: string): Promise<{ pulled: numb
   } catch (error) {
     pushError = error instanceof Error ? error.message : "Đẩy trạng thái lên Sheet thất bại";
   }
-  return { pulled, pushed, pushError };
+  return { pulled, pushed, pruned, pushError };
 }
 
 async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
@@ -1924,7 +1955,7 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
     sendJson(res, 400, { error: "Chưa cấu hình PRODUCT_SHEET_SYNC_URL / PRODUCT_SHEET_SECRET trong .env.local" });
     return;
   }
-  let result: { pulled: number; pushed: number; pushError: string | null };
+  let result: { pulled: number; pushed: number; pruned: number; pushError: string | null };
   try {
     result = await syncProductsWithSheet(user.email);
   } catch (error) {
@@ -2037,7 +2068,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     // best-effort
   }
 
-  let syncResult: { pulled: number; pushed: number; pushError: string | null } = { pulled: 0, pushed: 0, pushError: null };
+  let syncResult: { pulled: number; pushed: number; pruned: number; pushError: string | null } = { pulled: 0, pushed: 0, pruned: 0, pushError: null };
   try {
     syncResult = await syncProductsWithSheet(user.email);
   } catch (error) {
