@@ -1326,7 +1326,7 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
     const merged: ProductRecord = {
       ...existing,
       product_name: sheet.product_name,
-      shop_name: sheet.shop_name ?? null,
+      shop_name: sheet.shop_name ?? existing.shop_name,
       original_url: sheet.original_url ?? null,
       affiliate_url: sheet.affiliate_url ?? null,
       variation: sheet.variation ?? null,

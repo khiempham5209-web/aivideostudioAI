@@ -10,6 +10,11 @@ export interface ShopeeGalleryResult {
    *  response didn't have a usable value rather than a guessed 0. */
   name?: string;
   price?: number;
+  /** Shop's display name, read off a second (best-effort) call to Shopee's
+   *  shop/get endpoint using the same shopId — the item/get response the
+   *  rest of this function reads doesn't carry it. `undefined` if that
+   *  second call fails; never blocks the image/name/price result. */
+  shopName?: string;
 }
 
 /** Shopee product URLs come in two shapes:
@@ -85,10 +90,29 @@ export async function fetchShopeeGallery(productUrl: string): Promise<ShopeeGall
     // on those), so prefer it and fall back to price for single-price items.
     const rawPrice = data.price_min ?? data.price;
     const price = typeof rawPrice === "number" && rawPrice > 0 ? Math.round(rawPrice / 100000) : undefined;
+    const shopName = await fetchShopeeShopName(ids.shopId, productUrl);
 
-    return { imageUrls, videoUrls, name, price };
+    return { imageUrls, videoUrls, name, price, shopName };
   } catch (error) {
     console.error(`[shopee-gallery] fetch failed for ${productUrl}:`, error instanceof Error ? error.message : String(error));
     return { imageUrls: [], videoUrls: [] };
+  }
+}
+
+async function fetchShopeeShopName(shopId: string, referer: string): Promise<string | undefined> {
+  try {
+    const resp = await axios.get(`https://shopee.vn/api/v4/shop/get?shopid=${shopId}`, {
+      timeout: 15000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Referer": referer,
+        "Accept": "application/json",
+      },
+      validateStatus: (s) => s < 500,
+    });
+    const name = resp.data?.data?.name;
+    return typeof name === "string" && name.trim() ? name.trim() : undefined;
+  } catch {
+    return undefined;
   }
 }

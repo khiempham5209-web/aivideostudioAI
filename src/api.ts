@@ -1801,7 +1801,7 @@ async function handleDebugSheetRows(req: IncomingMessage, res: ServerResponse) {
     sendJson(res, 200, {
       ok: true,
       totalRowsInSheet: rows.length,
-      rows: filtered.map((r) => ({ item_id: r.item_id, product_name: r.product_name, image_url: r.image_url, price_reference: r.price_reference, shop_name: r.shop_name })),
+      rows: filtered.map((r) => ({ row: r._row, item_id: r.item_id, product_name: r.product_name, image_url: r.image_url, price_reference: r.price_reference, shop_name: r.shop_name, original_url: r.original_url })),
     });
   } catch (error) {
     sendJson(res, 502, { error: error instanceof Error ? error.message : "Sheet read failed" });
@@ -1821,6 +1821,7 @@ async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse
     product_name?: unknown;
     image_url?: unknown;
     price_reference?: unknown;
+    shop_name?: unknown;
   };
   const itemId = typeof body.item_id === "string" || typeof body.item_id === "number" ? String(body.item_id) : "";
   if (!itemId) {
@@ -1841,6 +1842,7 @@ async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse
       const p = String(body.price_reference).trim();
       if (p) fill.price_reference = p;
     }
+    if (typeof body.shop_name === "string" && body.shop_name.trim()) fill.shop_name = body.shop_name.trim();
     const updated = await fillSheetRowFields([fill]);
     const syncResult = await syncProductsWithSheet(user.email).catch(() => null);
     sendJson(res, 200, { ok: true, row: row._row, updated, syncResult });
@@ -1956,15 +1958,16 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
   }
 
   const localMissing = listProducts(user.email).filter(
-    (p) => p.original_url && (!p.image_url || !p.price_reference || !p.product_name),
+    (p) => p.original_url && (!p.image_url || !p.price_reference || !p.product_name || !p.shop_name),
   );
   let localImagesUpdated = 0;
   for (const p of localMissing) {
     const gallery = await fetchShopeeGallery(p.original_url!);
-    const updates: { image_url?: string; price_reference?: string; product_name?: string } = {};
+    const updates: { image_url?: string; price_reference?: string; product_name?: string; shop_name?: string } = {};
     if (!p.image_url && gallery.imageUrls[0]) updates.image_url = gallery.imageUrls[0];
     if (!p.price_reference && gallery.price) updates.price_reference = String(gallery.price);
     if (!p.product_name && gallery.name) updates.product_name = gallery.name;
+    if (!p.shop_name && gallery.shopName) updates.shop_name = gallery.shopName;
     if (Object.keys(updates).length) {
       updateProduct(p.id, updates);
       localImagesUpdated++;
@@ -1993,6 +1996,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
         // id) must not have it silently replaced by Shopee's listing title.
         product_name: row.product_name ? undefined : gallery.name,
         price_reference: gallery.price ? String(gallery.price) : undefined,
+        shop_name: row.shop_name ? undefined : gallery.shopName,
       });
       await sleep(1200);
     }
@@ -2014,7 +2018,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
   try {
     const allRows = await fetchProductsFromSheet();
     const staleRows = allRows.filter(
-      (r) => r.item_id && r.original_url && (!r.product_name || !r.image_url || !r.price_reference) && r._row,
+      (r) => r.item_id && r.original_url && (!r.product_name || !r.image_url || !r.price_reference || !r.shop_name) && r._row,
     );
     const fills: SheetRowFill[] = [];
     for (const row of staleRows) {
@@ -2024,7 +2028,8 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
       if (!row.image_url && gallery.imageUrls[0]) fill.image_url = gallery.imageUrls[0];
       if (!row.product_name && gallery.name) fill.product_name = gallery.name;
       if (!row.price_reference && gallery.price) fill.price_reference = String(gallery.price);
-      if (fill.image_url || fill.product_name || fill.price_reference) fills.push(fill);
+      if (!row.shop_name && gallery.shopName) fill.shop_name = gallery.shopName;
+      if (fill.image_url || fill.product_name || fill.price_reference || fill.shop_name) fills.push(fill);
       await sleep(1500);
     }
     if (fills.length) staleRowsFilled = await fillSheetRowFields(fills);

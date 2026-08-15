@@ -131,6 +131,7 @@ export interface SheetRowMissingItemId {
   row: number;
   product_name: string;
   original_url: string;
+  shop_name?: string;
 }
 
 /** Product-sheet rows that have a link/name but no item_id yet (freshly
@@ -149,6 +150,7 @@ export interface SheetRowFill {
   image_url?: string;
   product_name?: string;
   price_reference?: string;
+  shop_name?: string;
 }
 
 /** Writes directly to a row by its sheet row number rather than matching by
