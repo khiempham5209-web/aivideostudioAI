@@ -283,15 +283,14 @@
   .section.disabled .row-hint { color: var(--muted); font-size: 12px; margin: -8px 0 14px 4px; }
 
   .row {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
     gap: 14px;
-    overflow-x: auto;
-    padding-bottom: 6px;
-    scroll-snap-type: x proximity;
   }
+  @media (min-width: 600px) { .row { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 900px) { .row { grid-template-columns: repeat(4, 1fr); } }
   .card {
-    flex: 0 0 160px;
-    scroll-snap-align: start;
+    flex: initial;
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--panel);
