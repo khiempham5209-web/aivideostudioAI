@@ -1291,6 +1291,45 @@ export function deleteProduct(ownerEmail: string, id: string): boolean {
   return (result.changes ?? 0) > 0;
 }
 
+/** Copies the app-owned progress fields (render status, video file, TikTok
+ *  post/catalog links, view/commission stats, click count, fact sheet) from
+ *  one product record onto another, but only into fields the target record
+ *  hasn't already set — used right before deleting a stale duplicate (e.g.
+ *  an old "Sp1"-style placeholder-id record whose real product now also
+ *  exists under a proper Shopee item_id in a different local row) so a
+ *  product that was already rendered/posted doesn't silently revert to
+ *  "Chưa tạo" with its video and click history gone the moment the old row
+ *  is pruned. */
+export function transferProductProgress(ownerEmail: string, fromId: string, toId: string): void {
+  const from = db.prepare("SELECT * FROM products WHERE id = ? AND owner_email = ?").get(fromId, ownerEmail) as ProductRecord | undefined;
+  const to = db.prepare("SELECT * FROM products WHERE id = ? AND owner_email = ?").get(toId, ownerEmail) as ProductRecord | undefined;
+  if (!from || !to) return;
+  const merged: ProductRecord = {
+    ...to,
+    status: to.status === "Chưa tạo" ? from.status : to.status,
+    video_file: to.video_file ?? from.video_file,
+    tiktok_post_url: to.tiktok_post_url ?? from.tiktok_post_url,
+    tiktok_product_id: to.tiktok_product_id ?? from.tiktok_product_id,
+    views_clicks_orders: to.views_clicks_orders ?? from.views_clicks_orders,
+    commission: to.commission ?? from.commission,
+    landing_clicks: to.landing_clicks || from.landing_clicks,
+    media_urls: to.media_urls ?? from.media_urls,
+    fact_sheet_json: to.fact_sheet_json ?? from.fact_sheet_json,
+    fact_sheet_approved: to.fact_sheet_approved || from.fact_sheet_approved,
+    updated_at: nowIso(),
+  };
+  db.prepare(`
+    UPDATE products SET status=?, video_file=?, tiktok_post_url=?, tiktok_product_id=?, views_clicks_orders=?,
+    commission=?, landing_clicks=?, media_urls=?, fact_sheet_json=?, fact_sheet_approved=?, updated_at=?
+    WHERE id=?
+  `).run(
+    merged.status, merged.video_file, merged.tiktok_post_url, merged.tiktok_product_id, merged.views_clicks_orders,
+    merged.commission, merged.landing_clicks, merged.media_urls, merged.fact_sheet_json, merged.fact_sheet_approved,
+    merged.updated_at, toId,
+  );
+  mirrorUpsert("products", merged as unknown as DbRow, "id");
+}
+
 /** Bulk local-only delete by id — caller is responsible for the Postgres
  *  mirror cleanup (via the awaited deletePostgresProductsById) since the
  *  normal per-row deleteProduct's fire-and-forget mirror delete is exactly

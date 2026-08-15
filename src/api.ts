@@ -94,6 +94,7 @@ import {
   deleteProduct,
   upsertProductFromSheet,
   deleteProductsByIds,
+  transferProductProgress,
   type TimelineTrackType,
 } from "./storage/db.js";
 
@@ -1906,13 +1907,21 @@ async function syncProductsWithSheet(
   // cleanup.
   let pruned = 0;
   if (sheetItemIds.size > 0) {
-    const staleIds = listProducts(ownerEmail)
-      .filter((p) => !sheetItemIds.has(p.item_id) && p.original_url)
-      .map((p) => {
-        const derivedId = deriveShopeeItemId(p.original_url!);
-        return derivedId && derivedId !== p.item_id && sheetItemIds.has(derivedId) ? p.id : null;
-      })
-      .filter((id): id is string => id !== null);
+    const localAfterPull = listProducts(ownerEmail);
+    const localIdByItemId = new Map(localAfterPull.map((p) => [p.item_id, p.id]));
+    const staleIds: string[] = [];
+    for (const p of localAfterPull) {
+      if (sheetItemIds.has(p.item_id) || !p.original_url) continue;
+      const derivedId = deriveShopeeItemId(p.original_url);
+      if (!derivedId || derivedId === p.item_id || !sheetItemIds.has(derivedId)) continue;
+      const targetId = localIdByItemId.get(derivedId);
+      // Carry over render status/video/TikTok links/click history onto the
+      // row the same product now lives under before dropping the old one —
+      // without this, a product that was already rendered/posted would
+      // silently revert to "Chưa tạo" with its video and click count gone.
+      if (targetId) transferProductProgress(ownerEmail, p.id, targetId);
+      staleIds.push(p.id);
+    }
     if (staleIds.length) {
       deleteProductsByIds(ownerEmail, staleIds);
       await deletePostgresProductsById(staleIds).catch(() => {});
