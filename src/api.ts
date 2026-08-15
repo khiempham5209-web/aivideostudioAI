@@ -2024,11 +2024,19 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     await sleep(1200);
   }
 
+  // Writes are flushed every FLUSH_SIZE rows rather than accumulated for one
+  // write at the very end — a large batch (dozens of rows, each needing a
+  // paced Shopee call) can run long enough for Render's own request timeout
+  // to kill the connection before the loop ever finishes, which with a
+  // single end-of-loop write would silently discard every row's work done
+  // up to that point. Flushing incrementally means whatever got fetched
+  // before a kill is still saved.
+  const FLUSH_SIZE = 8;
   let newRowsFilled = 0;
   let newRowsSkipped = 0;
   try {
     const missingIdRows = await fetchRowsMissingItemId();
-    const fills: SheetRowFill[] = [];
+    let pending: SheetRowFill[] = [];
     for (const row of missingIdRows) {
       const itemId = row.original_url ? deriveShopeeItemId(row.original_url) : null;
       if (!itemId) {
@@ -2036,7 +2044,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
         continue;
       }
       const gallery = await fetchShopeeGallery(row.original_url);
-      fills.push({
+      pending.push({
         row: row.row,
         item_id: itemId,
         image_url: gallery.imageUrls[0] || undefined,
@@ -2047,9 +2055,13 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
         price_reference: gallery.price ? String(gallery.price) : undefined,
         shop_name: row.shop_name ? undefined : gallery.shopName,
       });
+      if (pending.length >= FLUSH_SIZE) {
+        newRowsFilled += await fillSheetRowFields(pending);
+        pending = [];
+      }
       await sleep(1200);
     }
-    if (fills.length) newRowsFilled = await fillSheetRowFields(fills);
+    if (pending.length) newRowsFilled += await fillSheetRowFields(pending);
   } catch {
     // best-effort — pass 1's local backfill above still counts as progress
     // even if the Sheet is unreachable for pass 2 right now.
@@ -2069,7 +2081,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     const staleRows = allRows.filter(
       (r) => r.item_id && r.original_url && (!r.product_name || !r.image_url || !r.price_reference || !r.shop_name) && r._row,
     );
-    const fills: SheetRowFill[] = [];
+    let pending: SheetRowFill[] = [];
     for (const row of staleRows) {
       staleRowsRetried++;
       const gallery = await fetchShopeeGallery(row.original_url!);
@@ -2078,10 +2090,14 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
       if (!row.product_name && gallery.name) fill.product_name = gallery.name;
       if (!row.price_reference && gallery.price) fill.price_reference = String(gallery.price);
       if (!row.shop_name && gallery.shopName) fill.shop_name = gallery.shopName;
-      if (fill.image_url || fill.product_name || fill.price_reference || fill.shop_name) fills.push(fill);
+      if (fill.image_url || fill.product_name || fill.price_reference || fill.shop_name) pending.push(fill);
+      if (pending.length >= FLUSH_SIZE) {
+        staleRowsFilled += await fillSheetRowFields(pending);
+        pending = [];
+      }
       await sleep(1500);
     }
-    if (fills.length) staleRowsFilled = await fillSheetRowFields(fills);
+    if (pending.length) staleRowsFilled += await fillSheetRowFields(pending);
   } catch {
     // best-effort
   }
