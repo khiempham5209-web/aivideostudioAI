@@ -1611,7 +1611,7 @@
           </div>
 
           <div id="productsTabPanel">
-            <div class="top-actions" style="margin-bottom:12px;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn" id="autoFetchImagesButton" type="button">🖼️ Tự động lấy ảnh</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button></div>
+            <div class="top-actions" style="margin-bottom:12px;align-items:center;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn" id="autoFetchImagesButton" type="button">🖼️ Tự động lấy ảnh</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button><span class="tiny" id="siteVisitCount" style="margin-left:auto;opacity:0.8;"></span></div>
             <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
             <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
               <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
@@ -2132,6 +2132,15 @@
         if (seq !== productsRequestSeq) return;
         state.products = data.products || [];
         renderProducts();
+        loadSiteVisitCount();
+      }
+
+      // Best-effort — a stats-fetch failure must never block the product list.
+      function loadSiteVisitCount() {
+        api("/api/site-stats").then((data) => {
+          const el = $("#siteVisitCount");
+          if (el && typeof data.totalVisits === "number") el.textContent = `👁️ ${data.totalVisits.toLocaleString("en-US")} lượt vào web`;
+        }).catch(() => {});
       }
 
       // Giá số thuần (vd "16901") tự thêm dấu phẩy ngăn cách + "VNĐ"; giá dạng
