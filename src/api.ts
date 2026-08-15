@@ -1808,6 +1808,47 @@ async function handleDebugSheetRows(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+// Writes product_name/image_url/price_reference straight to a Sheet row by
+// item_id, bypassing fetchShopeeGallery entirely — the escape hatch for rows
+// Shopee's own anti-bot has blocked the unofficial item/get API from ever
+// reading, where the data has to come from somewhere else (a logged-in
+// browser session reading the real product page) instead.
+async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const body = (await readJsonBody(req).catch(() => ({}))) as {
+    item_id?: unknown;
+    product_name?: unknown;
+    image_url?: unknown;
+    price_reference?: unknown;
+  };
+  const itemId = typeof body.item_id === "string" || typeof body.item_id === "number" ? String(body.item_id) : "";
+  if (!itemId) {
+    sendJson(res, 400, { error: "Thiếu item_id" });
+    return;
+  }
+  try {
+    const rows = await fetchProductsFromSheet();
+    const row = rows.find((r) => String(r.item_id) === itemId);
+    if (!row || !row._row) {
+      sendJson(res, 404, { error: `Không tìm thấy dòng nào trong Sheet có item_id=${itemId}` });
+      return;
+    }
+    const fill: SheetRowFill = { row: row._row };
+    if (typeof body.product_name === "string" && body.product_name.trim()) fill.product_name = body.product_name.trim();
+    if (typeof body.image_url === "string" && body.image_url.trim()) fill.image_url = body.image_url.trim();
+    if (typeof body.price_reference === "string" || typeof body.price_reference === "number") {
+      const p = String(body.price_reference).trim();
+      if (p) fill.price_reference = p;
+    }
+    const updated = await fillSheetRowFields([fill]);
+    const syncResult = await syncProductsWithSheet(user.email).catch(() => null);
+    sendJson(res, 200, { ok: true, row: row._row, updated, syncResult });
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : "Ghi vào Sheet thất bại" });
+  }
+}
+
 // Shared by handleSyncProducts and handleAutoFetchImages — pull whatever the
 // Sheet currently has into the local DB, then push back the local fields the
 // app itself owns/enriches (render progress + fetched image/price). Throws
@@ -2888,6 +2929,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "GET" && url.pathname === "/api/products/debug-sheet-rows") {
       await handleDebugSheetRows(req, res);
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/products/manual-fill") {
+      await handleManualFillProduct(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/content-queue/pending") {
