@@ -1820,24 +1820,33 @@ async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse
   if (!user) return;
   const body = (await readJsonBody(req).catch(() => ({}))) as {
     item_id?: unknown;
+    row?: unknown;
+    new_item_id?: unknown;
     product_name?: unknown;
     image_url?: unknown;
     price_reference?: unknown;
     shop_name?: unknown;
   };
   const itemId = typeof body.item_id === "string" || typeof body.item_id === "number" ? String(body.item_id) : "";
-  if (!itemId) {
-    sendJson(res, 400, { error: "Thiếu item_id" });
+  const explicitRow = typeof body.row === "number" ? body.row : undefined;
+  if (!itemId && !explicitRow) {
+    sendJson(res, 400, { error: "Thiếu item_id hoặc row" });
     return;
   }
   try {
     const rows = await fetchProductsFromSheet();
-    const row = rows.find((r) => String(r.item_id) === itemId);
+    // Matching by row number (not item_id) is the only way to fix a row
+    // whose item_id itself is wrong — e.g. two different Sheet rows ended
+    // up sharing the same item_id (a mis-derived/mis-typed collision), so
+    // looking that id up would find the WRONG row (or the right one
+    // ambiguously). Only used for this kind of surgical correction.
+    const row = explicitRow ? rows.find((r) => r._row === explicitRow) : rows.find((r) => String(r.item_id) === itemId);
     if (!row || !row._row) {
-      sendJson(res, 404, { error: `Không tìm thấy dòng nào trong Sheet có item_id=${itemId}` });
+      sendJson(res, 404, { error: explicitRow ? `Không tìm thấy dòng số ${explicitRow} trong Sheet` : `Không tìm thấy dòng nào trong Sheet có item_id=${itemId}` });
       return;
     }
     const fill: SheetRowFill = { row: row._row };
+    if (typeof body.new_item_id === "string" && body.new_item_id.trim()) fill.item_id = body.new_item_id.trim();
     if (typeof body.product_name === "string" && body.product_name.trim()) fill.product_name = body.product_name.trim();
     if (typeof body.image_url === "string" && body.image_url.trim()) fill.image_url = body.image_url.trim();
     if (typeof body.price_reference === "string" || typeof body.price_reference === "number") {
