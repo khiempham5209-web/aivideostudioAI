@@ -1611,7 +1611,7 @@
           </div>
 
           <div id="productsTabPanel">
-            <div class="top-actions" style="margin-bottom:12px;align-items:center;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn" id="autoFetchImagesButton" type="button">🖼️ Tự động lấy ảnh</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button><span class="tiny" id="siteVisitCount" style="margin-left:auto;opacity:0.8;"></span><span class="tiny" id="shopSnapshotStatus" style="opacity:0.8;"></span></div>
+            <div class="top-actions" style="margin-bottom:12px;align-items:center;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn" id="autoFetchImagesButton" type="button">🖼️ Tự động lấy thông tin</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button><span class="tiny" id="siteVisitCount" style="margin-left:auto;opacity:0.8;"></span><span class="tiny" id="shopSnapshotStatus" style="opacity:0.8;"></span></div>
             <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
             <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
               <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
@@ -5397,7 +5397,7 @@
         const button = $("#autoFetchImagesButton");
         const status = $("#productSyncStatus");
         button.disabled = true;
-        button.textContent = "Đang lấy ảnh...";
+        button.textContent = "Đang lấy thông tin...";
         const seq = ++productsRequestSeq;
         try {
           const data = await api("/api/products/auto-fetch-images", { method: "POST" });
@@ -5414,7 +5414,7 @@
           showError(error);
         } finally {
           button.disabled = false;
-          button.textContent = "🖼️ Tự động lấy ảnh";
+          button.textContent = "🖼️ Tự động lấy thông tin";
         }
       });
 
