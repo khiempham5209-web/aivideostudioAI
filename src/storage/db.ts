@@ -1348,11 +1348,12 @@ export function deleteProductsByIds(ownerEmail: string, ids: string[]): number {
  *  status/video_file/tiktok_post_url/commission — those are app-owned and
  *  pushed the other direction, so a sync-in can never clobber render progress.
  *
- *  image_url and price_reference get the same "app-owned" protection for a
- *  blank sheet cell specifically (unlike the other Sheet-owned fields below,
- *  which a blank cell legitimately clears): these two can be auto-fetched by
- *  the app itself (e.g. scraped from the product's Shopee link) before the
- *  Sheet's own cell has that value yet. A sync always pulls before it pushes
+ *  image_url, price_reference, shop_name, and category get the same
+ *  "app-owned" protection for a blank sheet cell specifically (unlike the
+ *  other Sheet-owned fields below, which a blank cell legitimately clears):
+ *  these can be auto-fetched/auto-classified by the app itself (Shopee
+ *  scrape, AI category pick) before the Sheet's own cell has that value
+ *  yet. A sync always pulls before it pushes
  *  in the same request (see handleSyncProducts) — with a plain `?? null`
  *  here, that pull would silently wipe a same-request-pending push's data
  *  before it ever reached the Sheet, discovered when a sync right after an
@@ -1386,7 +1387,7 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
       commission_type: sheet.commission_type ?? null,
       key_points: sheet.key_points ?? null,
       image_url: sheet.image_url ?? existing.image_url,
-      category: sheet.category ?? null,
+      category: sheet.category ?? existing.category,
       updated_at: updated,
     };
     db.prepare(`

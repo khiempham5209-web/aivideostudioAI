@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import dotenv from "dotenv";
-import { generateScriptFromPrompt, generateProductFactSheet, generateProductConcepts, type ProductFactSheet } from "./agent/prompt-to-script.js";
+import { generateScriptFromPrompt, generateProductFactSheet, generateProductConcepts, callGemini, DEFAULT_MODEL, type ProductFactSheet } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
 import { DEFAULT_VOICE_ID, findVoiceOption, getEffectiveVoiceOptions, VOICE_OPTIONS } from "./tts/voice-catalog.js";
@@ -1827,6 +1827,7 @@ async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse
     image_url?: unknown;
     price_reference?: unknown;
     shop_name?: unknown;
+    category?: unknown;
   };
   const itemId = typeof body.item_id === "string" || typeof body.item_id === "number" ? String(body.item_id) : "";
   const explicitRow = typeof body.row === "number" ? body.row : undefined;
@@ -1855,6 +1856,7 @@ async function handleManualFillProduct(req: IncomingMessage, res: ServerResponse
       if (p) fill.price_reference = p;
     }
     if (typeof body.shop_name === "string" && body.shop_name.trim()) fill.shop_name = body.shop_name.trim();
+    if (typeof body.category === "string" && body.category.trim()) fill.category = body.category.trim();
     const updated = await fillSheetRowFields([fill]);
     const syncResult = await syncProductsWithSheet(user.email).catch(() => null);
     sendJson(res, 200, { ok: true, row: row._row, updated, syncResult });
@@ -2008,6 +2010,36 @@ function sleep(ms: number): Promise<void> {
 // hook must never delay the admin action that triggered it, and the static
 // site simply keeps serving its last-known-good snapshot until the next
 // successful trigger.
+// Kept in sync by hand with CATEGORY_ICONS / CATEGORY_GROUPS in
+// public/shop.html — that's the list the public page actually groups
+// products by, so a category this classifier returns that isn't in that
+// list would just silently never show up in any section there.
+const PRODUCT_CATEGORIES = [
+  "Thời Trang Nữ", "Thời Trang Nam", "Giày Dép Nữ", "Giày Dép Nam", "Túi Ví Nữ", "Túi Ví Nam",
+  "Balo & Vali", "Phụ Kiện Thời Trang", "Trang Sức", "Đồng Hồ", "Sức Khỏe & Sắc Đẹp", "Mẹ & Bé",
+  "Điện Thoại & Phụ Kiện", "Máy Tính & Laptop", "Máy Ảnh & Máy Quay Phim", "Thiết Bị Điện Tử",
+  "Thiết Bị Số & Phụ Kiện Số", "Nhà Cửa & Đời Sống", "Đồ Gia Dụng", "Điện Gia Dụng",
+  "Ô Tô & Xe Máy & Xe Đạp", "Thể Thao & Du Lịch", "Bách Hóa Online", "Sách", "Văn Phòng Phẩm", "Vật Nuôi",
+];
+
+/** Best-effort — a classification failure (no API key, bad response, model
+ *  picking something outside the fixed list) must never block the rest of
+ *  auto-fetch; the product just keeps whatever category it already had
+ *  (usually none) until the next run. */
+async function classifyProductCategory(productName: string): Promise<string | null> {
+  if (!process.env.GEMINI_API_KEY || !productName.trim()) return null;
+  try {
+    const prompt = `Chọn ĐÚNG 1 danh mục phù hợp nhất cho sản phẩm Shopee này, chỉ được chọn nguyên văn 1 mục trong danh sách sau, không tự bịa thêm:\n${JSON.stringify(PRODUCT_CATEGORIES)}\n\nTên sản phẩm: "${productName.trim().slice(0, 200)}"\n\nTrả lời đúng định dạng JSON: {"category": "..."}`;
+    const raw = await callGemini(prompt, DEFAULT_MODEL, 100);
+    const parsed = JSON.parse(raw) as { category?: string };
+    const category = parsed.category?.trim();
+    return category && PRODUCT_CATEGORIES.includes(category) ? category : null;
+  } catch (error) {
+    console.warn(`Product category classification failed: ${error instanceof Error ? error.message : error}`);
+    return null;
+  }
+}
+
 async function triggerVercelShopRebuild(): Promise<void> {
   const hookUrl = process.env.VERCEL_SHOP_DEPLOY_HOOK_URL?.trim();
   if (!hookUrl) return;
@@ -2027,16 +2059,21 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
   }
 
   const localMissing = listProducts(user.email).filter(
-    (p) => p.original_url && (!p.image_url || !p.price_reference || !p.product_name || !p.shop_name),
+    (p) => p.original_url && (!p.image_url || !p.price_reference || !p.product_name || !p.shop_name || !p.category),
   );
   let localImagesUpdated = 0;
   for (const p of localMissing) {
     const gallery = await fetchShopeeGallery(p.original_url!);
-    const updates: { image_url?: string; price_reference?: string; product_name?: string; shop_name?: string } = {};
+    const updates: { image_url?: string; price_reference?: string; product_name?: string; shop_name?: string; category?: string } = {};
     if (!p.image_url && gallery.imageUrls[0]) updates.image_url = gallery.imageUrls[0];
     if (!p.price_reference && gallery.price) updates.price_reference = String(gallery.price);
     if (!p.product_name && gallery.name) updates.product_name = gallery.name;
     if (!p.shop_name && gallery.shopName) updates.shop_name = gallery.shopName;
+    const nameForCategory = p.product_name || gallery.name;
+    if (!p.category && nameForCategory) {
+      const category = await classifyProductCategory(nameForCategory);
+      if (category) updates.category = category;
+    }
     if (Object.keys(updates).length) {
       updateProduct(p.id, updates);
       localImagesUpdated++;
@@ -2099,7 +2136,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
   try {
     const allRows = await fetchProductsFromSheet();
     const staleRows = allRows.filter(
-      (r) => r.item_id && r.original_url && (!r.product_name || !r.image_url || !r.price_reference || !r.shop_name) && r._row,
+      (r) => r.item_id && r.original_url && (!r.product_name || !r.image_url || !r.price_reference || !r.shop_name || !r.category) && r._row,
     );
     let pending: SheetRowFill[] = [];
     for (const row of staleRows) {
@@ -2110,7 +2147,12 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
       if (!row.product_name && gallery.name) fill.product_name = gallery.name;
       if (!row.price_reference && gallery.price) fill.price_reference = String(gallery.price);
       if (!row.shop_name && gallery.shopName) fill.shop_name = gallery.shopName;
-      if (fill.image_url || fill.product_name || fill.price_reference || fill.shop_name) pending.push(fill);
+      const nameForCategory = row.product_name || gallery.name;
+      if (!row.category && nameForCategory) {
+        const category = await classifyProductCategory(nameForCategory);
+        if (category) fill.category = category;
+      }
+      if (fill.image_url || fill.product_name || fill.price_reference || fill.shop_name || fill.category) pending.push(fill);
       if (pending.length >= FLUSH_SIZE) {
         staleRowsFilled += await fillSheetRowFields(pending);
         pending = [];
