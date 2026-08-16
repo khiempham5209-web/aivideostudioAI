@@ -850,8 +850,15 @@
       body: JSON.stringify({ path: location.pathname }),
     }).catch(() => {});
 
-    fetch("/api/public/products")
-      .then((r) => r.json())
+    // /products.json is a pre-baked static snapshot (only present when this
+    // page is served from the Vercel static mirror — see vercel-shop/) that
+    // loads instantly regardless of whether the Render backend is asleep.
+    // Falls back to the live API when there's no snapshot (e.g. served
+    // directly from Render, or before the Vercel mirror is set up) so this
+    // page keeps working exactly as before either way.
+    fetch("/products.json")
+      .then((r) => { if (!r.ok) throw new Error("no static snapshot"); return r.json(); })
+      .catch(() => fetch("/api/public/products").then((r) => r.json()))
       .then((data) => {
         allProducts = data.products || [];
         renderDrawer();

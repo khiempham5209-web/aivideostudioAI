@@ -1982,6 +1982,7 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
     return;
   }
   sendJson(res, 200, { ok: true, ...result, products: listProducts(user.email) });
+  void triggerVercelShopRebuild();
 }
 
 // The "Tự động lấy ảnh" button's handler. Two passes:
@@ -1997,6 +1998,24 @@ async function handleSyncProducts(req: IncomingMessage, res: ServerResponse) {
 // products and pass 1's fetched images get pushed out to the Sheet.
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Fires the Vercel Deploy Hook for the standalone hukiai258.com static
+// mirror (see vercel-shop/) whenever product data the public page shows
+// might have changed — Vercel then reruns vercel-shop/build.mjs, which
+// pulls a fresh product snapshot from this same backend and redeploys.
+// Best-effort and fire-and-forget on purpose: a slow/unreachable Vercel
+// hook must never delay the admin action that triggered it, and the static
+// site simply keeps serving its last-known-good snapshot until the next
+// successful trigger.
+async function triggerVercelShopRebuild(): Promise<void> {
+  const hookUrl = process.env.VERCEL_SHOP_DEPLOY_HOOK_URL?.trim();
+  if (!hookUrl) return;
+  try {
+    await fetch(hookUrl, { method: "POST", signal: AbortSignal.timeout(10000) });
+  } catch {
+    // best-effort
+  }
 }
 
 async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) {
@@ -2120,6 +2139,7 @@ async function handleAutoFetchImages(req: IncomingMessage, res: ServerResponse) 
     ...syncResult,
     products: listProducts(user.email),
   });
+  void triggerVercelShopRebuild();
 }
 
 async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) {

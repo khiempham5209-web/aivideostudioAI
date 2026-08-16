@@ -1,0 +1,10 @@
+{
+  "name": "hukiai258-static-shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Vercel project for hukiai258.com — a static snapshot of the product storefront, rebuilt from the Render backend's public API on every deploy hook trigger. Deliberately separate from the main aivideostudioAI package.json so this build never has to install the main app's video-pipeline dependencies (ffmpeg, etc).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}
