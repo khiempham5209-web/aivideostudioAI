@@ -5397,25 +5397,56 @@
         const button = $("#autoFetchImagesButton");
         const status = $("#productSyncStatus");
         button.disabled = true;
-        button.textContent = "Đang lấy thông tin...";
         const seq = ++productsRequestSeq;
-        try {
-          const data = await api("/api/products/auto-fetch-images", { method: "POST" });
+        // One request only has so much time to run before the server cuts it
+        // off (a big batch of new/unfinished products can't always finish in
+        // one shot) — loop automatically, feeding each round's leftovers into
+        // the next, instead of making the user notice it stopped and click
+        // again themselves. Stops as soon as a round makes zero progress
+        // (everything that could be filled has been), or after a safety cap
+        // of rounds so a genuinely stuck case (e.g. Shopee blocking) doesn't
+        // spin forever.
+        const MAX_ROUNDS = 15;
+        let round = 0;
+        let totalImages = 0, totalNewRows = 0, totalStale = 0, totalPruned = 0;
+        let lastError = null;
+        const summarize = (prefix) => `${prefix} đã lấy ${totalImages} sản phẩm, gán mã ${totalNewRows} dòng mới, cập nhật ${totalStale} dòng còn thiếu${totalPruned ? `, dọn ${totalPruned} SKU trùng/rác` : ""}.`;
+        while (round < MAX_ROUNDS) {
+          round++;
+          button.textContent = `Đang lấy thông tin... (lượt ${round})`;
+          let data;
+          try {
+            data = await api("/api/products/auto-fetch-images", { method: "POST" });
+          } catch (error) {
+            // A round can fail mid-batch (server-side timeout on a big batch)
+            // without meaning there's no more work left — keep looping
+            // rather than treating this as fatal.
+            lastError = error?.message || String(error);
+            continue;
+          }
           if (seq === productsRequestSeq) {
             state.products = data.products || [];
             renderProducts();
           }
+          totalImages += data.localImagesUpdated || 0;
+          totalNewRows += data.newRowsFilled || 0;
+          totalStale += data.staleRowsFilled || 0;
+          totalPruned += data.pruned || 0;
+          lastError = data.pushError || lastError;
           if (status) {
             status.style.display = "block";
-            status.textContent = `Đã lấy ảnh cho ${data.localImagesUpdated} sản phẩm, gán mã + ảnh cho ${data.newRowsFilled} dòng mới${data.newRowsSkipped ? ` (${data.newRowsSkipped} dòng bỏ qua vì thiếu link Shopee)` : ""}.` + (data.pruned ? ` Đã dọn ${data.pruned} SKU trùng/rác.` : "");
+            status.textContent = summarize(`Đang chạy lượt ${round}...`);
           }
-          toast(data.pushError ? `Lấy ảnh xong nhưng ghi ngược lên Sheet lỗi: ${data.pushError}` : "Đã lấy ảnh và đồng bộ xong.");
-        } catch (error) {
-          showError(error);
-        } finally {
-          button.disabled = false;
-          button.textContent = "🖼️ Tự động lấy thông tin";
+          const madeProgress = (data.localImagesUpdated || 0) + (data.newRowsFilled || 0) + (data.staleRowsFilled || 0) > 0;
+          if (!madeProgress) break;
         }
+        if (status) {
+          status.style.display = "block";
+          status.textContent = summarize("Xong —");
+        }
+        toast(lastError ? `Lấy thông tin xong nhưng có lỗi: ${lastError}` : "Đã lấy thông tin và đồng bộ xong.");
+        button.disabled = false;
+        button.textContent = "🖼️ Tự động lấy thông tin";
       });
 
       function renderContentQueue() {
