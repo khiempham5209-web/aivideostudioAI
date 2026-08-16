@@ -1495,7 +1495,7 @@
         <section class="page" id="script">
           <div class="page-head">
             <div><h2>Kịch bản AI</h2><p class="muted">Tiêu đề, hook, Scene 1..N, sửa tay, regenerate, thêm/xóa cảnh.</p></div>
-            <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="pasteTextButton" type="button">📋 Dán văn bản</button><button class="btn" id="fetchSheetContentButton" type="button" style="display:none;" title="Lấy đúng nội dung mới nhất bạn đã viết/sửa trực tiếp trong Google Sheet (cột Kịch bản) — thay các cảnh hiện tại, khỏi copy dán tay.">📥 Chọn nội dung có sẵn (từ Google Sheet)</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
+            <div class="top-actions"><button class="btn" id="regenerateButton">Regenerate</button><button class="btn" id="pasteTextButton" type="button">📋 Dán văn bản</button><button class="btn" id="fetchSheetContentButton" type="button" style="display:none;" title="Lấy đúng nội dung mới nhất bạn đã viết/sửa trực tiếp trong Google Sheet (cột Kịch bản, hoặc cột script_text ở Kho sản phẩm) — thay các cảnh hiện tại, khỏi copy dán tay.">📥 Chọn nội dung có sẵn (từ Google Sheet)</button><button class="btn" id="addSceneButton">+ Thêm cảnh</button></div>
           </div>
           <div class="panel" style="margin-bottom:16px;">
             <div class="panel-body field-stack">
@@ -2733,7 +2733,7 @@
         const panel = $("#approveContentPanel");
         if (panel) panel.style.display = state.activeProject?.content_queue_row ? "block" : "none";
         const fetchButton = $("#fetchSheetContentButton");
-        if (fetchButton) fetchButton.style.display = state.activeProject?.content_queue_row ? "" : "none";
+        if (fetchButton) fetchButton.style.display = (state.activeProject?.content_queue_row || state.activeProject?.product_id) ? "" : "none";
       }
 
       function voiceMatches(v) {
@@ -5493,9 +5493,12 @@
       });
 
       async function fetchSheetContentIntoProject(projectId, existingScenes) {
-        const data = await api(`/api/projects/${projectId}/content-queue-script`);
+        const endpoint = state.activeProject?.content_queue_row
+          ? `/api/projects/${projectId}/content-queue-script`
+          : `/api/projects/${projectId}/product-sheet-script`;
+        const data = await api(endpoint);
         const chunks = splitPastedTextIntoScenes(data.kichBan || "");
-        if (!chunks.length) throw { error: "Chưa có kịch bản nào trên Sheet cho dự án này." };
+        if (!chunks.length) throw { error: "Chưa có kịch bản nào trên Sheet cho dự án này — dán vào cột \"Kịch bản\" (Q) trên Google Sheet rồi thử lại." };
         for (const scene of existingScenes) {
           await api(`/api/scenes/${scene.id}`, { method: "DELETE" });
         }

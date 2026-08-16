@@ -19,6 +19,9 @@ export interface SheetProductRow {
   key_points?: string;
   image_url?: string;
   category?: string;
+  /** Cột "script_text" (Q) — kịch bản người dùng tự chat/viết rồi dán trực
+   *  tiếp vào Sheet cho sản phẩm này, dùng thay AI khi muốn. */
+  script_text?: string;
 }
 
 export interface SheetPushUpdate {

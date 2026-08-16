@@ -1609,6 +1609,38 @@ async function handleFetchContentQueueScript(req: IncomingMessage, res: ServerRe
   }
 }
 
+/** Same idea as handleFetchContentQueueScript but for an affiliate/product
+ *  project: the user chats with an AI themselves (ChatGPT/Claude/whatever)
+ *  and pastes the result into the "script_text" column (Q) of the product's
+ *  own Sheet row instead of relying on the app's built-in AI call — this
+ *  path never touches Gemini/OpenAI at all, so it isn't affected by quota. */
+async function handleFetchProductSheetScript(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  if (!project.product_id) {
+    sendJson(res, 400, { error: "Dự án này không gắn với sản phẩm nào trong Kho sản phẩm" });
+    return;
+  }
+  const product = getProduct(user.email, project.product_id);
+  if (!product) {
+    sendJson(res, 404, { error: "Không tìm thấy sản phẩm của dự án này" });
+    return;
+  }
+  try {
+    const rows = await fetchProductsFromSheet();
+    const row = rows.find((r) => String(r.item_id) === String(product.item_id));
+    const kichBan = row?.script_text?.trim() || "";
+    sendJson(res, 200, { ok: true, kichBan });
+  } catch (error) {
+    sendJson(res, 502, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 function productToJson(p: ReturnType<typeof getProduct>) {
   if (!p) return p;
   return { ...p };
@@ -3100,6 +3132,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const contentQueueScriptMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/content-queue-script$/);
     if (req.method === "GET" && contentQueueScriptMatch) {
       await handleFetchContentQueueScript(req, res, contentQueueScriptMatch[1]);
+      return;
+    }
+    const productSheetScriptMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/product-sheet-script$/);
+    if (req.method === "GET" && productSheetScriptMatch) {
+      await handleFetchProductSheetScript(req, res, productSheetScriptMatch[1]);
       return;
     }
     const factSheetMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/fact-sheet$/);
