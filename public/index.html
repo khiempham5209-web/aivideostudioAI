@@ -5523,6 +5523,14 @@
             body: JSON.stringify({ voiceText }),
           });
         }
+        // Content-queue scenes fall back to Pexels stock search fine, but a
+        // product-linked project should show the product's own real photos
+        // in every scene — handleGenerateProjectScript does this for free on
+        // the AI-script path, but scenes built here from plain pasted text
+        // never go through that, so it has to be triggered explicitly.
+        if (state.activeProject?.product_id) {
+          await api(`/api/projects/${projectId}/attach-product-media`, { method: "POST" }).catch(() => {});
+        }
         return chunks.length;
       }
 

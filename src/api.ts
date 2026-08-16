@@ -1641,6 +1641,32 @@ async function handleFetchProductSheetScript(req: IncomingMessage, res: ServerRe
   }
 }
 
+/** Lets the frontend trigger attachProductMediaToScenes standalone — needed
+ *  because the Sheet-script path (handleFetchProductSheetScript's scenes,
+ *  built client-side from plain pasted text) never goes through
+ *  handleGenerateProjectScript, so the real-product-photo attachment that
+ *  path normally gets for free has to be called explicitly here instead. */
+async function handleAttachProductMedia(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  if (!project.product_id) {
+    sendJson(res, 400, { error: "Dự án này không gắn với sản phẩm nào trong Kho sản phẩm" });
+    return;
+  }
+  const product = getProduct(user.email, project.product_id);
+  if (!product) {
+    sendJson(res, 404, { error: "Không tìm thấy sản phẩm của dự án này" });
+    return;
+  }
+  await attachProductMediaToScenes(user.email, projectId, product);
+  sendJson(res, 200, { ok: true, scenes: listScenes(projectId) });
+}
+
 function productToJson(p: ReturnType<typeof getProduct>) {
   if (!p) return p;
   return { ...p };
@@ -3137,6 +3163,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const productSheetScriptMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/product-sheet-script$/);
     if (req.method === "GET" && productSheetScriptMatch) {
       await handleFetchProductSheetScript(req, res, productSheetScriptMatch[1]);
+      return;
+    }
+    const attachProductMediaMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/attach-product-media$/);
+    if (req.method === "POST" && attachProductMediaMatch) {
+      await handleAttachProductMedia(req, res, attachProductMediaMatch[1]);
       return;
     }
     const factSheetMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/fact-sheet$/);
