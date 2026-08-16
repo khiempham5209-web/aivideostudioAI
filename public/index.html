@@ -5396,7 +5396,18 @@
       $("#autoFetchImagesButton")?.addEventListener("click", async () => {
         const button = $("#autoFetchImagesButton");
         const status = $("#productSyncStatus");
-        button.disabled = true;
+        // While a run is in progress, clicking the same button cancels it
+        // instead of starting a second one — the previous "no way to stop"
+        // gap meant an accidental click could only be interrupted by
+        // reloading the page.
+        if (state.autoFetchRunning) {
+          state.autoFetchCancelRequested = true;
+          button.textContent = "Đang dừng...";
+          return;
+        }
+        state.autoFetchRunning = true;
+        state.autoFetchCancelRequested = false;
+        button.textContent = "⏹ Dừng lại";
         const seq = ++productsRequestSeq;
         // One request only has so much time to run before the server cuts it
         // off (a big batch of new/unfinished products can't always finish in
@@ -5412,8 +5423,9 @@
         let lastError = null;
         const summarize = (prefix) => `${prefix} đã lấy ${totalImages} sản phẩm, gán mã ${totalNewRows} dòng mới, cập nhật ${totalStale} dòng còn thiếu${totalPruned ? `, dọn ${totalPruned} SKU trùng/rác` : ""}.`;
         while (round < MAX_ROUNDS) {
+          if (state.autoFetchCancelRequested) break;
           round++;
-          button.textContent = `Đang lấy thông tin... (lượt ${round})`;
+          button.textContent = `⏹ Dừng lại (lượt ${round})`;
           let data;
           try {
             data = await api("/api/products/auto-fetch-images", { method: "POST" });
@@ -5440,6 +5452,8 @@
           const madeProgress = (data.localImagesUpdated || 0) + (data.newRowsFilled || 0) + (data.staleRowsFilled || 0) > 0;
           if (!madeProgress) break;
         }
+        state.autoFetchRunning = false;
+        state.autoFetchCancelRequested = false;
         if (status) {
           status.style.display = "block";
           status.textContent = summarize("Xong —");
