@@ -2185,6 +2185,23 @@ async function handleGetSiteStats(req: IncomingMessage, res: ServerResponse) {
   sendJson(res, 200, { ok: true, totalVisits });
 }
 
+// Admin-only peek at the hukiai258.com static mirror's last build time —
+// fetched server-side (not from the browser) so this never needs CORS
+// headers added to the public static site, and never appears on the public
+// page itself.
+async function handleShopSnapshotStatus(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  try {
+    const resp = await fetch("https://hukiai258.com/products.json", { signal: AbortSignal.timeout(10000) });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = (await resp.json()) as { generatedAt?: string; products?: unknown[] };
+    sendJson(res, 200, { ok: true, generatedAt: data.generatedAt ?? null, productCount: data.products?.length ?? 0 });
+  } catch (error) {
+    sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : "Không lấy được trạng thái web tĩnh" });
+  }
+}
+
 // One-off cleanup for Postgres-only "ghost" product rows — see
 // deletePostgresProductsById's comment for how these accumulate (a delete
 // mirrored to Postgres that silently failed). Takes explicit ids rather
@@ -3082,6 +3099,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "GET" && url.pathname === "/api/site-stats") {
       await handleGetSiteStats(req, res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/shop-snapshot-status") {
+      await handleShopSnapshotStatus(req, res);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/products/purge-ghosts") {
