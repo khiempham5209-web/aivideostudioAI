@@ -127,7 +127,21 @@ function openBrowser(url) {
   // no Electron rewrite needed for that. msedge.exe is registered as a
   // Windows App Path on virtually every install; fall back to the plain
   // default-browser open (full browser chrome) if that resolution fails.
-  const edge = spawn("cmd", ["/c", "start", "", "msedge", `--app=${url}`], { detached: true, stdio: "ignore", windowsHide: true });
+  //
+  // --app= only actually produces a chrome-less window when it starts a
+  // NEW browser process. If the user already has any Edge window open
+  // (the common case — this isn't their only browser tab of the day),
+  // Chromium forwards the request to that existing process instead of
+  // spawning a new one, and it just opens as an ordinary tab there,
+  // address bar and all. A dedicated --user-data-dir forces a genuinely
+  // separate process every time, so --app= always gets honored regardless
+  // of what else the user has open in their regular Edge profile.
+  const appProfileDir = join(ROOT, "edge-app-profile");
+  const edge = spawn(
+    "cmd",
+    ["/c", "start", "", "msedge", `--user-data-dir=${appProfileDir}`, "--new-window", `--app=${url}`],
+    { detached: true, stdio: "ignore", windowsHide: true },
+  );
   edge.on("error", () => {
     spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
   });
