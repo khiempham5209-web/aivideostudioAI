@@ -1013,6 +1013,10 @@
 
       .modal {
         width: min(560px, 100%);
+        max-height: calc(100vh - 44px);
+        overflow-y: auto;
+        align-self: start;
+        min-height: 0;
         border: 1px solid var(--line);
         border-radius: 12px;
         background: linear-gradient(180deg, rgba(21, 28, 41, 0.99), rgba(8, 12, 19, 0.99));
@@ -1253,19 +1257,75 @@
             <p class="tiny">Đăng nhập để tách riêng dự án theo từng Gmail</p>
           </div>
         </div>
-        <div style="margin-top:24px;">
-          <h2>Đăng nhập bằng Gmail</h2>
-          <p class="muted" style="margin-top:10px;">Mỗi tài khoản Gmail chỉ thấy dự án, media, render job và file xuất của chính tài khoản đó.</p>
-          <a class="btn primary" id="googleLoginButton" href="/api/auth/google/start" style="display:grid;place-items:center;text-decoration:none;">Tiếp tục với Google</a>
-          <div class="field-stack" id="devLoginBox" style="display:none;margin-top:14px;">
-            <p class="tiny">Dev login chỉ dùng khi bật ALLOW_DEV_LOGIN=true trong môi trường local.</p>
-            <input id="devEmail" type="email" placeholder="yourname@gmail.com" />
-            <button class="btn" id="devLoginButton" type="button">Đăng nhập local test</button>
+        <div style="margin-top:24px;" id="localLoginArea">
+          <div id="localAccountPickerView">
+            <h2>Chọn tài khoản</h2>
+            <div class="field-stack" id="localAccountList" style="margin-top:12px;"></div>
+            <button class="btn" id="localAddAccountButton" type="button" style="width:100%;margin-top:8px;">+ Thêm tài khoản khác</button>
           </div>
-          <div class="field-stack" id="desktopConnectBox" style="display:none;margin-top:14px;">
-            <p class="tiny">App này chưa có cấu hình (lần đầu cài đặt). Bấm nút dưới để mở web thật, đăng nhập, rồi xác nhận kết nối máy này — không cần nhập tay key nào.</p>
-            <button class="btn primary" id="desktopConnectButton" type="button">Kết nối với tài khoản trên web</button>
+          <div id="localAccountAuthView" style="display:none;">
+            <button class="btn" id="localBackToPickerButton" type="button" style="margin-bottom:12px;">← Quay lại</button>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+              <div class="logo" style="width:32px;height:32px;font-size:14px;" id="localAuthAvatar">G</div>
+              <div>
+                <div style="font-weight:600;" id="localAuthEmailLabel"></div>
+                <div class="tiny muted" id="localAuthSubLabel">Google</div>
+              </div>
+            </div>
+            <div class="segmented" id="localAuthMethodTabs" style="margin-bottom:14px;">
+              <button type="button" class="active" data-method="password">Mật khẩu</button>
+              <button type="button" data-method="totp">Mã QR / Authenticator</button>
+            </div>
+            <div class="field-stack" id="localAuthPasswordView">
+              <input id="localAuthPasswordInput" type="password" placeholder="Nhập mật khẩu" autocomplete="current-password" />
+              <button class="btn primary" id="localAuthPasswordSubmit" type="button">Đăng nhập</button>
+            </div>
+            <div class="field-stack" id="localAuthTotpView" style="display:none;">
+              <p class="tiny">Mở app Authenticator (Google Authenticator/Authy...), nhập mã 6 số hiện tại.</p>
+              <input id="localAuthTotpInput" type="text" inputmode="numeric" maxlength="6" placeholder="123456" />
+              <button class="btn primary" id="localAuthTotpSubmit" type="button">Đăng nhập</button>
+            </div>
           </div>
+          <div id="localAddAccountView" style="display:none;">
+            <button class="btn" id="localAddBackButton" type="button" style="margin-bottom:12px;">← Quay lại</button>
+            <h2>Thêm tài khoản</h2>
+            <div class="field-stack" style="margin-top:12px;">
+              <input id="localNewEmail" type="email" placeholder="yourname@gmail.com" />
+              <input id="localNewDisplayName" type="text" placeholder="Tên hiển thị (tùy chọn)" />
+            </div>
+            <div class="segmented" id="localSetupMethodTabs" style="margin:14px 0;">
+              <button type="button" class="active" data-method="password">Đặt mật khẩu</button>
+              <button type="button" data-method="totp">QR Authenticator</button>
+            </div>
+            <div class="field-stack" id="localSetupPasswordView">
+              <input id="localSetupPassword" type="password" placeholder="Đặt mật khẩu mới (từ 6 ký tự)" autocomplete="new-password" />
+              <button class="btn primary" id="localSetupPasswordSubmit" type="button">Tạo tài khoản</button>
+            </div>
+            <div class="field-stack" id="localSetupTotpView" style="display:none;">
+              <button class="btn" id="localGenerateQrButton" type="button">Tạo mã QR</button>
+              <div id="localQrDisplay" style="display:none;text-align:center;margin-top:10px;">
+                <img id="localQrImage" style="width:180px;height:180px;border-radius:8px;" />
+                <p class="tiny" id="localQrSecretText" style="word-break:break-all;margin-top:6px;"></p>
+                <input id="localSetupTotpCode" type="text" inputmode="numeric" maxlength="6" placeholder="Nhập mã 6 số để xác nhận" style="margin-top:10px;" />
+                <button class="btn primary" id="localSetupTotpSubmit" type="button" style="width:100%;margin-top:8px;">Xác nhận & Tạo tài khoản</button>
+              </div>
+            </div>
+          </div>
+          <details style="margin-top:18px;">
+            <summary class="tiny muted" style="cursor:pointer;">Cách khác</summary>
+            <div style="margin-top:10px;">
+              <a class="btn" id="googleLoginButton" href="/api/auth/google/start" style="display:grid;place-items:center;text-decoration:none;">Tiếp tục với Google thật</a>
+              <div class="field-stack" id="devLoginBox" style="display:none;margin-top:14px;">
+                <p class="tiny">Dev login chỉ dùng khi bật ALLOW_DEV_LOGIN=true trong môi trường local.</p>
+                <input id="devEmail" type="email" placeholder="yourname@gmail.com" />
+                <button class="btn" id="devLoginButton" type="button">Đăng nhập local test</button>
+              </div>
+              <div class="field-stack" id="desktopConnectBox" style="display:none;margin-top:14px;">
+                <p class="tiny">App này chưa có cấu hình (lần đầu cài đặt). Bấm nút dưới để mở web thật, đăng nhập, rồi xác nhận kết nối máy này — không cần nhập tay key nào.</p>
+                <button class="btn primary" id="desktopConnectButton" type="button">Kết nối với tài khoản trên web</button>
+              </div>
+            </div>
+          </details>
           <p class="tiny" id="loginHint" style="margin-top:14px;"></p>
         </div>
       </div>
@@ -1669,6 +1729,7 @@
               <button class="btn" id="fetchShopeeGalleryButton" type="button">🔗 Lấy toàn bộ ảnh/video thật từ trang Shopee</button>
               <p class="tiny" style="margin-top:4px;">Lấy đúng ảnh/video shop đã đăng trên trang sản phẩm (dùng "Link gốc sản phẩm (Shopee)" ở trên) — an toàn bản quyền vì là ảnh chính chủ shop, không phải nội dung mạng xã hội của người khác. <strong>Đã test thật: Shopee thường chặn (403)</strong> nên nút này không đáng tin cậy — cách chắc ăn hơn là tự mở trang sản phẩm, chuột phải từng ảnh muốn dùng → "Sao chép địa chỉ hình ảnh" → dán vào ô Media Pack ở trên.</p>
               <div><label>Danh mục</label><select id="productCategory"><option value="">— Chọn danh mục —</option></select></div>
+              <label class="tiny" style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="productPinnedCheckbox" /> 📌 Ghim sản phẩm này lên đầu trang web (không hiện nhãn gì với khách, chỉ tự đứng trước)</label>
               <div><label>Trạng thái</label>
                 <select id="productStatus">
                   <option>Chưa tạo</option>
@@ -2176,14 +2237,15 @@
         }
         const statusClass = (s) => (s === "Đã đăng" ? "ok" : s === "Cần sửa" ? "warn" : (s === "Đã tạo" || s === "Chờ đăng") ? "info" : "");
         list.innerHTML = products.map((p) => `
-          <div class="panel">
-            <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span></div>
+          <div class="panel"${p.pinned ? ' style="border-color:#7c3aed;"' : ""}>
+            <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span>${p.pinned ? '<span class="pill" style="background:#7c3aed;color:#fff;">📌 Đã ghim</span>' : ""}</div>
             ${p.image_url ? `<img src="${p.image_url}" alt="" style="width:100%;height:130px;object-fit:cover;" onerror="this.style.display='none';" />` : ""}
             <div class="panel-body field-stack">
               <strong>${p.product_name}</strong>
               ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${formatPrice(p.price_reference)}</p>` : ""}
               <div class="top-actions">
                 <button class="btn" data-edit-product="${p.id}" type="button">Sửa</button>
+                <button class="btn" data-toggle-pin="${p.id}" type="button">${p.pinned ? "📌 Bỏ ghim" : "📌 Ghim lên đầu"}</button>
                 <button class="btn primary" data-create-script="${p.id}" type="button">Tạo kịch bản</button>
                 <button class="btn primary" data-make-video="${p.id}" type="button">🎬 Tạo video</button>
               </div>
@@ -2192,6 +2254,19 @@
         `).join("");
         list.querySelectorAll("[data-edit-product]").forEach((btn) => {
           btn.addEventListener("click", () => openProductEditor(products.find((p) => p.id === btn.dataset.editProduct)));
+        });
+        list.querySelectorAll("[data-toggle-pin]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const product = products.find((p) => p.id === btn.dataset.togglePin);
+            if (!product) return;
+            try {
+              await api(`/api/products/${product.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned: !product.pinned }) });
+              await loadProducts();
+              toast(product.pinned ? "Đã bỏ ghim sản phẩm." : "Đã ghim sản phẩm lên đầu trang.");
+            } catch (e) {
+              showError(e);
+            }
+          });
         });
         list.querySelectorAll("[data-create-script]").forEach((btn) => {
           btn.addEventListener("click", () => {
@@ -2290,6 +2365,7 @@
         $("#productTiktokProductId").value = product?.tiktok_product_id || "";
         $("#deleteProductEditorButton").style.display = product ? "inline-flex" : "none";
         $("#factSheetApprovedCheckbox").checked = Boolean(product?.fact_sheet_approved);
+        $("#productPinnedCheckbox").checked = Boolean(product?.pinned);
         renderFactSheetDisplay(state.editingProductFactSheet);
         $("#productEditorModal").classList.add("show");
       }
@@ -2308,16 +2384,181 @@
         const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
         const needsDesktopConnect = isLocal && !me.googleConfigured && !me.devLoginEnabled;
         $("#desktopConnectBox").style.display = needsDesktopConnect ? "grid" : "none";
-        $("#loginHint").textContent = me.googleConfigured
-          ? "Google OAuth đã sẵn sàng. Sau khi đăng nhập, dữ liệu sẽ được tách theo email."
-          : needsDesktopConnect
-            ? ""
-            : "Chưa cấu hình GOOGLE_CLIENT_ID và GOOGLE_CLIENT_SECRET nên chưa đăng nhập Gmail thật được.";
+        $("#loginHint").textContent = "";
+        showLocalPicker();
+        loadLocalAccounts();
       }
 
       function hideLogin() {
         $("#loginScreen").classList.remove("show");
       }
+
+      // ---- Local login (self-set password / TOTP authenticator) ----
+      // Three sub-views inside the login card: account picker (default),
+      // per-account password-or-code entry, and the add-a-new-account flow.
+      function showLocalPicker() {
+        $("#localAccountPickerView").style.display = "block";
+        $("#localAccountAuthView").style.display = "none";
+        $("#localAddAccountView").style.display = "none";
+      }
+
+      async function loadLocalAccounts() {
+        try {
+          const data = await api("/api/auth/local/accounts");
+          const list = $("#localAccountList");
+          const accounts = data.accounts || [];
+          if (!accounts.length) {
+            list.innerHTML = '<p class="tiny muted">Chưa có tài khoản nào — bấm "Thêm tài khoản khác" bên dưới để tạo.</p>';
+            return;
+          }
+          list.innerHTML = accounts
+            .map(
+              (a) => `
+              <button type="button" class="btn local-account-row" data-email="${a.email}" data-has-password="${a.has_password}" data-has-totp="${a.has_totp}" data-display-name="${a.display_name}"
+                style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;">
+                <div class="logo" style="width:32px;height:32px;font-size:14px;flex-shrink:0;">${(a.display_name || a.email)[0].toUpperCase()}</div>
+                <div style="overflow:hidden;">
+                  <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display_name}</div>
+                  <div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.email}</div>
+                </div>
+              </button>`,
+            )
+            .join("");
+          list.querySelectorAll(".local-account-row").forEach((row) => {
+            row.addEventListener("click", () => openLocalAuthView(row.dataset));
+          });
+        } catch {
+          // Best-effort — the picker just stays empty; Google/dev-login fallback still works.
+        }
+      }
+
+      function openLocalAuthView(account) {
+        $("#localAccountPickerView").style.display = "none";
+        $("#localAddAccountView").style.display = "none";
+        $("#localAccountAuthView").style.display = "block";
+        $("#localAccountAuthView").dataset.email = account.email;
+        $("#localAuthAvatar").textContent = (account.displayName || account.email)[0].toUpperCase();
+        $("#localAuthEmailLabel").textContent = account.displayName;
+        $("#localAuthSubLabel").textContent = account.email;
+        const hasPassword = account.hasPassword === "true";
+        const hasTotp = account.hasTotp === "true";
+        $$("#localAuthMethodTabs button").forEach((b) => b.style.display = "");
+        if (!hasPassword) $('#localAuthMethodTabs button[data-method="password"]').style.display = "none";
+        if (!hasTotp) $('#localAuthMethodTabs button[data-method="totp"]').style.display = "none";
+        const defaultMethod = hasPassword ? "password" : "totp";
+        setLocalAuthMethod(defaultMethod);
+        $("#localAuthPasswordInput").value = "";
+        $("#localAuthTotpInput").value = "";
+      }
+
+      function setLocalAuthMethod(method) {
+        $$("#localAuthMethodTabs button").forEach((b) => b.classList.toggle("active", b.dataset.method === method));
+        $("#localAuthPasswordView").style.display = method === "password" ? "grid" : "none";
+        $("#localAuthTotpView").style.display = method === "totp" ? "grid" : "none";
+      }
+
+      $("#localAuthMethodTabs")?.addEventListener("click", (e) => {
+        if (e.target.tagName !== "BUTTON") return;
+        setLocalAuthMethod(e.target.dataset.method);
+      });
+
+      $("#localBackToPickerButton")?.addEventListener("click", showLocalPicker);
+      $("#localAddBackButton")?.addEventListener("click", showLocalPicker);
+
+      $("#localAddAccountButton")?.addEventListener("click", () => {
+        $("#localAccountPickerView").style.display = "none";
+        $("#localAccountAuthView").style.display = "none";
+        $("#localAddAccountView").style.display = "block";
+        $("#localNewEmail").value = "";
+        $("#localNewDisplayName").value = "";
+        $("#localSetupPassword").value = "";
+        $("#localQrDisplay").style.display = "none";
+        setLocalSetupMethod("password");
+      });
+
+      function setLocalSetupMethod(method) {
+        $$("#localSetupMethodTabs button").forEach((b) => b.classList.toggle("active", b.dataset.method === method));
+        $("#localSetupPasswordView").style.display = method === "password" ? "grid" : "none";
+        $("#localSetupTotpView").style.display = method === "totp" ? "grid" : "none";
+      }
+
+      $("#localSetupMethodTabs")?.addEventListener("click", (e) => {
+        if (e.target.tagName !== "BUTTON") return;
+        setLocalSetupMethod(e.target.dataset.method);
+      });
+
+      async function submitLocalLogin(method) {
+        const email = $("#localAccountAuthView").dataset.email;
+        try {
+          const body = method === "password"
+            ? { email, password: $("#localAuthPasswordInput").value }
+            : { email, code: $("#localAuthTotpInput").value };
+          const endpoint = method === "password" ? "/api/auth/local/login-password" : "/api/auth/local/login-totp";
+          await api(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          location.reload();
+        } catch (error) {
+          $("#loginHint").textContent = error?.error || error?.message || "Đăng nhập thất bại.";
+        }
+      }
+      $("#localAuthPasswordSubmit")?.addEventListener("click", () => submitLocalLogin("password"));
+      $("#localAuthTotpSubmit")?.addEventListener("click", () => submitLocalLogin("totp"));
+      $("#localAuthPasswordInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLocalLogin("password"); });
+      $("#localAuthTotpInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLocalLogin("totp"); });
+
+      $("#localSetupPasswordSubmit")?.addEventListener("click", async () => {
+        const email = $("#localNewEmail").value.trim().toLowerCase();
+        const displayName = $("#localNewDisplayName").value.trim();
+        const password = $("#localSetupPassword").value;
+        if (!email || !password) return ($("#loginHint").textContent = "Nhập email và mật khẩu.");
+        const button = $("#localSetupPasswordSubmit");
+        button.disabled = true;
+        try {
+          await api("/api/auth/local/setup-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, displayName }) });
+          await api("/api/auth/local/login-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+          location.reload();
+        } catch (error) {
+          $("#loginHint").textContent = error?.error || error?.message || "Không tạo được tài khoản.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      let pendingTotpSecret = "";
+      $("#localGenerateQrButton")?.addEventListener("click", async () => {
+        const email = $("#localNewEmail").value.trim().toLowerCase();
+        if (!email) return ($("#loginHint").textContent = "Nhập email trước khi tạo mã QR.");
+        const button = $("#localGenerateQrButton");
+        button.disabled = true;
+        try {
+          const data = await api("/api/auth/local/setup-totp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+          pendingTotpSecret = data.secret;
+          $("#localQrImage").src = data.qrDataUrl;
+          $("#localQrSecretText").textContent = `Không quét được? Nhập mã tay: ${data.secret}`;
+          $("#localQrDisplay").style.display = "block";
+        } catch (error) {
+          $("#loginHint").textContent = error?.error || error?.message || "Không tạo được mã QR.";
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      $("#localSetupTotpSubmit")?.addEventListener("click", async () => {
+        const email = $("#localNewEmail").value.trim().toLowerCase();
+        const displayName = $("#localNewDisplayName").value.trim();
+        const code = $("#localSetupTotpCode").value;
+        if (!code) return ($("#loginHint").textContent = "Nhập mã 6 số từ app Authenticator.");
+        const button = $("#localSetupTotpSubmit");
+        button.disabled = true;
+        try {
+          await api("/api/auth/local/confirm-totp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, secret: pendingTotpSecret, code, displayName }) });
+          await api("/api/auth/local/login-totp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code }) });
+          location.reload();
+        } catch (error) {
+          $("#loginHint").textContent = error?.error || error?.message || "Xác nhận thất bại.";
+        } finally {
+          button.disabled = false;
+        }
+      });
 
       function setUser(user) {
         state.user = user;
@@ -5319,7 +5560,7 @@
         };
         try {
           if (state.editingProductId) {
-            await api(`/api/products/${state.editingProductId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, factSheetApproved: $("#factSheetApprovedCheckbox").checked }) });
+            await api(`/api/products/${state.editingProductId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, factSheetApproved: $("#factSheetApprovedCheckbox").checked, pinned: $("#productPinnedCheckbox").checked }) });
           } else {
             await api("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           }

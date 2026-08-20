@@ -109,6 +109,11 @@ export interface ProductRecord {
    *  from an unapproved sheet — this is a soft compliance flag, not a hard
    *  block, since most existing products predate this field. */
   fact_sheet_approved: number;
+  /** True once the owner has pinned this product to the top of the public
+   *  storefront (no visible "pinned" label — just reorders it). pinned_at
+   *  drives ordering among multiple pinned products (most recent first). */
+  pinned: number;
+  pinned_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -308,6 +313,21 @@ db.exec(`
     FOREIGN KEY(email) REFERENCES users(email)
   );
 
+  -- Local login (self-set password and/or TOTP authenticator secret) — a
+  -- faster stand-in for real Google OAuth on the desktop app, since typing
+  -- a real Google password every time is slow and this app never actually
+  -- needs Google's identity, just a per-device gate. password_hash is
+  -- "scrypt:<salt-hex>:<hash-hex>", never the plain password.
+  CREATE TABLE IF NOT EXISTS local_auth (
+    email TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    password_hash TEXT,
+    totp_secret TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(email) REFERENCES users(email)
+  );
+
   -- Long-lived, not a session: lets an already-connected desktop install
   -- silently re-sync its own config (new secrets, updated keys) on every
   -- launch, without repeating the interactive browser handshake each time.
@@ -432,6 +452,8 @@ db.exec(`
     media_urls TEXT,
     fact_sheet_json TEXT,
     fact_sheet_approved INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    pinned_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -507,6 +529,8 @@ for (const statement of [
   "ALTER TABLE products ADD COLUMN media_urls TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_json TEXT",
   "ALTER TABLE products ADD COLUMN fact_sheet_approved INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE products ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE products ADD COLUMN pinned_at TEXT",
   "ALTER TABLE scenes ADD COLUMN visual_query TEXT",
   "ALTER TABLE projects ADD COLUMN voice_2_id TEXT",
   "ALTER TABLE projects ADD COLUMN voice_2_name TEXT",
@@ -645,6 +669,17 @@ async function initPostgresMirror() {
         email TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         created_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "local_auth",
+      sql: `CREATE TABLE IF NOT EXISTS local_auth (
+        email TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        password_hash TEXT,
+        totp_secret TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )`,
     },
     {
@@ -813,6 +848,8 @@ async function initPostgresMirror() {
         media_urls TEXT,
         fact_sheet_json TEXT,
         fact_sheet_approved INTEGER NOT NULL DEFAULT 0,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        pinned_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -858,6 +895,8 @@ async function initPostgresMirror() {
     { label: "products.media_urls", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS media_urls TEXT` },
     { label: "products.fact_sheet_json", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_json TEXT` },
     { label: "products.fact_sheet_approved", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS fact_sheet_approved INTEGER NOT NULL DEFAULT 0` },
+    { label: "products.pinned", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS pinned INTEGER NOT NULL DEFAULT 0` },
+    { label: "products.pinned_at", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS pinned_at TEXT` },
     { label: "user_settings.theme", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'dark'` },
     { label: "user_settings.ui_scale", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS ui_scale DOUBLE PRECISION NOT NULL DEFAULT 1` },
     { label: "user_settings.storage_mode", sql: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS storage_mode TEXT NOT NULL DEFAULT 'server'` },
@@ -1245,20 +1284,22 @@ export function createProduct(data: {
     media_urls: data.mediaUrls ?? null,
     fact_sheet_json: null,
     fact_sheet_approved: 0,
+    pinned: 0,
+    pinned_at: null,
     created_at: created,
     updated_at: created,
   };
   db.prepare(`
     INSERT INTO products
-    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, tiktok_product_id, views_clicks_orders, commission, landing_clicks, media_urls, fact_sheet_json, fact_sheet_approved, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, owner_email, item_id, product_name, shop_name, original_url, affiliate_url, variation, price_reference, commission_type, key_points, image_url, category, status, video_file, tiktok_post_url, tiktok_product_id, views_clicks_orders, commission, landing_clicks, media_urls, fact_sheet_json, fact_sheet_approved, pinned, pinned_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     product.id, product.owner_email, product.item_id, product.product_name, product.shop_name,
     product.original_url, product.affiliate_url, product.variation, product.price_reference,
     product.commission_type, product.key_points, product.image_url, product.category,
     product.status, product.video_file,
     product.tiktok_post_url, product.tiktok_product_id, product.views_clicks_orders, product.commission, product.landing_clicks,
-    product.media_urls, product.fact_sheet_json, product.fact_sheet_approved,
+    product.media_urls, product.fact_sheet_json, product.fact_sheet_approved, product.pinned, product.pinned_at,
     product.created_at, product.updated_at,
   );
   mirrorUpsert("products", product as unknown as DbRow, "id");
@@ -1272,14 +1313,14 @@ export function updateProduct(id: string, updates: Partial<Omit<ProductRecord, "
   db.prepare(`
     UPDATE products SET product_name=?, shop_name=?, original_url=?, affiliate_url=?, variation=?, price_reference=?,
     commission_type=?, key_points=?, image_url=?, category=?, status=?, video_file=?, tiktok_post_url=?, tiktok_product_id=?, views_clicks_orders=?, commission=?,
-    media_urls=?, fact_sheet_json=?, fact_sheet_approved=?, updated_at=?
+    media_urls=?, fact_sheet_json=?, fact_sheet_approved=?, pinned=?, pinned_at=?, updated_at=?
     WHERE id=?
   `).run(
     merged.product_name, merged.shop_name, merged.original_url, merged.affiliate_url, merged.variation,
     merged.price_reference, merged.commission_type, merged.key_points, merged.image_url, merged.category,
     merged.status, merged.video_file,
     merged.tiktok_post_url, merged.tiktok_product_id, merged.views_clicks_orders, merged.commission,
-    merged.media_urls, merged.fact_sheet_json, merged.fact_sheet_approved, merged.updated_at, id,
+    merged.media_urls, merged.fact_sheet_json, merged.fact_sheet_approved, merged.pinned, merged.pinned_at, merged.updated_at, id,
   );
   mirrorUpsert("products", merged as unknown as DbRow, "id");
   return merged;
@@ -2092,6 +2133,88 @@ export function createSession(email: string, ttlDays = 30): SessionRecord {
   );
   mirrorUpsert("sessions", session as unknown as DbRow, "id");
   return session;
+}
+
+/** Local-login session: expires at the next upcoming local midnight instead
+ *  of a fixed N-days-from-now TTL, so a user who logs in never gets logged
+ *  out mid-day but still gets a fresh daily gate — matches the "don't log
+ *  me out constantly, just reset once a day" behavior asked for. */
+export function createMidnightSession(email: string): SessionRecord {
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  const session: SessionRecord = {
+    id: id("sess"),
+    email,
+    expires_at: nextMidnight.toISOString(),
+    created_at: nowIso(),
+  };
+  db.prepare("INSERT INTO sessions (id, email, expires_at, created_at) VALUES (?, ?, ?, ?)").run(
+    session.id,
+    session.email,
+    session.expires_at,
+    session.created_at,
+  );
+  mirrorUpsert("sessions", session as unknown as DbRow, "id");
+  return session;
+}
+
+export interface LocalAuthRecord {
+  email: string;
+  display_name: string;
+  password_hash: string | null;
+  totp_secret: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getLocalAuth(email: string): LocalAuthRecord | undefined {
+  return db.prepare("SELECT * FROM local_auth WHERE email = ?").get(email) as LocalAuthRecord | undefined;
+}
+
+/** Account picker on the login screen — every local account that has ever
+ *  set a password or an authenticator, minus the actual secrets. */
+export function listLocalAuthAccounts(): Array<{ email: string; display_name: string; has_password: boolean; has_totp: boolean; picture: string | null }> {
+  const rows = db.prepare(`
+    SELECT local_auth.email, local_auth.display_name, local_auth.password_hash, local_auth.totp_secret, users.picture
+    FROM local_auth
+    LEFT JOIN users ON users.email = local_auth.email
+    ORDER BY local_auth.display_name
+  `).all() as Array<{ email: string; display_name: string; password_hash: string | null; totp_secret: string | null; picture: string | null }>;
+  return rows.map((r) => ({
+    email: r.email,
+    display_name: r.display_name,
+    has_password: Boolean(r.password_hash),
+    has_totp: Boolean(r.totp_secret),
+    picture: r.picture,
+  }));
+}
+
+function upsertLocalAuth(email: string, displayName: string, patch: { password_hash?: string | null; totp_secret?: string | null }): LocalAuthRecord {
+  const existing = getLocalAuth(email);
+  const timestamp = nowIso();
+  if (existing) {
+    db.prepare(`
+      UPDATE local_auth
+      SET display_name = ?, password_hash = COALESCE(?, password_hash), totp_secret = COALESCE(?, totp_secret), updated_at = ?
+      WHERE email = ?
+    `).run(displayName, patch.password_hash ?? null, patch.totp_secret ?? null, timestamp, email);
+  } else {
+    db.prepare(`
+      INSERT INTO local_auth (email, display_name, password_hash, totp_secret, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(email, displayName, patch.password_hash ?? null, patch.totp_secret ?? null, timestamp, timestamp);
+  }
+  const record = getLocalAuth(email)!;
+  mirrorUpsert("local_auth", record as unknown as DbRow, "email");
+  return record;
+}
+
+export function setLocalAuthPassword(email: string, displayName: string, passwordHash: string): LocalAuthRecord {
+  return upsertLocalAuth(email, displayName, { password_hash: passwordHash });
+}
+
+export function setLocalAuthTotp(email: string, displayName: string, totpSecret: string): LocalAuthRecord {
+  return upsertLocalAuth(email, displayName, { totp_secret: totpSecret });
 }
 
 export function getSession(sessionId: string): (SessionRecord & { name: string; picture: string | null }) | undefined {

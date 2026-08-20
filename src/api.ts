@@ -13,6 +13,7 @@ import { DEFAULT_VOICE_ID, findVoiceOption, getEffectiveVoiceOptions, VOICE_OPTI
 import { createTtsClient } from "./tts/tts-client.js";
 import { loadConfig } from "./config.js";
 import { toSlug } from "./utils/slug.js";
+import { hashPassword, verifyPassword, generateTotpSecret, verifyTotpCode, buildTotpQrCode } from "./auth/local-auth.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
 import { fetchMedia } from "./assets/image-fetcher.js";
@@ -36,6 +37,11 @@ import {
   createProject,
   loadPostgresIntoSqlite,
   createSession,
+  createMidnightSession,
+  listLocalAuthAccounts,
+  getLocalAuth,
+  setLocalAuthPassword,
+  setLocalAuthTotp,
   createDeviceToken,
   getDeviceTokenEmail,
   addProjectScene,
@@ -1736,8 +1742,19 @@ async function handleUpdateProduct(req: IncomingMessage, res: ServerResponse, pr
   if (typeof body.factSheetApproved === "boolean") {
     updates.fact_sheet_approved = body.factSheetApproved ? 1 : 0;
   }
+  // pinned_at tracks when it was pinned so multiple pinned products can be
+  // ordered most-recently-pinned-first on the public storefront.
+  if (typeof body.pinned === "boolean") {
+    updates.pinned = body.pinned ? 1 : 0;
+    updates.pinned_at = body.pinned ? new Date().toISOString() : null;
+  }
   const product = updateProduct(productId, updates as never);
   sendJson(res, 200, { ok: true, product: productToJson(product) });
+  // Pin/unpin should reflect on the public storefront right away rather than
+  // waiting for the next Google Sheet sync (the only other thing that
+  // rebuilds the static Vercel mirror) — that's the whole point of pinning
+  // something while actively promoting it.
+  if ("pinned" in updates) void triggerVercelShopRebuild();
 }
 
 async function handleGenerateProductFactSheet(req: IncomingMessage, res: ServerResponse, productId: string) {
@@ -2254,6 +2271,8 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
     category: p.category,
     created_at: p.created_at,
     landing_clicks: p.landing_clicks,
+    pinned: p.pinned,
+    pinned_at: p.pinned_at,
   }));
   sendJson(res, 200, { ok: true, products });
 }
@@ -2436,6 +2455,103 @@ async function handleDevLogin(req: IncomingMessage, res: ServerResponse) {
   const session = createSession(user.email);
   setCookie(res, SESSION_COOKIE, session.id);
   sendJson(res, 200, { ok: true, user });
+}
+
+/** Account picker on the login screen — every account that has a local
+ *  password or authenticator set up, no secrets included. */
+async function handleListLocalAccounts(req: IncomingMessage, res: ServerResponse) {
+  sendJson(res, 200, { ok: true, accounts: listLocalAuthAccounts() });
+}
+
+/** First-time setup or reset: (re)sets a self-chosen password for an
+ *  allowed email. Deliberately does not require an existing session — this
+ *  IS how a user first gets one — but still gated by ALLOWED_EMAILS so a
+ *  stranger with network access to the desktop server can't mint their own
+ *  account. */
+async function handleSetupLocalPassword(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req);
+  const email = String((body as { email?: unknown }).email ?? "").trim().toLowerCase();
+  const password = String((body as { password?: unknown }).password ?? "");
+  const displayName = String((body as { displayName?: unknown }).displayName ?? "").trim() || email.split("@")[0];
+  if (!email || !password) {
+    sendJson(res, 400, { error: "Thiếu email hoặc mật khẩu" });
+    return;
+  }
+  if (password.length < 6) {
+    sendJson(res, 400, { error: "Mật khẩu cần ít nhất 6 ký tự" });
+    return;
+  }
+  if (!isAllowedEmail(email)) {
+    sendJson(res, 403, { error: "Email này không được phép dùng app" });
+    return;
+  }
+  const existing = getUser(email);
+  upsertUser({ email, name: existing?.name || displayName, picture: existing?.picture ?? null, provider: existing?.provider || "local" });
+  setLocalAuthPassword(email, displayName, hashPassword(password));
+  sendJson(res, 200, { ok: true });
+}
+
+/** Step 1 of authenticator setup: generate a secret + QR, but don't save it
+ *  yet — handleConfirmLocalTotp saves it only after the user proves they
+ *  actually scanned it correctly, same flow every "enable 2FA" screen uses. */
+async function handleStartLocalTotpSetup(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req);
+  const email = String((body as { email?: unknown }).email ?? "").trim().toLowerCase();
+  if (!email || !isAllowedEmail(email)) {
+    sendJson(res, 403, { error: "Email này không được phép dùng app" });
+    return;
+  }
+  const secret = generateTotpSecret();
+  const qrDataUrl = await buildTotpQrCode(secret, email);
+  sendJson(res, 200, { ok: true, secret, qrDataUrl });
+}
+
+async function handleConfirmLocalTotp(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req);
+  const email = String((body as { email?: unknown }).email ?? "").trim().toLowerCase();
+  const secret = String((body as { secret?: unknown }).secret ?? "");
+  const code = String((body as { code?: unknown }).code ?? "");
+  const displayName = String((body as { displayName?: unknown }).displayName ?? "").trim() || email.split("@")[0];
+  if (!email || !isAllowedEmail(email)) {
+    sendJson(res, 403, { error: "Email này không được phép dùng app" });
+    return;
+  }
+  if (!verifyTotpCode(secret, code)) {
+    sendJson(res, 400, { error: "Mã 6 số không đúng — quét lại QR hoặc thử mã mới" });
+    return;
+  }
+  const existing = getUser(email);
+  upsertUser({ email, name: existing?.name || displayName, picture: existing?.picture ?? null, provider: existing?.provider || "local" });
+  setLocalAuthTotp(email, displayName, secret);
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleLocalLoginPassword(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req);
+  const email = String((body as { email?: unknown }).email ?? "").trim().toLowerCase();
+  const password = String((body as { password?: unknown }).password ?? "");
+  const auth = getLocalAuth(email);
+  if (!auth || !verifyPassword(password, auth.password_hash)) {
+    sendJson(res, 401, { error: "Sai email hoặc mật khẩu" });
+    return;
+  }
+  const session = createMidnightSession(email);
+  setCookie(res, SESSION_COOKIE, session.id, "Path=/; HttpOnly; SameSite=Lax; Max-Age=86400");
+  sendJson(res, 200, { ok: true, user: getUser(email) });
+}
+
+async function handleLocalLoginTotp(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req);
+  const email = String((body as { email?: unknown }).email ?? "").trim().toLowerCase();
+  const code = String((body as { code?: unknown }).code ?? "");
+  const auth = getLocalAuth(email);
+  if (!auth || !auth.totp_secret || !verifyTotpCode(auth.totp_secret, code)) {
+    sendJson(res, 401, { error: "Mã xác thực không đúng" });
+    return;
+  }
+  const session = createMidnightSession(email);
+  setCookie(res, SESSION_COOKIE, session.id, "Path=/; HttpOnly; SameSite=Lax; Max-Age=86400");
+  sendJson(res, 200, { ok: true, user: getUser(email) });
 }
 
 interface DesktopVersionInfo {
@@ -2757,6 +2873,36 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === "POST" && url.pathname === "/api/auth/dev-login") {
       await handleDevLogin(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/auth/local/accounts") {
+      await handleListLocalAccounts(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/local/setup-password") {
+      await handleSetupLocalPassword(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/local/setup-totp") {
+      await handleStartLocalTotpSetup(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/local/confirm-totp") {
+      await handleConfirmLocalTotp(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/local/login-password") {
+      await handleLocalLoginPassword(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/local/login-totp") {
+      await handleLocalLoginTotp(req, res);
       return;
     }
 

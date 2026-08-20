@@ -122,6 +122,14 @@ async function isServerUp(port) {
 }
 
 function openBrowser(url) {
+  // The Electron wrapper (desktop/electron-main.cjs) spawns this same
+  // launcher to start the server, then opens its own native window instead
+  // of an Edge one — skip Edge entirely in that case so the user doesn't
+  // get two windows.
+  if (process.env.SKIP_OPEN_BROWSER === "true") {
+    log("SKIP_OPEN_BROWSER set — not opening a browser window (Electron will open its own)");
+    return;
+  }
   // Edge's --app= mode strips the address bar/tabs/bookmarks bar, so the
   // window reads as a standalone desktop app instead of "a browser tab" —
   // no Electron rewrite needed for that. msedge.exe is registered as a
