@@ -214,13 +214,25 @@ async function main() {
     // best-effort — an oversized log is better than a launch failure
   }
   const serverLogFd = openSync(SERVER_LOG_FILE, "a");
+  // Detached+unref only makes sense when THIS launcher is itself a
+  // short-lived process meant to exit immediately (the old wscript path) —
+  // the server needs to keep running after its own parent is gone. Under
+  // Electron (SKIP_OPEN_BROWSER=true), this launcher's own parent is the
+  // long-lived Electron process, and Windows silently tears down a
+  // detached+unref'd grandchild along with its intermediate parent's job
+  // object membership when that parent process exits — observed directly:
+  // the server logs "listening", starts warming caches, then vanishes with
+  // no error the moment this script's main() returns. Keeping the child
+  // attached (and keeping this whole script alive below) sidesteps that
+  // entirely instead of fighting Windows job-object semantics.
+  const keepAttached = process.env.SKIP_OPEN_BROWSER === "true";
   const child = spawn(process.execPath, [distEntry], {
     cwd: ROOT,
-    detached: true,
+    detached: !keepAttached,
     stdio: ["ignore", serverLogFd, serverLogFd],
     windowsHide: true,
   });
-  child.unref();
+  if (!keepAttached) child.unref();
 
   const ready = await waitForServer(port, 30000);
   if (!ready) {

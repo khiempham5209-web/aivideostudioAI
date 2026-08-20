@@ -13,11 +13,23 @@
 
 const { app, BrowserWindow } = require("electron");
 const { spawn } = require("node:child_process");
-const { existsSync, readFileSync } = require("node:fs");
+const { existsSync, readFileSync, mkdirSync, openSync, appendFileSync } = require("node:fs");
 const { join } = require("node:path");
 const http = require("node:http");
 
-const ROOT = join(__dirname, "..");
+// electron-main.cjs sits at DIFFERENT depths depending on context:
+// - Packaged (real usage): prepare-desktop-build.mjs copies it to the
+//   staging root itself, sitting right next to dist/public/scripts/node —
+//   so __dirname IS the app root.
+// - Source repo (desktop/electron-main.cjs, only ever used for ad-hoc local
+//   testing before packaging): one level below the actual repo root.
+// Getting this wrong doesn't error loudly — every path built from it just
+// silently points at the wrong place, which is exactly what happened here:
+// dist/api.js resolved to .../resources/dist/api.js instead of
+// .../resources/app/dist/api.js, so the server crashed on MODULE_NOT_FOUND
+// on every single launch and every diagnostic log went to the wrong folder
+// too, which is why none of the log-file checks ever found anything.
+const ROOT = existsSync(join(__dirname, "dist", "api.js")) ? __dirname : join(__dirname, "..");
 
 function readPort() {
   const envPath = join(ROOT, ".env.local");
@@ -56,24 +68,71 @@ async function waitForServer(port, timeoutMs) {
   return false;
 }
 
+// Held at module scope so the child never loses its last reference (and
+// so it can be explicitly killed on app quit instead of relying on Windows
+// process-tree/job-object cleanup, which is what kept silently tearing
+// down the server in earlier attempts that routed through an intermediate
+// launcher script — see the long comment history in git blame for exactly
+// what was tried and why it didn't hold).
+let serverProcess = null;
+
 async function ensureServerRunning(port) {
   if (await isServerUp(port)) return;
 
-  const portableNode = join(ROOT, "desktop", "node", "node.exe");
-  const nodeExe = existsSync(portableNode) ? portableNode : "node";
-  const launcher = join(ROOT, "scripts", "launch-desktop.mjs");
+  // In the SOURCE repo, the portable runtime lives at desktop/node/node.exe
+  // (relative to repo root). Once staged/packaged, prepare-desktop-build.mjs
+  // flattens that to a top-level node/ next to dist/public/scripts — so ROOT
+  // here (which IS the staging root once packaged) needs the non-"desktop/"
+  // path. Check both so this keeps working for local dev testing too.
+  const packagedNode = join(ROOT, "node", "node.exe");
+  const devNode = join(ROOT, "desktop", "node", "node.exe");
+  const nodeExe = existsSync(packagedNode) ? packagedNode : existsSync(devNode) ? devNode : "node";
+  const distEntry = join(ROOT, "dist", "api.js");
 
-  spawn(nodeExe, [launcher], {
+  // Deliberately spawns dist/api.js DIRECTLY instead of going through
+  // scripts/launch-desktop.mjs as an intermediate process — Electron is
+  // already the long-lived parent for as long as the window is open, so no
+  // intermediate launcher is needed. This skips launch-desktop.mjs's
+  // auto-config-sync and first-run edge-tts venv setup, both best-effort
+  // niceties — the venv just needs to exist once (scripts/install-edge-tts.mjs
+  // can still be run standalone if TTS ever falls back to gTTS unexpectedly).
+  const logDir = join(ROOT, "logs");
+  try {
+    mkdirSync(logDir, { recursive: true });
+  } catch {
+    // best-effort
+  }
+  const logPath = join(logDir, "electron-server.log");
+  let logFd;
+  try {
+    logFd = openSync(logPath, "a");
+  } catch {
+    logFd = "ignore";
+  }
+
+  serverProcess = spawn(nodeExe, [distEntry], {
     cwd: ROOT,
-    detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     windowsHide: true,
-    env: { ...process.env, SKIP_OPEN_BROWSER: "true" },
-  }).unref();
+  });
+  serverProcess.on("error", (err) => {
+    try {
+      appendFileSync(logPath, `[${new Date().toISOString()}] SPAWN ERROR: ${err?.stack || err}\n`);
+    } catch {
+      // best-effort
+    }
+  });
+  serverProcess.on("exit", (code, signal) => {
+    try {
+      appendFileSync(logPath, `[${new Date().toISOString()}] Server process exited: code=${code} signal=${signal}\n`);
+    } catch {
+      // best-effort
+    }
+  });
 
-  const ready = await waitForServer(port, 45000);
+  const ready = await waitForServer(port, 5 * 60 * 1000);
   if (!ready) {
-    throw new Error("Server did not become ready within 45s");
+    throw new Error("Server did not become ready within 5 minutes — check logs/electron-server.log for what's stuck");
   }
 }
 
@@ -97,7 +156,17 @@ async function createWindow() {
     },
   });
 
-  mainWindow.loadURL("about:blank");
+  mainWindow.loadURL(
+    "data:text/html;charset=utf-8," +
+      encodeURIComponent(
+        `<body style="background:#0b0b0f;color:#fff;font-family:sans-serif;padding:40px;display:grid;place-items:center;height:100vh;margin:0;">
+          <div style="text-align:center;">
+            <div style="font-size:32px;">▶</div>
+            <p style="opacity:.8;margin-top:12px;">Đang khởi động... (lần đầu có thể mất vài phút để cài đặt giọng đọc)</p>
+          </div>
+        </body>`,
+      ),
+  );
 
   try {
     await ensureServerRunning(port);
@@ -120,6 +189,10 @@ app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  if (serverProcess && !serverProcess.killed) serverProcess.kill();
 });
 
 app.on("activate", () => {
