@@ -1189,7 +1189,7 @@ export function getProduct(ownerEmail: string, id: string): ProductRecord | unde
 export function listPublicProducts(): ProductRecord[] {
   // Single-tenant landing page — no auth, so no owner filter. Only products
   // with a real affiliate link are worth showing (no dead "Xem trên Shopee" buttons).
-  return db.prepare("SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY created_at DESC").all() as ProductRecord[];
+  return db.prepare("SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY pinned DESC, pinned_at DESC, created_at DESC").all() as ProductRecord[];
 }
 
 /** Same query as listPublicProducts(), but straight against Postgres instead
@@ -1205,7 +1205,7 @@ export async function listPublicProductsLive(): Promise<ProductRecord[] | null> 
   if (!pool) return null;
   try {
     const result = await pool.query(
-      "SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY created_at DESC",
+      "SELECT * FROM products WHERE affiliate_url IS NOT NULL AND affiliate_url != '' ORDER BY pinned DESC, pinned_at DESC, created_at DESC",
     );
     return result.rows as ProductRecord[];
   } catch (error) {
