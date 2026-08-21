@@ -168,7 +168,7 @@ async function createWindow() {
         `<body style="background:#0b0b0f;color:#fff;font-family:sans-serif;padding:40px;display:grid;place-items:center;height:100vh;margin:0;">
           <div style="text-align:center;">
             <div style="font-size:32px;">▶</div>
-            <p style="opacity:.8;margin-top:12px;">Đang khởi động... (lần đầu có thể mất vài phút để cài đặt giọng đọc)</p>
+            <p style="opacity:.8;margin-top:12px;">Đang khởi động server và tải dữ liệu (thường 10-20 giây)...</p>
           </div>
         </body>`,
       ),

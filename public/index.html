@@ -2230,7 +2230,12 @@
         renderCreateProductSelect();
         const list = $("#productList");
         if (!list) return;
-        const products = state.products || [];
+        // Pinned products float to the top here too (not just the public
+        // storefront) so managing them is easier — unpin puts a product
+        // straight back where its creation-date position would put it,
+        // since this only re-sorts pinned-vs-not and leaves everything
+        // else in the order the API already returned.
+        const products = [...(state.products || [])].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
         if (!products.length) {
           list.innerHTML = '<div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>';
           return;
@@ -2245,7 +2250,7 @@
               ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${formatPrice(p.price_reference)}</p>` : ""}
               <div class="top-actions">
                 <button class="btn" data-edit-product="${p.id}" type="button">Sửa</button>
-                <button class="btn" data-toggle-pin="${p.id}" type="button">${p.pinned ? "📌 Bỏ ghim" : "📌 Ghim lên đầu"}</button>
+                <button class="btn" data-toggle-pin="${p.id}" type="button">${p.pinned ? "📌 Bỏ ghim" : "📌 Ghim SP"}</button>
                 <button class="btn primary" data-create-script="${p.id}" type="button">Tạo kịch bản</button>
                 <button class="btn primary" data-make-video="${p.id}" type="button">🎬 Tạo video</button>
               </div>
