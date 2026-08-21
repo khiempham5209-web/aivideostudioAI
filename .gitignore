@@ -34,4 +34,5 @@ assets/pexels-cache/
 /desktop/node/
 /desktop/staging/
 /desktop/dist-installer/
+/desktop/electron-dist/
 logs/

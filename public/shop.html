@@ -487,6 +487,10 @@
       <div id="highlightGrid" class="highlight-grid"></div>
     </div>
 
+    <div id="pinnedSection" class="section" style="display:none;">
+      <div class="row" id="pinnedRow"></div>
+    </div>
+
     <div id="searchResults" style="display:none;"></div>
     <div id="sections"><div class="empty">Đang tải...</div></div>
     <footer>Giá và ưu đãi thật có thể thay đổi theo thời gian, quý khách bấm "Xem giá trên Shopee" để chính xác hơn. Cảm ơn quý khách!</footer>
@@ -642,6 +646,25 @@
       });
     }
 
+    // Sản phẩm được chủ shop ghim — hiện thành 1 dải không có nhãn/tên danh
+    // mục ở ngay đầu trang mặc định, ghim gần đây nhất đứng trước. Chỉ hiện
+    // ở màn mặc định (không lọc/tìm) — xem toggle trong runSearch().
+    function renderPinned() {
+      const items = allProducts
+        .filter((p) => p.pinned)
+        .sort((a, b) => new Date(b.pinned_at || b.created_at) - new Date(a.pinned_at || a.created_at));
+      const wrap = document.getElementById("pinnedSection");
+      const row = document.getElementById("pinnedRow");
+      if (!items.length) {
+        wrap.style.display = "none";
+        row.innerHTML = "";
+        return;
+      }
+      row.innerHTML = items.map(cardHtml).join("");
+      bindCardButtons(row);
+      wrap.style.display = "";
+    }
+
     function renderDrawer() {
       const counts = new Map();
       allProducts.forEach((p) => {
@@ -760,16 +783,21 @@
       const sections = document.getElementById("sections");
       const results = document.getElementById("searchResults");
       const highlight = document.getElementById("highlightSection");
+      const pinnedWrap = document.getElementById("pinnedSection");
       const active = anyFilterActive();
       document.getElementById("clearFilterButton").style.display = active ? "inline-block" : "none";
       if (!q && !active && !force) {
         sections.style.display = "";
         highlight.style.display = allProducts.length ? "" : "none";
+        pinnedWrap.style.display = allProducts.some((p) => p.pinned) ? "" : "none";
         results.style.display = "none";
         return;
       }
+      // Ghim chỉ nổi bật ở màn mặc định — khi người dùng đang lọc/tìm, sản
+      // phẩm ghim không được ưu tiên, chỉ xuất hiện tự nhiên nếu khớp bộ lọc.
       sections.style.display = "none";
       highlight.style.display = "none";
+      pinnedWrap.style.display = "none";
       results.style.display = "grid";
       let list = getFilteredSortedProducts();
       if (q) list = list.filter((p) => (p.product_name || "").toLowerCase().includes(q));
@@ -863,6 +891,7 @@
         allProducts = data.products || [];
         renderDrawer();
         renderSections();
+        renderPinned();
         renderHighlights();
         document.getElementById("highlightSection").style.display = allProducts.length ? "" : "none";
       })

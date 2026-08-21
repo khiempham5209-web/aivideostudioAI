@@ -11,7 +11,7 @@
 // then points its own BrowserWindow at the resulting local server. All the
 // port/config/auto-sync/edge-tts-setup logic stays in one place.
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, Tray, Menu } = require("electron");
 const { spawn } = require("node:child_process");
 const { existsSync, readFileSync, mkdirSync, openSync, appendFileSync } = require("node:fs");
 const { join } = require("node:path");
@@ -143,6 +143,14 @@ async function ensureServerRunning(port) {
 }
 
 let mainWindow;
+let tray;
+// Closing the window (X button) used to fully quit the app, which killed
+// the server too — meaning every reopen paid the full ~10-20s startup cost
+// (connect to Postgres, mirror project data) again, not just the very
+// first launch. Closing now just hides the window instead; the server and
+// its data stay warm in the background, so reopening is instant. Only the
+// tray menu's "Thoát" (or an OS-level quit) actually shuts it down.
+let isQuitting = false;
 
 async function createWindow() {
   const port = readPort();
@@ -162,14 +170,27 @@ async function createWindow() {
     },
   });
 
+  // Matches the real app's own branding (same gradient logo, same dark
+  // background with purple/cyan glow, same font stack) instead of a plain
+  // generic "loading" screen — so the very first launch (the only time this
+  // is ever seen now that closing the window hides instead of quitting)
+  // reads as "the app is opening" rather than a separate Electron splash.
   mainWindow.loadURL(
     "data:text/html;charset=utf-8," +
       encodeURIComponent(
-        `<body style="background:#0b0b0f;color:#fff;font-family:sans-serif;padding:40px;display:grid;place-items:center;height:100vh;margin:0;">
+        `<body style="margin:0;height:100vh;display:grid;place-items:center;font-family:'Segoe UI',Arial,sans-serif;color:#f8fafc;background:
+          radial-gradient(circle at 22% 8%, rgba(124,58,237,0.22), transparent 34%),
+          radial-gradient(circle at 88% 14%, rgba(34,211,238,0.1), transparent 30%),
+          #070a10;">
           <div style="text-align:center;">
-            <div style="font-size:32px;">▶</div>
-            <p style="opacity:.8;margin-top:12px;">Đang khởi động server và tải dữ liệu (thường 10-20 giây)...</p>
+            <div style="width:56px;height:56px;margin:0 auto 18px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2563eb,#7c3aed,#ec4899);box-shadow:0 0 40px rgba(124,58,237,0.45);font-size:26px;">▶</div>
+            <h1 style="font-size:20px;margin:0 0 8px;">AI Video Studio</h1>
+            <p style="opacity:.65;margin:0;font-size:13px;">Đang tải dữ liệu...</p>
+            <div style="width:120px;height:3px;margin:22px auto 0;border-radius:3px;background:rgba(148,163,184,0.18);overflow:hidden;">
+              <div style="width:40%;height:100%;border-radius:3px;background:linear-gradient(90deg,#7c3aed,#22d3ee);animation:slide 1.1s ease-in-out infinite;"></div>
+            </div>
           </div>
+          <style>@keyframes slide{0%{transform:translateX(-120%)}100%{transform:translateX(340%)}}</style>
         </body>`,
       ),
   );
@@ -189,13 +210,57 @@ async function createWindow() {
         ),
     );
   }
+
+  mainWindow.on("close", (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
 }
 
-app.whenReady().then(createWindow);
+function createTray() {
+  tray = new Tray(join(__dirname, "icon.ico"));
+  tray.setToolTip("AI Video Studio");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Mở AI Video Studio",
+        click: () => {
+          if (!mainWindow) return;
+          mainWindow.show();
+          mainWindow.focus();
+        },
+      },
+      { type: "separator" },
+      {
+        label: "Thoát",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("double-click", () => {
+    if (!mainWindow) return;
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
 });
+
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
+// No window-all-closed -> app.quit() anymore: the window's own "close"
+// handler hides instead of destroying it, so this normally never fires
+// with a real user-initiated close. Only the tray's "Thoát" (or an OS
+// shutdown/task-kill) should end the process now.
 
 app.on("before-quit", () => {
   if (serverProcess && !serverProcess.killed) serverProcess.kill();

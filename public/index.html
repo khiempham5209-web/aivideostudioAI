@@ -239,6 +239,25 @@
         gap: 10px;
       }
 
+      .product-actions {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .product-actions .btn {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 30px;
+        padding: 0 4px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
       .chip,
       .pill {
         display: inline-flex;
@@ -2249,11 +2268,11 @@
             <div class="panel-body field-stack">
               <strong>${p.product_name}</strong>
               ${p.price_reference ? `<p class="tiny">Giá tham khảo: ${formatPrice(p.price_reference)}</p>` : ""}
-              <div class="top-actions">
-                <button class="btn" data-edit-product="${p.id}" type="button">Sửa</button>
-                <button class="btn" data-toggle-pin="${p.id}" type="button">${p.pinned ? "📌 Bỏ ghim" : "📌 Ghim SP"}</button>
-                <button class="btn primary" data-create-script="${p.id}" type="button">Tạo kịch bản</button>
-                <button class="btn primary" data-make-video="${p.id}" type="button">🎬 Tạo video</button>
+              <div class="product-actions">
+                <button class="btn" data-edit-product="${p.id}" type="button" title="Sửa">Sửa</button>
+                <button class="btn" data-toggle-pin="${p.id}" type="button" title="${p.pinned ? "Bỏ ghim" : "Ghim SP"}">${p.pinned ? "📌 Bỏ" : "📌 Ghim"}</button>
+                <button class="btn primary" data-create-script="${p.id}" type="button" title="Tạo kịch bản">Kịch bản</button>
+                <button class="btn primary" data-make-video="${p.id}" type="button" title="Tạo video">🎬 Video</button>
               </div>
             </div>
           </div>
