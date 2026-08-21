@@ -1012,7 +1012,7 @@ export async function loadPostgresIntoSqlite() {
   const pool = pgPool;
   if (!pool) return;
   await initPostgresMirror();
-  const tables = ["users", "user_settings", "projects", "render_jobs", "assets", "scenes", "timeline_tracks", "timeline_clips", "sessions", "products"] as const;
+  const tables = ["users", "local_auth", "device_tokens", "user_settings", "projects", "render_jobs", "assets", "scenes", "timeline_tracks", "timeline_clips", "sessions", "products"] as const;
   const rows = Object.fromEntries(
     await Promise.all(
       tables.map(async (table) => {
@@ -1028,9 +1028,14 @@ export async function loadPostgresIntoSqlite() {
       }),
     ),
   ) as Record<(typeof tables)[number], DbRow[]>;
-  db.exec(
-    "DELETE FROM sessions; DELETE FROM user_settings; DELETE FROM timeline_clips; DELETE FROM timeline_tracks; DELETE FROM scenes; DELETE FROM assets; DELETE FROM render_jobs; DELETE FROM products; DELETE FROM projects; DELETE FROM users;",
-  );
+  for (const table of ["sessions", "user_settings", "timeline_clips", "timeline_tracks", "scenes", "assets", "render_jobs", "products", "projects", "local_auth", "device_tokens", "users"]) {
+    try {
+      db.exec(`DELETE FROM ${table};`);
+    } catch (error) {
+      console.error(`DELETE FROM ${table} failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
   const insertRows = (table: string, items: DbRow[]) => {
     for (const row of items) {
       const cols = Object.keys(row);
@@ -1039,6 +1044,8 @@ export async function loadPostgresIntoSqlite() {
     }
   };
   insertRows("users", rows.users);
+  insertRows("local_auth", rows.local_auth);
+  insertRows("device_tokens", rows.device_tokens);
   insertRows("user_settings", rows.user_settings);
   insertRows("projects", rows.projects);
   insertRows("render_jobs", rows.render_jobs);

@@ -87,15 +87,20 @@ async function ensureServerRunning(port) {
   const packagedNode = join(ROOT, "node", "node.exe");
   const devNode = join(ROOT, "desktop", "node", "node.exe");
   const nodeExe = existsSync(packagedNode) ? packagedNode : existsSync(devNode) ? devNode : "node";
-  const distEntry = join(ROOT, "dist", "api.js");
 
-  // Deliberately spawns dist/api.js DIRECTLY instead of going through
-  // scripts/launch-desktop.mjs as an intermediate process — Electron is
-  // already the long-lived parent for as long as the window is open, so no
-  // intermediate launcher is needed. This skips launch-desktop.mjs's
-  // auto-config-sync and first-run edge-tts venv setup, both best-effort
-  // niceties — the venv just needs to exist once (scripts/install-edge-tts.mjs
-  // can still be run standalone if TTS ever falls back to gTTS unexpectedly).
+  // Goes through scripts/launch-desktop.mjs rather than spawning dist/api.js
+  // directly — that script also auto-syncs .env.local (real secrets pulled
+  // fresh from the account's production config via DEVICE_SYNC_TOKEN, never
+  // baked into the installer) and does first-run edge-tts venv setup, and
+  // skipping it silently left the packaged app with no working DB config the
+  // moment a repackage wiped a .env.local that had only ever existed because
+  // an earlier run's auto-sync had created it. SKIP_OPEN_BROWSER=true also
+  // tells launch-desktop.mjs to keep its own server-spawn attached rather
+  // than detached (see that file's own comment on this) — a detached+unref'd
+  // grandchild reliably died the moment this intermediate script exited,
+  // which looked exactly like a Windows job-object issue before the real
+  // culprit (a wrong ROOT path here causing MODULE_NOT_FOUND) was found.
+  const launcher = join(ROOT, "scripts", "launch-desktop.mjs");
   const logDir = join(ROOT, "logs");
   try {
     mkdirSync(logDir, { recursive: true });
@@ -110,10 +115,11 @@ async function ensureServerRunning(port) {
     logFd = "ignore";
   }
 
-  serverProcess = spawn(nodeExe, [distEntry], {
+  serverProcess = spawn(nodeExe, [launcher], {
     cwd: ROOT,
     stdio: ["ignore", logFd, logFd],
     windowsHide: true,
+    env: { ...process.env, SKIP_OPEN_BROWSER: "true" },
   });
   serverProcess.on("error", (err) => {
     try {

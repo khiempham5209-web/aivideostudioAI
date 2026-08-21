@@ -2505,11 +2505,19 @@
       $("#localAuthPasswordInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLocalLogin("password"); });
       $("#localAuthTotpInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLocalLogin("totp"); });
 
+      // Guards against exactly the typo that once split one person's data
+      // into two accounts: "khiempham5209gmail.com" (missing @) silently
+      // creating a brand-new, empty identity instead of erroring.
+      function isValidEmailFormat(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      }
+
       $("#localSetupPasswordSubmit")?.addEventListener("click", async () => {
         const email = $("#localNewEmail").value.trim().toLowerCase();
         const displayName = $("#localNewDisplayName").value.trim();
         const password = $("#localSetupPassword").value;
         if (!email || !password) return ($("#loginHint").textContent = "Nhập email và mật khẩu.");
+        if (!isValidEmailFormat(email)) return ($("#loginHint").textContent = "Email không đúng định dạng (thiếu @ hoặc thiếu tên miền) — kiểm tra lại.");
         const button = $("#localSetupPasswordSubmit");
         button.disabled = true;
         try {
@@ -2527,6 +2535,7 @@
       $("#localGenerateQrButton")?.addEventListener("click", async () => {
         const email = $("#localNewEmail").value.trim().toLowerCase();
         if (!email) return ($("#loginHint").textContent = "Nhập email trước khi tạo mã QR.");
+        if (!isValidEmailFormat(email)) return ($("#loginHint").textContent = "Email không đúng định dạng (thiếu @ hoặc thiếu tên miền) — kiểm tra lại.");
         const button = $("#localGenerateQrButton");
         button.disabled = true;
         try {
