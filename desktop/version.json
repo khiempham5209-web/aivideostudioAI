@@ -1,5 +1,5 @@
 {
-  "version": "1.1.12",
+  "version": "1.1.13",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Dong bo Google Sheet on dinh hon (khong con ghi de mat anh/gia da lay, sua loi trung ma san pham); tu dong lay them ten shop; tu dong don SKU trung khi dong bo; web hukiai258.com chuyen sang tai tinh, khong con man hinh cho Render thuc day; them dem luot truy cap web theo ngay ghi vao Sheet."
+  "notes": "App doi sang Electron that (khong con qua Edge, icon rieng, khong hien trong trinh duyet); dang nhap kieu chon tai khoan voi mat khau/QR Authenticator, tu dong dang xuat luc 00h; dong cua so gio chi an xuong khay he thong (mo lai tuc thi, khong phai cho lai tu dau); ghim san pham hien dung o Kho san pham va web tinh hukiai258.com; sua loi web hukiai258.com khong hien san pham do Render build that bai am tham."
 }
