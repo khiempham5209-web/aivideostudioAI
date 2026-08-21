@@ -102,6 +102,7 @@ async function autoSyncConfig() {
       `R2_BUCKET=${str("r2Bucket")}`,
       `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
       `PEXELS_API_KEY=${str("pexelsApiKey")}`,
+      `VERCEL_SHOP_DEPLOY_HOOK_URL=${str("vercelShopDeployHookUrl")}`,
       `DEVICE_SYNC_TOKEN=${token}`,
       "",
     ].join("\n");

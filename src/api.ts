@@ -2654,6 +2654,13 @@ function buildDesktopConfigPayload(user: { email: string; name: string; picture:
     r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
     r2Bucket: process.env.R2_BUCKET ?? "",
     r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL ?? "",
+    // Without this, the desktop app's own triggerVercelShopRebuild() calls
+    // (fired on every pin toggle / product create-update) are silent no-ops —
+    // pinning or editing a product from the desktop app would never refresh
+    // the static hukiai258.com site, only edits made through the deployed
+    // Render web app itself would, which the desktop app was specifically
+    // built to replace as the primary way products get managed.
+    vercelShopDeployHookUrl: process.env.VERCEL_SHOP_DEPLOY_HOOK_URL ?? "",
   };
 }
 
@@ -2731,6 +2738,7 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       `R2_BUCKET=${str("r2Bucket")}`,
       `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
       `PEXELS_API_KEY=${str("pexelsApiKey")}`,
+      `VERCEL_SHOP_DEPLOY_HOOK_URL=${str("vercelShopDeployHookUrl")}`,
       `DEVICE_SYNC_TOKEN=${str("deviceToken")}`,
       "",
     ].join("\n");
