@@ -560,6 +560,17 @@ let pgPool = DATABASE_URL
       ssl: DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
     })
   : null;
+// node-postgres emits "error" on an idle client that gets dropped by the
+// server (Neon suspends idle connections aggressively) — without a
+// listener, that's an unhandled event that Node logs as a crash-looking
+// stack trace with no indication it's actually harmless (the pool discards
+// that client and reconnects fine on the next query). Logging it plainly
+// here at least makes a real, persistent connection problem show up in
+// Render's logs instead of every query just silently falling back to the
+// stale on-disk mirror with no visible cause.
+pgPool?.on("error", (error) => {
+  console.error("Postgres pool idle client error:", error instanceof Error ? error.message : error);
+});
 let pgWriteQueue: Promise<void> = Promise.resolve();
 
 // This app's own tables (dropped AND recreated fresh by the steps below).
