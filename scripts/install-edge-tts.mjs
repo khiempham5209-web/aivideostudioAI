@@ -34,6 +34,20 @@ const CUSTOM_PIPER_VOICES = [
 ];
 const CUSTOM_PIPER_VOICES_BACKEND_URL = "https://aivideostudioaibackend.onrender.com";
 
+// The desktop .exe does all rendering/TTS now (see DISABLE_WEB_RENDER in
+// api.ts) — Render only stores raw data. This whole script exists to set up
+// a Python virtualenv for edge-tts/Piper/Supertonic, none of which Render
+// ever needs to actually run. It used to bail out of the Piper/Supertonic
+// parts specifically in a server environment, but still unconditionally
+// tried to find Python and build the edge-tts venv first — on a build image
+// with no Python available, that hit process.exit(1) below and failed the
+// entire "npm ci", which is a hard failure for the whole deploy, not just a
+// missing voice feature. Skip the entire script up front instead.
+if (process.env.RENDER || process.env.VERCEL || process.env.APP_ENV === "production") {
+  console.log("Skipping edge-tts/Piper/Supertonic setup entirely (server/production environment — desktop-only feature).");
+  process.exit(0);
+}
+
 // Deliberate, narrow exception to the "Piper is desktop-only" rule below:
 // this is the app's default voice (see DEFAULT_VOICE_ID in voice-catalog.ts)
 // and must work on the web build too, not just desktop. Limited to exactly
