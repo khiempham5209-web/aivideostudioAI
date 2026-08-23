@@ -1277,9 +1277,13 @@ function startAudioJob(projectId: string, jobId: string) {
       });
       const pipelineResult = await runTemplatePipeline(generated.scriptPath, {
         audioOnly: true,
+        // runTemplatePipeline already reports a proper 0-96 range for
+        // audioOnly jobs (TTS is nearly the whole job here, unlike a full
+        // video render) — pass it through directly instead of re-squashing
+        // it into a second, narrower band on top of that.
         onProgress: (step, progress) => {
           if (isCancelled()) return;
-          updateRenderJob(jobId, { current_step: step, progress: Math.min(90, 35 + Math.round((progress / 100) * 55)) });
+          updateRenderJob(jobId, { current_step: step, progress: Math.min(97, Math.round(progress)) });
         },
       });
       if (isCancelled()) return;

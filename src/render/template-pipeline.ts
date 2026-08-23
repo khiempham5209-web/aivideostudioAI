@@ -178,7 +178,18 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   let ttsDone = 0;
   const reportTts = () => {
     ttsDone += 1;
-    report(`Đang tạo giọng đọc: ${ttsDone}/${script.scenes.length} scene`, 5 + Math.round((ttsDone / script.scenes.length) * 15));
+    // TTS is a small slice of a full video render (scene rendering + video
+    // encoding still follow it), but it's nearly the WHOLE job when
+    // audioOnly — reusing the same narrow 5-20 band there left the progress
+    // bar visibly stuck around 38-46% (after api.ts's own audioOnly-specific
+    // remap) for the entire TTS phase, the longest part of an audio-only
+    // job, then jumping straight to 100% at the very end.
+    report(
+      `Đang tạo giọng đọc: ${ttsDone}/${script.scenes.length} scene`,
+      options.audioOnly
+        ? Math.round((ttsDone / script.scenes.length) * 90)
+        : 5 + Math.round((ttsDone / script.scenes.length) * 15),
+    );
   };
   const sceneAudio = await Promise.all(
     script.scenes.map((scene) =>
@@ -286,6 +297,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   log.info(`  voice.mp3: ${totalAudioSec.toFixed(2)}s, ${sfxList.length} SFX`);
   const sceneDurations = Object.fromEntries(sceneAudio.map((a) => [a.id, a.durationSec]));
   if (options.audioOnly) {
+    report("Ghép giọng đọc + trộn âm thanh", 96);
     log.step(6, TOTAL_STEPS, "Audio only mode");
     console.log("\n=== Audio Result ===");
     console.log(`Audio:  ${voiceMp3}`);
