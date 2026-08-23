@@ -68,10 +68,15 @@ export const TemplateScriptSchema = z.object({
   // High ceiling, not a real target — the actual constraint for how many
   // scenes a single AI call can produce is the model's own output-token
   // limit, not this number. This just guards against a malformed response.
+  // 500 turned out to be too low for real long-form content: a 30-minute
+  // story script (scene_type "manual", one scene per sentence) legitimately
+  // needs 1000+ scenes at normal narration pacing — that's not a malformed
+  // AI response, just a long video. Raised well past what even a 40+ minute
+  // story would need, while still catching genuine runaway/looping output.
   scenes: z
     .array(TemplateScene)
     .min(3)
-    .max(500)
+    .max(5000)
     .refine((s) => s[0]?.type === "hook", { message: "scenes[0] must be type=hook" })
     .refine((s) => s[s.length - 1]?.type === "outro", { message: "last scene must be type=outro" }),
 });

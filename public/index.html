@@ -4705,8 +4705,57 @@
         }
         dropdown.innerHTML = `<div style="font-weight:600;padding:6px 8px;">Thông báo render</div>` + recent.map((j) => {
           const statusLabel = j.status === "completed" ? "✅ Hoàn tất" : j.status === "failed" ? "❌ Lỗi" : "⏹ Đã hủy";
-          return `<div style="padding:8px;border-top:1px solid rgba(148,163,184,.15);"><strong>${j.project_title || "Dự án"}</strong><p class="tiny">${statusLabel} · ${formatDateTime(j.finished_at || j.updated_at)}</p></div>`;
+          const hasDetail = j.status === "failed" && j.error_message;
+          return `<div class="notif-row" data-job-id="${j.id}" style="padding:8px;border-top:1px solid rgba(148,163,184,.15);${hasDetail ? "cursor:pointer;" : ""}">
+            <strong>${j.project_title || "Dự án"}</strong>
+            <p class="tiny">${statusLabel} · ${formatDateTime(j.finished_at || j.updated_at)}${hasDetail ? ' <span class="notif-toggle" style="color:#93c5fd;">▸ Xem chi tiết lỗi</span>' : ""}</p>
+            ${hasDetail ? `<pre class="notif-detail tiny" style="display:none;white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.3);border-radius:6px;padding:8px;margin-top:4px;max-height:220px;overflow:auto;">${escapeHtml(formatRenderError(j.error_message))}</pre>` : ""}
+          </div>`;
         }).join("");
+        dropdown.querySelectorAll(".notif-row[data-job-id]").forEach((row) => {
+          row.addEventListener("click", () => {
+            const detail = row.querySelector(".notif-detail");
+            const toggle = row.querySelector(".notif-toggle");
+            if (!detail || !toggle) return;
+            const willShow = detail.style.display === "none";
+            detail.style.display = willShow ? "block" : "none";
+            toggle.textContent = willShow ? "▾ Ẩn chi tiết lỗi" : "▸ Xem chi tiết lỗi";
+          });
+        });
+      }
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+      /** Render-job error_message is often a raw Zod issues array (JSON
+       *  string) — pretty-print it into something readable instead of one
+       *  unbroken line, and translate the couple of Zod codes users are
+       *  actually likely to hit into plain Vietnamese. Falls back to the
+       *  raw string as-is for ordinary (non-JSON) error messages. */
+      function formatRenderError(raw) {
+        if (!raw) return "";
+        let issues;
+        try {
+          issues = JSON.parse(raw);
+        } catch {
+          return raw;
+        }
+        if (!Array.isArray(issues)) return raw;
+        return issues.map((issue) => {
+          const path = Array.isArray(issue.path) && issue.path.length ? issue.path.join(".") : null;
+          let msg = issue.message || "Lỗi không xác định";
+          if (issue.code === "too_big" && issue.path?.[0] === "scenes") {
+            msg = `Kịch bản có quá nhiều cảnh (vượt quá ${issue.maximum} cảnh cho phép/video) — kiểm tra lại nội dung kịch bản, có thể bị lặp/tách cảnh sai.`;
+          } else if (issue.code === "too_small") {
+            msg = `Thiếu dữ liệu bắt buộc${path ? ` ở "${path}"` : ""} (tối thiểu ${issue.minimum}).`;
+          } else if (issue.code === "invalid_type") {
+            msg = `Sai kiểu dữ liệu${path ? ` ở "${path}"` : ""}: cần ${issue.expected}, nhận được ${issue.received}.`;
+          }
+          return path ? `• [${path}] ${msg}` : `• ${msg}`;
+        }).join("\n");
       }
       function toggleNotifDropdown(forceOpen) {
         const dropdown = $("#notifDropdown");
