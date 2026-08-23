@@ -1634,9 +1634,27 @@
                   <p class="tiny">Chọn "2 giọng" khi kịch bản là dạng hỏi-đáp/đối thoại giữa 2 người — AI sẽ tự chia lời thoại cho từng giọng.</p>
                 </div>
                 <div id="voiceName2Wrap" style="display:none;"><label for="voiceName2">Giọng thứ 2 (người trả lời)</label><select id="voiceName2"></select></div>
-                <div><label for="speed">Tốc độ</label><input id="speed" type="range" min="0.5" max="2" step="0.05" value="1" /></div>
-                <div><label for="pitch">Pitch</label><input id="pitch" type="range" min="-12" max="12" step="1" value="0" /></div>
-                <div><label for="volume">Âm lượng</label><input id="volume" type="range" min="0" max="150" step="5" value="100" /></div>
+                <div>
+                  <label for="speed">Tốc độ <span class="tiny muted" id="speedValue">1.0x (bình thường)</span></label>
+                  <input id="speed" type="range" min="0.5" max="2" step="0.05" value="1" />
+                  <div class="tiny muted" style="display:flex;justify-content:space-between;">
+                    <span>0.5x — chậm nhất</span><span>2.0x — nhanh nhất</span>
+                  </div>
+                </div>
+                <div>
+                  <label for="pitch">Pitch <span class="tiny muted" id="pitchValue">0 (bình thường)</span></label>
+                  <input id="pitch" type="range" min="-12" max="12" step="1" value="0" />
+                  <div class="tiny muted" style="display:flex;justify-content:space-between;">
+                    <span>-12 — giọng trầm nhất</span><span>+12 — giọng cao nhất</span>
+                  </div>
+                </div>
+                <div>
+                  <label for="volume">Âm lượng <span class="tiny muted" id="volumeValue">100% (bình thường)</span></label>
+                  <input id="volume" type="range" min="0" max="150" step="5" value="100" />
+                  <div class="tiny muted" style="display:flex;justify-content:space-between;">
+                    <span>0% — im lặng</span><span>150% — to nhất</span>
+                  </div>
+                </div>
                 <button class="btn" id="previewVoiceButton">Preview giọng đọc</button>
                 <audio id="voicePreviewPlayer" style="display:none;width:100%;margin-top:8px;" controls></audio>
               </div>
@@ -4368,9 +4386,34 @@
         state.voices = data.voices || [];
         state.selectedVoiceId = data.defaultVoice || "";
         $("#speed").value = data.defaultSpeed || 1;
+        updateVoiceSliderLabels();
         renderVoices();
         renderDashboard();
       }
+
+      // Sliders only showed the bare handle with no indication of what the
+      // two ends meant or what the current value actually was — user had to
+      // guess whether dragging left made speech faster or slower. Shows the
+      // live value plus a plain-language tag ("bình thường") right at the
+      // default so 1.0x/pitch 0/volume 100% reads as "this is the normal
+      // setting", not just a number with no reference point.
+      function updateVoiceSliderLabels() {
+        const speed = Number($("#speed")?.value ?? 1);
+        const speedEl = $("#speedValue");
+        if (speedEl) speedEl.textContent = `${speed.toFixed(2)}x${Math.abs(speed - 1) < 0.001 ? " (bình thường)" : speed < 1 ? " (chậm hơn)" : " (nhanh hơn)"}`;
+
+        const pitch = Number($("#pitch")?.value ?? 0);
+        const pitchEl = $("#pitchValue");
+        if (pitchEl) pitchEl.textContent = `${pitch > 0 ? "+" : ""}${pitch}${pitch === 0 ? " (bình thường)" : pitch < 0 ? " (trầm hơn)" : " (cao hơn)"}`;
+
+        const volume = Number($("#volume")?.value ?? 100);
+        const volumeEl = $("#volumeValue");
+        if (volumeEl) volumeEl.textContent = `${volume}%${volume === 100 ? " (bình thường)" : volume < 100 ? " (nhỏ hơn)" : " (to hơn)"}`;
+      }
+      $("#speed")?.addEventListener("input", updateVoiceSliderLabels);
+      $("#pitch")?.addEventListener("input", updateVoiceSliderLabels);
+      $("#volume")?.addEventListener("input", updateVoiceSliderLabels);
+      updateVoiceSliderLabels();
 
       async function loadAssets(projectId) {
         if (!projectId) {
