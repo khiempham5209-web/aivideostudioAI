@@ -3014,6 +3014,17 @@
         $("#prompt").value = project.topic || $("#prompt").value;
         $("#scriptTitle").textContent = `Tiêu đề: ${project.title || "Untitled video"}`;
         $("#scriptHook").textContent = `Đề tài: ${project.topic || ""}`;
+        // Sliders used to just keep whatever was last in the DOM (page
+        // default, or leftover from a previous project) instead of this
+        // project's own saved values — selecting a different project (or
+        // reloading the app) could silently show/use the wrong speed, which
+        // is also what's hashed into the TTS cache signature: an unnoticed
+        // mismatch there wipes and re-synthesizes every already-generated
+        // scene even though nothing was deliberately changed.
+        if ($("#speed") && project.voice_speed != null) $("#speed").value = project.voice_speed;
+        if ($("#pitch") && project.voice_pitch != null) $("#pitch").value = project.voice_pitch;
+        if ($("#volume") && project.voice_volume != null) $("#volume").value = project.voice_volume;
+        updateVoiceSliderLabels();
         syncProjectControls();
         updateCreatePreview();
         applyPreviewAspect();
@@ -5936,7 +5947,7 @@
           await api(`/api/projects/${state.activeProjectId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() }),
+            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voicePitch: Number($("#pitch").value || 0), voiceVolume: Number($("#volume").value || 100), voice2Id: activeVoice2Id() }),
           });
           const data = await api(`/api/projects/${state.activeProjectId}/approve-content`, { method: "POST" });
           if (data.sheetWarning) {
@@ -6066,7 +6077,7 @@
           await api(`/api/projects/${state.activeProjectId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() }),
+            body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voicePitch: Number($("#pitch").value || 0), voiceVolume: Number($("#volume").value || 100), voice2Id: activeVoice2Id() }),
           });
           $("#audioJobStatus").innerHTML = "Đang tạo voice MP3 từ kịch bản đã chỉnh...";
           const data = await api(`/api/projects/${state.activeProjectId}/audio`, { method: "POST" });
@@ -6139,7 +6150,7 @@
           return;
         }
         const projects = state.projects.filter((p) => checkedIds.includes(p.id));
-        const voiceConfig = { voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() };
+        const voiceConfig = { voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voicePitch: Number($("#pitch").value || 0), voiceVolume: Number($("#volume").value || 100), voice2Id: activeVoice2Id() };
         const button = $("#createVoiceMp3Button");
         button.disabled = true;
         const resultsList = $("#bulkVoiceResultsList");
@@ -6188,7 +6199,7 @@
         await api(`/api/projects/${state.activeProjectId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voice2Id: activeVoice2Id() }),
+          body: JSON.stringify({ voiceId: $("#voiceName").value, voiceSpeed: Number($("#speed").value || 1), voicePitch: Number($("#pitch").value || 0), voiceVolume: Number($("#volume").value || 100), voice2Id: activeVoice2Id() }),
         }).then(async () => {
           await loadProjects();
           toast("Đã lưu giọng đọc vào dự án.");

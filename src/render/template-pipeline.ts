@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rm, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import pLimit from "p-limit";
@@ -10,6 +10,8 @@ import {
   concatWithSilence,
   mixSfxOntoVoice,
   mixBackgroundMusicUnderVoice,
+  generateSilenceClip,
+  applyVoiceAdjustments,
   type SfxMixSpec,
 } from "../assets/audio-tools.js";
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "../assets/sfx-selector.js";
@@ -231,8 +233,12 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   // reusing pre-fix audio forever — this is what made two separate rounds
   // of "still broken" reports in the same day turn out to be untested old
   // audio, not the fix actually failing.
-  const voice2Signature = script.voice2 ? `:${script.voice2.provider}:${script.voice2.name}:${script.voice2.speed}` : "";
-  const voiceSignature = `${effectiveTtsProvider}:chunked-v6:${script.voice.name}:${script.voice.speed}${voice2Signature}`;
+  const voice2Signature = script.voice2 ? `:${script.voice2.provider}:${script.voice2.name}:${script.voice2.speed}:${script.voice2.pitch}:${script.voice2.volume}` : "";
+  // pitch/volume added to the signature for the same reason speed is in it —
+  // they're applied via post-processing (applyVoiceAdjustments), so a scene
+  // reused from a prior run with different pitch/volume settings would
+  // silently keep the OLD pitch/volume forever otherwise.
+  const voiceSignature = `${effectiveTtsProvider}:chunked-v6:${script.voice.name}:${script.voice.speed}:${script.voice.pitch}:${script.voice.volume}${voice2Signature}`;
   const voiceSignaturePath = join(voiceDir, ".voice-signature");
   const previousSignature = existsSync(voiceSignaturePath) ? await readFile(voiceSignaturePath, "utf8") : null;
   if (previousSignature !== voiceSignature) {
@@ -268,8 +274,56 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
           reportTts();
           return { id: scene.id, path: out, durationSec: dur };
         }
+        let preparedText = textForTts(scene.voiceText);
+        if (!/\p{L}/u.test(preparedText)) {
+          // No actual letters left after normalization (digits are already
+          // spelled out by textForTts, so this only catches things like a
+          // standalone "…"). A scene that's just an ellipsis is usually the
+          // continuation marker in a numbered list written out across
+          // scenes ("1." / "2." / "3." / "…" / "37.", meaning "numbered 1
+          // through 37") — meant to be read aloud as part of that sequence,
+          // not skipped. Speak it as "chấm chấm chấm" (literally "dot dot
+          // dot", how it's naturally read out loud in Vietnamese).
+          if (/^\.{3}$/.test(preparedText)) {
+            preparedText = "chấm chấm chấm";
+          } else {
+            // Anything else with no letters at all (truly empty/garbage
+            // content) has no sensible spoken reading — every TTS engine
+            // legitimately fails trying to synthesize speech from
+            // punctuation alone (Piper throws immediately, Edge and the
+            // gTTS fallback both error out on empty input), which used to
+            // crash the entire render on whichever scene hit this rather
+            // than just that one scene. Render it as a short silent beat
+            // instead of crashing.
+            log.info(`  scene ${scene.id}: no spoken content ("${scene.voiceText}") — rendering as silence`);
+            await generateSilenceClip(out, 1.2);
+            if (srtOut) await writeFile(srtOut, "", "utf-8");
+            const dur = await getDurationSec(out);
+            reportTts();
+            return { id: scene.id, path: out, durationSec: dur };
+          }
+        }
         log.info(`  TTS scene ${scene.id} (${scene.voiceText.length} chars)...`);
-        await ttsClientFor(scene).generate(textForTts(scene.voiceText), out, srtOut);
+        await ttsClientFor(scene).generate(preparedText, out, srtOut);
+        // Only Edge has native rate control (applied inside EdgeTtsClient
+        // itself via --rate) — Piper/OmniVoice/Supertonic ignore speed
+        // entirely unless it's applied here too. Pitch/volume have no
+        // native support anywhere, so those always go through post-processing
+        // regardless of provider.
+        const isVoice2Scene = scene.speaker === "B" && script.voice2;
+        const voiceSettings = isVoice2Scene ? script.voice2! : script.voice;
+        const sceneProvider = isVoice2Scene ? (script.voice2!.provider ?? cfg.ttsProvider) : effectiveTtsProvider;
+        const speedNeedsPostProcess = sceneProvider !== "edge" && voiceSettings.speed !== 1;
+        if (speedNeedsPostProcess || voiceSettings.pitch !== 0 || voiceSettings.volume !== 100) {
+          const adjustedPath = `${out}.adjusted.mp3`;
+          await applyVoiceAdjustments(out, adjustedPath, {
+            speed: speedNeedsPostProcess ? voiceSettings.speed : 1,
+            pitchSemitones: voiceSettings.pitch,
+            volumePercent: voiceSettings.volume,
+          });
+          await rm(out, { force: true });
+          await rename(adjustedPath, out);
+        }
         const dur = await getDurationSec(out);
         log.info(`  scene ${scene.id}: ${dur.toFixed(2)}s`);
         reportTts();

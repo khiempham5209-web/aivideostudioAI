@@ -18,6 +18,79 @@ function run(cmd: string, args: string[]): Promise<string> {
   });
 }
 
+/** Renders `durationSec` of silence as an mp3 — used for scenes whose
+ *  voiceText has no actual spoken content after normalization (e.g. a
+ *  scene that's just "…", a punctuation-only artifact from how the story
+ *  got split into scenes). No TTS engine can meaningfully synthesize
+ *  speech from punctuation alone; every one of them (Piper, Edge, gTTS)
+ *  reliably fails on it, which used to crash the entire render on scene
+ *  ~300 of a 1076-scene project rather than just skipping the one broken
+ *  scene. A short silent beat is also the more correct rendering of a
+ *  "…"-only scene anyway — it reads as an intentional pause in the story. */
+export async function generateSilenceClip(outPath: string, durationSec: number): Promise<void> {
+  await run(FFMPEG_BIN, [
+    "-y", "-f", "lavfi",
+    "-i", "anullsrc=r=44100:cl=mono",
+    "-t", String(durationSec),
+    "-codec:a", "libmp3lame", "-qscale:a", "4",
+    outPath,
+  ]);
+}
+
+export interface VoiceAdjustments {
+  /** 0.5-2.0, 1 = no change. Applied via ffmpeg atempo (time-stretch) —
+   *  Piper has no native rate control, unlike Edge's own --rate flag, so
+   *  this is the only way to actually change its speed. Also used for
+   *  Edge/OmniVoice/Supertonic, none of which support pitch/volume at all,
+   *  so everyone gets adjusted through the same single code path instead of
+   *  each TTS client reimplementing its own subset. */
+  speed?: number;
+  /** -12 to +12 semitones, 0 = no change. */
+  pitchSemitones?: number;
+  /** 0-150, 100 = no change (percent). */
+  volumePercent?: number;
+}
+
+/** Applies speed/pitch/volume to an already-synthesized voice file — no TTS
+ *  engine this app uses (Piper, Edge, OmniVoice, Supertonic) has native
+ *  pitch or volume control, and only Edge has native speed control, so the
+ *  three sliders in the voice settings UI need a uniform post-processing
+ *  step to actually do anything for the other engines. A no-op (all
+ *  defaults) skips ffmpeg entirely rather than re-encoding every scene for
+ *  nothing.
+ *
+ *  Pitch shifts by resampling (asetrate) then correcting the resulting
+ *  tempo change back with atempo — the standard "chipmunk/deep-voice"
+ *  technique, real pitch-preserving time-stretch (e.g. rubberband) isn't
+ *  guaranteed available in every ffmpeg build. atempo's own valid range per
+ *  instance is 0.5-2.0; the pitch-compensation factor (2^(-semitones/12))
+ *  and the speed factor are each independently within that range for our
+ *  slider bounds (±12 semitones -> 0.5-2.0x; speed slider itself 0.5-2.0x),
+ *  so two separate atempo filters chained together covers the full range
+ *  without needing to split either into multiple sub-1-octave hops. */
+export async function applyVoiceAdjustments(
+  inputPath: string,
+  outputPath: string,
+  adjustments: VoiceAdjustments,
+): Promise<void> {
+  const speed = adjustments.speed ?? 1;
+  const pitch = adjustments.pitchSemitones ?? 0;
+  const volume = (adjustments.volumePercent ?? 100) / 100;
+  if (speed === 1 && pitch === 0 && volume === 1) {
+    if (inputPath !== outputPath) await run(FFMPEG_BIN, ["-y", "-i", inputPath, "-c", "copy", outputPath]);
+    return;
+  }
+  const SAMPLE_RATE = 44100;
+  const filters: string[] = [];
+  if (pitch !== 0) {
+    const pitchRatio = Math.pow(2, pitch / 12);
+    filters.push(`asetrate=${SAMPLE_RATE}*${pitchRatio}`, `aresample=${SAMPLE_RATE}`, `atempo=${(1 / pitchRatio).toFixed(6)}`);
+  }
+  if (speed !== 1) filters.push(`atempo=${speed}`);
+  if (volume !== 1) filters.push(`volume=${volume}`);
+  await run(FFMPEG_BIN, ["-y", "-i", inputPath, "-af", filters.join(","), "-codec:a", "libmp3lame", "-qscale:a", "4", outputPath]);
+}
+
 export async function getDurationSec(path: string): Promise<number> {
   // For MP3 files, ffprobe's format=duration estimates duration from bitrate×filesize
   // and is often wrong for TTS-generated files (e.g. OmniVoice 24kHz MPEG-2 L3 can

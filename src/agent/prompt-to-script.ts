@@ -465,8 +465,8 @@ export async function generateScriptFromPrompt(
   // nothing should depend on that being exact. Scenes without a valid
   // "speaker" (single-voice mode, or the model omitting it) default to "A"
   // via the schema.
-  script.voice = { provider: voiceProvider, name: voiceName, speed: voiceSpeed };
-  script.voice2 = secondVoice ? { ...secondVoice, speed: voiceSpeed } : null;
+  script.voice = { provider: voiceProvider, name: voiceName, speed: voiceSpeed, pitch: 0, volume: 100 };
+  script.voice2 = secondVoice ? { ...secondVoice, speed: voiceSpeed, pitch: 0, volume: 100 } : null;
   if (!secondVoice) {
     script.scenes = script.scenes.map((scene) => ({ ...scene, speaker: "A" }));
   }

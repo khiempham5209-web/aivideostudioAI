@@ -1035,6 +1035,8 @@ async function writeProjectScriptFromScenes(projectId: string, folderName?: stri
       provider: findVoiceOption(project.voice_id).provider,
       name: project.voice_name || "vi-VN-HoaiMyNeural",
       speed: project.voice_speed || 1,
+      pitch: project.voice_pitch || 0,
+      volume: project.voice_volume || 100,
     },
     voice2: voice2Option
       ? { provider: voice2Option.provider, name: voice2Option.runtimeVoiceName, speed: project.voice_speed || 1 }
@@ -3529,6 +3531,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         voice_id: selectedVoice?.status === "ready" ? selectedVoice.id : undefined,
         voice_name: selectedVoice?.status === "ready" ? selectedVoice.runtimeVoiceName : undefined,
         voice_speed: typeof (body as { voiceSpeed?: unknown }).voiceSpeed === "number" ? (body as { voiceSpeed: number }).voiceSpeed : undefined,
+        voice_pitch: typeof (body as { voicePitch?: unknown }).voicePitch === "number" ? (body as { voicePitch: number }).voicePitch : undefined,
+        voice_volume: typeof (body as { voiceVolume?: unknown }).voiceVolume === "number" ? (body as { voiceVolume: number }).voiceVolume : undefined,
         aspect_ratio: ratio,
         target_duration_sec: Number.isFinite(durationSecRaw) && durationSecRaw > 0 ? Math.round(durationSecRaw) : undefined,
       };

@@ -52,6 +52,11 @@ export const TemplateScriptSchema = z.object({
     provider: z.enum(["omnivoice", "edge", "piper", "supertonic"]).default("edge"),
     name: z.string().min(1).default("vi-VN-HoaiMyNeural"),
     speed: z.number().min(0.5).max(2.0).default(1),
+    /** Semitones, applied via ffmpeg post-processing (see
+     *  applyVoiceAdjustments) — no TTS engine here has native pitch control. */
+    pitch: z.number().min(-12).max(12).default(0),
+    /** Percent, 100 = no change. Same post-processing caveat as pitch. */
+    volume: z.number().min(0).max(150).default(100),
   }),
   /** Second voice for dialogue/Q&A-style scripts — scenes with speaker:"B"
    *  use this instead of `voice`. Absent/null means single-voice mode. */
@@ -60,6 +65,8 @@ export const TemplateScriptSchema = z.object({
       provider: z.enum(["omnivoice", "edge", "piper", "supertonic"]),
       name: z.string().min(1),
       speed: z.number().min(0.5).max(2.0).default(1),
+      pitch: z.number().min(-12).max(12).default(0),
+      volume: z.number().min(0).max(150).default(100),
     })
     .nullable()
     .optional(),
