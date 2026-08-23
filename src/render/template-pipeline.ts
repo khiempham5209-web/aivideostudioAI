@@ -52,14 +52,80 @@ function srtText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+const VN_ONES = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+
+/** Reads a 0-999 group into Vietnamese words. `hasHigherGroup` controls the
+ *  "một trăm linh năm" (105) vs "một trăm lẻ năm" style zero-tens filler —
+ *  both are correct, "linh" is used here — and whether a fully-zero group
+ *  should still say "không trăm" (only needed when a higher group precedes
+ *  it, e.g. 1005 -> "một nghìn không trăm linh năm"). */
+function readGroup(n: number, forceHundreds: boolean): string {
+  const hundreds = Math.floor(n / 100);
+  const tens = Math.floor((n % 100) / 10);
+  const ones = n % 10;
+  const parts: string[] = [];
+  if (hundreds > 0 || forceHundreds) parts.push(`${VN_ONES[hundreds]} trăm`);
+  if (tens === 0) {
+    if (ones > 0 && (hundreds > 0 || forceHundreds)) parts.push(`linh ${VN_ONES[ones]}`);
+    else if (ones > 0) parts.push(VN_ONES[ones]);
+  } else if (tens === 1) {
+    parts.push(ones === 5 ? "mười lăm" : ones === 0 ? "mười" : `mười ${VN_ONES[ones]}`);
+  } else {
+    const tensWord = `${VN_ONES[tens]} mươi`;
+    if (ones === 0) parts.push(tensWord);
+    else if (ones === 1) parts.push(`${tensWord} mốt`);
+    else if (ones === 5) parts.push(`${tensWord} lăm`);
+    else parts.push(`${tensWord} ${VN_ONES[ones]}`);
+  }
+  return parts.join(" ");
+}
+
+/** Spells out a non-negative integer in Vietnamese words, e.g. 1005 ->
+ *  "một nghìn không trăm linh năm". Covers 0-999,999,999 (comfortably past
+ *  anything a real video script would contain — chapter/scene numbers,
+ *  ages, prices, dates); returns the plain digit string unchanged outside
+ *  that range or for negative/non-integer input, so a pathological value
+ *  never crashes a render, it just skips this specific normalization. */
+function numberToVietnameseWords(value: number): string {
+  if (!Number.isInteger(value) || value < 0 || value > 999_999_999) return String(value);
+  if (value === 0) return "không";
+  const billions = Math.floor(value / 1_000_000_000);
+  const millions = Math.floor((value % 1_000_000_000) / 1_000_000);
+  const thousands = Math.floor((value % 1_000_000) / 1_000);
+  const rest = value % 1_000;
+  const groups: string[] = [];
+  if (billions > 0) groups.push(`${readGroup(billions, false)} tỷ`);
+  if (millions > 0) groups.push(`${readGroup(millions, groups.length > 0)} triệu`);
+  if (thousands > 0) groups.push(`${readGroup(thousands, groups.length > 0)} nghìn`);
+  if (rest > 0 || groups.length === 0) groups.push(readGroup(rest, groups.length > 0));
+  return groups.join(" ").replace(/\s+/g, " ").trim();
+}
+
 /** Quote marks are never meant to be spoken, but leaving them in for TTS
  *  input isn't just cosmetic — a line starting right at a quote character
  *  (dialogue-style scenes like `"Bác mang cây đi đâu vậy ạ?"`) is where we
  *  observed both Piper/espeak-ng synthesis failures AND clipped first
  *  words, on both Piper and Edge. Strip double-quote variants before
- *  synthesis only — subtitles/script.txt still show the real punctuation. */
+ *  synthesis only — subtitles/script.txt still show the real punctuation.
+ *
+ *  Same reasoning extends to a few other characters that turned up in real
+ *  long-form story scripts (chapter headers like "CHƯƠNG 12", em/en-dashes,
+ *  the single-character "…" glyph): none of these are guaranteed to be
+ *  handled the way plain ASCII punctuation is by Piper/espeak-ng's
+ *  Vietnamese frontend, so normalize them before synthesis instead of
+ *  hoping the phonemizer copes. Standalone digit runs are spelled out in
+ *  Vietnamese words — the project convention is for scripts to already do
+ *  this (see TemplateScene.voiceText), but this is a safety net for the
+ *  cases that slip through (chapter/scene numbers are a common one), not a
+ *  replacement for writing scripts correctly in the first place. */
 function textForTts(text: string): string {
-  return text.replace(/["“”„‟«»]/g, "").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/["“”„‟«»]/g, "")
+    .replace(/…/g, "...")
+    .replace(/[–—]/g, ", ")
+    .replace(/\b\d+\b/g, (digits) => numberToVietnameseWords(Number(digits)))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function listFootageFiles(dir: string): Promise<string[]> {
