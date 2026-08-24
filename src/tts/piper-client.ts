@@ -6,18 +6,7 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { FFMPEG_BIN, PIPER_BIN, PIPER_VOICES_DIR, localPiperEspeakDataDir } from "../utils/binaries.js";
-import { getDurationSec } from "../assets/audio-tools.js";
-import { EdgeTtsClient } from "./edge-client.js";
-import { VOICE_OPTIONS } from "./voice-catalog.js";
-
-/** Edge TTS fallback voice, matched by gender so a mid-render Piper failure
- *  doesn't swap in a voice of the wrong gender for the rest of the file —
- *  that mismatch was previously showing up as "the video randomly has 2
- *  different voices". */
-function edgeFallbackVoiceFor(piperVoiceId: string): string {
-  const gender = VOICE_OPTIONS.find((v) => v.provider === "piper" && v.name === piperVoiceId)?.gender;
-  return gender === "male" ? "vi-VN-NamMinhNeural" : "vi-VN-HoaiMyNeural";
-}
+import { getDurationSec, generateSilenceClip } from "../assets/audio-tools.js";
 
 export interface PiperOpts {
   /** Piper voice id, e.g. "vi_VN-vivos-x_low" — matches the .onnx filename in PIPER_VOICES_DIR. */
@@ -298,7 +287,7 @@ export class PiperClient {
       // voice-switching, since the same short line often succeeds on a
       // later attempt (it's intermittent, not a deterministic failure on
       // that exact text).
-      const MAX_ATTEMPTS = 5;
+      const MAX_ATTEMPTS = 10;
       let lastError: unknown;
       let succeeded = false;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -316,17 +305,20 @@ export class PiperClient {
       }
       if (!succeeded) throw lastError;
     } catch (error) {
-      // This used to be attributed to an "unresolved espeak-ng bug" on
-      // words like "học"/"đọc" — it was actually the PYTHONUTF8/
-      // PYTHONIOENCODING mismatch above, now fixed at the source. This
-      // fallback stays as a safety net for any other unexpected failure so
-      // one bad scene doesn't kill the whole render, not as the primary fix.
-      const fallbackVoice = edgeFallbackVoiceFor(this.voiceId);
-      console.warn(`Piper TTS failed twice for this text, falling back to Edge TTS (${fallbackVoice}): ${error instanceof Error ? error.message : error}`);
+      // Used to fall back to a completely different Edge voice here — that
+      // is exactly what produced "the video randomly has 2-3 voices" even
+      // though only one voice was ever selected: a per-scene engine swap
+      // is audible as a different narrator, no matter how well the
+      // fallback voice's gender is matched. Only one voice is acceptable —
+      // if Piper genuinely cannot produce this line after 10 attempts,
+      // render a short silence for this one scene instead of ever
+      // switching engines. A rare silent beat is a far smaller defect than
+      // an audibly different voice appearing mid-video.
+      console.warn(`Piper TTS failed after all retries, rendering silence instead of switching voices: ${error instanceof Error ? error.message : error}`);
       await rm(wavPath, { force: true }).catch(() => {});
       await rm(textPath, { force: true }).catch(() => {});
-      const fallback = new EdgeTtsClient({ voice: fallbackVoice });
-      await fallback.generate(text, audioOutPath, srtOutPath);
+      await generateSilenceClip(audioOutPath, 1.0);
+      if (srtOutPath) await writeFile(srtOutPath, "", "utf-8");
       return;
     }
 
