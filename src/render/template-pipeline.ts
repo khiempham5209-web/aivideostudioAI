@@ -120,11 +120,28 @@ function numberToVietnameseWords(value: number): string {
  *  this (see TemplateScene.voiceText), but this is a safety net for the
  *  cases that slip through (chapter/scene numbers are a common one), not a
  *  replacement for writing scripts correctly in the first place. */
+// Foreign loanwords spelled in their original (non-Vietnamese) letter
+// pattern have no entry in Piper/espeak-ng's Vietnamese phoneme rules —
+// confirmed directly on a real render: "camera" and "vali" both came out as
+// garbled non-words, because Vietnamese syllable rules don't produce a
+// "cam-e-ra" or "va-li" reading for those letter clusters. Respelling them
+// the way a Vietnamese voice-over script normally would (space-separated,
+// each chunk a real Vietnamese syllable) gives the phonemizer something it
+// actually knows how to read. Small and evidence-based on purpose — add an
+// entry here only once a specific word is confirmed mispronounced, not
+// preemptively for every loanword that might theoretically show up.
+const LOANWORD_RESPELLINGS: Record<string, string> = {
+  camera: "ca mê ra",
+  vali: "va li",
+};
+const LOANWORD_PATTERN = new RegExp(`\\b(${Object.keys(LOANWORD_RESPELLINGS).join("|")})\\b`, "gi");
+
 function textForTts(text: string): string {
   return text
     .replace(/["“”„‟«»]/g, "")
     .replace(/…/g, "...")
     .replace(/[–—]/g, ", ")
+    .replace(LOANWORD_PATTERN, (match) => LOANWORD_RESPELLINGS[match.toLowerCase()])
     .replace(/\b\d+\b/g, (digits) => numberToVietnameseWords(Number(digits)))
     .replace(/\s+/g, " ")
     .trim();

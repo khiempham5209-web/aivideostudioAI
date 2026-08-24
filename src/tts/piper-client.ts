@@ -287,16 +287,34 @@ export class PiperClient {
     try {
       // Piper/espeak-ng has a known intermittent failure on Windows with
       // Vietnamese text (previously misdiagnosed as encoding-specific — it
-      // can still happen transiently even with the encoding fix above).
-      // A bare retry recovers most of these without ever touching the
-      // fallback voice, since the same text often succeeds the second time.
-      try {
-        await synthesizeOnce();
-      } catch (firstError) {
-        await rm(wavPath, { force: true }).catch(() => {});
-        console.warn(`Piper TTS failed once, retrying before falling back: ${firstError instanceof Error ? firstError.message.split("\n")[0] : firstError}`);
-        await synthesizeOnce();
+      // can still happen transiently even with the encoding fix above) —
+      // measured directly on a real 1076-scene render: it hit disproportionately
+      // on very short lines ("Biết.", "Có.", "1.", single-word dialogue beats),
+      // producing an empty/unreadable wav (ffprobe: non-numeric duration).
+      // Falling back to Edge after only 2 attempts meant ~7% of scenes
+      // silently swapped to a completely different voice mid-video, which
+      // is far more noticeable than a slightly slower render — retrying
+      // more before giving up on Piper trades a bit of time for a lot less
+      // voice-switching, since the same short line often succeeds on a
+      // later attempt (it's intermittent, not a deterministic failure on
+      // that exact text).
+      const MAX_ATTEMPTS = 5;
+      let lastError: unknown;
+      let succeeded = false;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          await synthesizeOnce();
+          succeeded = true;
+          break;
+        } catch (err) {
+          lastError = err;
+          await rm(wavPath, { force: true }).catch(() => {});
+          if (attempt < MAX_ATTEMPTS) {
+            console.warn(`Piper TTS failed (attempt ${attempt}/${MAX_ATTEMPTS}), retrying: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+          }
+        }
       }
+      if (!succeeded) throw lastError;
     } catch (error) {
       // This used to be attributed to an "unresolved espeak-ng bug" on
       // words like "học"/"đọc" — it was actually the PYTHONUTF8/
