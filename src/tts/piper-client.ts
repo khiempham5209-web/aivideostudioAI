@@ -171,6 +171,54 @@ async function detectSpeechEnd(wavPath: string): Promise<number | null> {
   }
 }
 
+// Edge TTS can synthesize a bare "Có." or "1." just fine — proof the text
+// itself isn't unspeakable, so Piper's failure on it is Piper's own defect,
+// not something to just give up on. Measured on a real 1076-scene render:
+// every single Piper failure (ffprobe: non-numeric duration on the raw wav,
+// i.e. empty/corrupt output) was on a very short line — VITS-family models
+// like Piper's run text through a duration predictor before the vocoder,
+// and that predictor is known to get numerically unstable on extremely
+// short sequences (most training data is full sentences, not single
+// words), which reads as "espeak-ng bug" but is actually a duration-model
+// instability at very short input lengths. The standard workaround is to
+// give the model more length to work with: append a throwaway sentence so
+// the total input is safely outside the unstable zone, then cut the
+// padding back off using the same --sentence-silence gap Piper already
+// inserts between sentences.
+const SHORT_TEXT_WORD_THRESHOLD = 4;
+const PADDING_SENTENCE = "Đây là một câu đệm để giúp giọng đọc ổn định hơn khi nội dung thật quá ngắn.";
+
+function isShortText(text: string): boolean {
+  return text.split(/\s+/).filter(Boolean).length <= SHORT_TEXT_WORD_THRESHOLD;
+}
+
+/** Finds the gap between two sentences synthesized together with
+ *  --sentence-silence (real silence of ~SENTENCE_SILENCE_SEC between them)
+ *  — used to cut a padding sentence back off after using it to stabilize
+ *  Piper's duration predictor for very short real content. Deliberately
+ *  stricter than detectLeadingSilence (no "must be near the start" check,
+ *  since the real content here can legitimately run close to a second) but
+ *  still only trusts the FIRST qualifying gap — the real content in this
+ *  use case is always a single short phrase with no internal comma-length
+ *  pause of its own, so the first gap can only be the sentence boundary,
+ *  never a false match inside the real content. Returns null (caller must
+ *  treat that as a failed attempt, not silently ship the padding sentence's
+ *  audio as if it were the real line) if no gap is found at all. */
+async function findPaddingBoundary(wavPath: string): Promise<number | null> {
+  const MIN_GAP_SEC = 0.15;
+  try {
+    const { stderr } = await execFileAsync(FFMPEG_BIN, [
+      "-i", wavPath,
+      "-af", `silencedetect=noise=-30dB:d=${MIN_GAP_SEC}`,
+      "-f", "null", "-",
+    ], { windowsHide: true });
+    const match = stderr.match(/silence_start:\s*([\d.]+)/);
+    return match ? parseFloat(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
 function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv; stdin?: string } = {}): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(command, args, { env: options.env, windowsHide: true });
@@ -218,7 +266,6 @@ export class PiperClient {
     const textPath = `${audioOutPath}.txt`;
     const normalizedText = text.normalize("NFC").trim();
     if (!normalizedText) throw new Error("No text provided for Piper TTS");
-    await writeFile(textPath, normalizedText, "utf-8");
     const wavPath = `${audioOutPath}.piper.wav`;
     const espeakDataDir = ensureEspeakDataDir();
     const env: NodeJS.ProcessEnv = { ...process.env };
@@ -226,14 +273,33 @@ export class PiperClient {
     env.PYTHONUTF8 = "1";
     env.PYTHONIOENCODING = "utf-8";
 
-    const synthesizeOnce = async () => {
-      const rawWavPath = `${wavPath}.raw.wav`;
+    const synthesizeOnce = async (textToSpeak: string, isPadded: boolean) => {
+      await writeFile(textPath, textToSpeak, "utf-8");
+      const paddedRawPath = `${wavPath}.raw.wav`;
       await run(PIPER_BIN, [
         "-m", modelPath,
         "-i", textPath,
-        "-f", rawWavPath,
+        "-f", paddedRawPath,
         "--sentence-silence", String(SENTENCE_SILENCE_SEC),
       ], { env });
+
+      // If padded, cut the throwaway sentence back off FIRST — everything
+      // below then operates on just the real content, exactly as if it had
+      // been synthesized alone (just without the instability that caused
+      // the failures being retried here in the first place).
+      let rawWavPath = paddedRawPath;
+      if (isPadded) {
+        const boundary = await findPaddingBoundary(paddedRawPath);
+        if (boundary === null || boundary < 0.05) {
+          await rm(paddedRawPath, { force: true }).catch(() => {});
+          throw new Error("Padded synthesis succeeded but the sentence boundary couldn't be located — refusing to risk shipping padding audio as real content");
+        }
+        const depadPath = `${wavPath}.depad.wav`;
+        await run(FFMPEG_BIN, ["-y", "-i", paddedRawPath, "-to", boundary.toFixed(3), "-c", "copy", depadPath]);
+        await rm(paddedRawPath, { force: true }).catch(() => {});
+        rawWavPath = depadPath;
+      }
+
       const rawDurationSec = await getDurationSec(rawWavPath);
 
       const cutSec = await detectLeadingSilence(rawWavPath);
@@ -282,24 +348,40 @@ export class PiperClient {
       // producing an empty/unreadable wav (ffprobe: non-numeric duration).
       // Falling back to Edge after only 2 attempts meant ~7% of scenes
       // silently swapped to a completely different voice mid-video, which
-      // is far more noticeable than a slightly slower render — retrying
-      // more before giving up on Piper trades a bit of time for a lot less
-      // voice-switching, since the same short line often succeeds on a
-      // later attempt (it's intermittent, not a deterministic failure on
-      // that exact text).
-      const MAX_ATTEMPTS = 10;
+      // is far more noticeable than a slightly slower render.
+      //
+      // Short text gets a two-phase strategy: a few direct attempts first
+      // (works most of the time even for short lines — most short scenes
+      // never hit this at all), then if those keep failing, switch to
+      // padded synthesis (see PADDING_SENTENCE/findPaddingBoundary above),
+      // which sidesteps the actual root cause — Piper's duration predictor
+      // destabilizing on very short input — instead of just hoping a plain
+      // retry gets lucky.
+      const short = isShortText(normalizedText);
+      const directAttempts = short ? 3 : 10;
+      const paddedAttempts = short ? 7 : 0;
       let lastError: unknown;
       let succeeded = false;
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      for (let attempt = 1; attempt <= directAttempts && !succeeded; attempt++) {
         try {
-          await synthesizeOnce();
+          await synthesizeOnce(normalizedText, false);
           succeeded = true;
-          break;
         } catch (err) {
           lastError = err;
           await rm(wavPath, { force: true }).catch(() => {});
-          if (attempt < MAX_ATTEMPTS) {
-            console.warn(`Piper TTS failed (attempt ${attempt}/${MAX_ATTEMPTS}), retrying: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+          console.warn(`Piper TTS failed (direct attempt ${attempt}/${directAttempts}), retrying: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+        }
+      }
+      if (!succeeded && short) {
+        const paddedText = `${normalizedText} ${PADDING_SENTENCE}`;
+        for (let attempt = 1; attempt <= paddedAttempts && !succeeded; attempt++) {
+          try {
+            await synthesizeOnce(paddedText, true);
+            succeeded = true;
+          } catch (err) {
+            lastError = err;
+            await rm(wavPath, { force: true }).catch(() => {});
+            console.warn(`Piper TTS (padded) failed (attempt ${attempt}/${paddedAttempts}), retrying: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
           }
         }
       }
