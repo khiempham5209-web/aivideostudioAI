@@ -34,7 +34,7 @@ export interface GenerateScriptOptions {
   outputRoot?: string;
   model?: string;
   channel?: string;
-  voiceProvider?: "edge" | "omnivoice" | "piper" | "supertonic";
+  voiceProvider?: "edge" | "omnivoice" | "piper" | "supertonic" | "vieneu";
   voiceName?: string;
   voiceSpeed?: number;
   /** Target spoken duration in seconds — shapes requested word count and scene count. */
@@ -61,7 +61,7 @@ export interface GenerateScriptOptions {
    *  secondVoiceName switches the script from single-narrator to an
    *  alternating two-speaker Q&A format (see buildPrompt). Omit both for
    *  the default single-voice behavior. */
-  secondVoiceProvider?: "edge" | "omnivoice" | "piper" | "supertonic";
+  secondVoiceProvider?: "edge" | "omnivoice" | "piper" | "supertonic" | "vieneu";
   secondVoiceName?: string;
 }
 
@@ -191,7 +191,7 @@ function normalizeGeneratedScript(raw: unknown): unknown {
 function buildPrompt(
   userRequest: string,
   channel: string,
-  voiceProvider: "edge" | "omnivoice" | "piper" | "supertonic",
+  voiceProvider: "edge" | "omnivoice" | "piper" | "supertonic" | "vieneu",
   voiceName: string,
   voiceSpeed: number,
   targetDurationSec: number,
@@ -199,7 +199,7 @@ function buildPrompt(
   mode: "affiliate" | "content" = "content",
   platform: "tiktok_shop" | "shopee_aff" | "generic" = "generic",
   durationMode: "fixed" | "auto" = "fixed",
-  secondVoice?: { provider: "edge" | "omnivoice" | "piper" | "supertonic"; name: string },
+  secondVoice?: { provider: "edge" | "omnivoice" | "piper" | "supertonic" | "vieneu"; name: string },
 ): { text: string; minWords: number; maxWords: number } {
   // "Auto" only makes sense for content mode — affiliate always targets a
   // real, fixed ad length (60/90/120s), never "however long the topic needs".

@@ -1,4 +1,4 @@
-export type VoiceProvider = "edge" | "omnivoice" | "piper" | "supertonic";
+export type VoiceProvider = "edge" | "omnivoice" | "piper" | "supertonic" | "vieneu";
 export type VoiceGender = "male" | "female";
 export type VoiceRegion = "north" | "central" | "south" | "neutral";
 export type VoiceTone = "story" | "news" | "warm" | "dramatic" | "calm" | "sales";
@@ -19,10 +19,16 @@ export interface VoiceOption {
 }
 
 /** New projects and "create voice" flows fall back to this voice when the
- *  caller doesn't pick one explicitly. Ngoc Huyen per user preference —
- *  keep this in sync with the one Piper voice actually installed on the
- *  server (see scripts/install-edge-tts.mjs's PRODUCTION_PIPER_VOICES). */
-export const DEFAULT_VOICE_ID = "piper-ngochuyen";
+ *  caller doesn't pick one explicitly. Was the Piper "ngochuyen" voice
+ *  until a direct A/B test (real render + user listening) confirmed Piper
+ *  mispronounces ngã/hỏi tones across all 31 locally-installed voices —
+ *  VieNeu-TTS's "Ngọc Huyền" preset (unrelated model, same human name by
+ *  coincidence) got the same tone pairs right, so it's the new default.
+ *  Piper stays fully in the catalog below as a manually-selectable
+ *  alternative, not an automatic fallback — switching TTS engines
+ *  mid-render is exactly what caused "the video randomly has 2-3 voices"
+ *  before (see piper-client.ts), so nothing here should do that silently. */
+export const DEFAULT_VOICE_ID = "vieneu-ngochuyen";
 
 export const VOICE_OPTIONS: VoiceOption[] = [
   {
@@ -596,6 +602,169 @@ export const VOICE_OPTIONS: VoiceOption[] = [
     source: "Supertonic (local, offline)",
     status: "ready",
     description: "Giong local offline, chay CPU.",
+  },
+  // VieNeu-TTS: open-source, own Vietnamese phonemizer (sea-g2p), not
+  // espeak-ng. Confirmed by direct A/B test against every tone pair Piper
+  // got wrong (o/o+sac, gan/gan+ngang, ro/ro+sac, nghi/nghi+sac, etc.) —
+  // Ngoc Huyen read them correctly where all 31 local Piper voices didn't.
+  // Only the 12 voices actually verified to synthesize successfully are
+  // listed here (VieNeu ships 20 presets total; the other 8 are untested,
+  // not necessarily broken — add them once confirmed working).
+  {
+    id: "vieneu-ngochuyen",
+    name: "Ngọc Huyền",
+    runtimeVoiceName: "Ngọc Huyền",
+    label: "VieNeu - Ngoc Huyen",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline. Da xac nhan doc dung dau nga/hoi (Piper khong lam duoc).",
+  },
+  {
+    id: "vieneu-minhduc",
+    name: "Minh Đức",
+    runtimeVoiceName: "Minh Đức",
+    label: "VieNeu - Minh Duc",
+    gender: "male",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-phamtuyen",
+    name: "Phạm Tuyên",
+    runtimeVoiceName: "Phạm Tuyên",
+    label: "VieNeu - Pham Tuyen",
+    gender: "male",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-thaison",
+    name: "Thái Sơn",
+    runtimeVoiceName: "Thái Sơn",
+    label: "VieNeu - Thai Son",
+    gender: "male",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-trucly",
+    name: "Trúc Ly",
+    runtimeVoiceName: "Trúc Ly",
+    label: "VieNeu - Truc Ly",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-ngoclinh",
+    name: "Ngọc Linh",
+    runtimeVoiceName: "Ngọc Linh",
+    label: "VieNeu - Ngoc Linh",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-doantrang",
+    name: "Đoan Trang",
+    runtimeVoiceName: "Đoan Trang",
+    label: "VieNeu - Doan Trang",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-maianh",
+    name: "Mai Anh",
+    runtimeVoiceName: "Mai Anh",
+    label: "VieNeu - Mai Anh",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-thuydung",
+    name: "Thùy Dung",
+    runtimeVoiceName: "Thùy Dung",
+    label: "VieNeu - Thuy Dung",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-quangson",
+    name: "Quang Sơn",
+    runtimeVoiceName: "Quang Sơn",
+    label: "VieNeu - Quang Son",
+    gender: "male",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-quynhanh",
+    name: "Quỳnh Anh",
+    runtimeVoiceName: "Quỳnh Anh",
+    label: "VieNeu - Quynh Anh",
+    gender: "female",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline.",
+  },
+  {
+    id: "vieneu-adam",
+    name: "Adam",
+    runtimeVoiceName: "Adam",
+    label: "VieNeu - Adam",
+    gender: "male",
+    region: "neutral",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS (local, offline)",
+    status: "ready",
+    description: "Giong local offline (mac dinh cua VieNeu).",
   },
   {
     id: "omni-female-north-warm",

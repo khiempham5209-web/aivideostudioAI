@@ -86,3 +86,26 @@ export function localPiperEspeakDataDir(): string | undefined {
 export function isSupertonicInstalled(): boolean {
   return existsSync(resolve(".edge-tts-venv", "Lib", "site-packages", "supertonic"));
 }
+
+// VieNeu-TTS (vieneu on PyPI) has its own dedicated Vietnamese phonemizer
+// (sea-g2p) instead of espeak-ng — confirmed to actually get ngã/hỏi tones
+// right where every one of the 31 local Piper voices got them wrong. It
+// needs its OWN separate venv, not the shared .edge-tts-venv one: one of
+// its dependencies (kaldi-native-fbank) only ships prebuilt wheels up to
+// Python 3.12, and .edge-tts-venv runs on whatever Python built it (3.14
+// here), which forces a from-source build that fails without a C++
+// compiler toolchain installed. A dedicated Python 3.11 venv sidesteps
+// that entirely.
+function localVieneuPython(): string | undefined {
+  const win = resolve(".vieneu-venv", "Scripts", "python.exe");
+  const linux = resolve(".vieneu-venv", "bin", "python");
+  if (existsSync(win)) return win;
+  if (existsSync(linux)) return linux;
+  return undefined;
+}
+export const VIENEU_PYTHON = process.env.VIENEU_PYTHON ?? localVieneuPython() ?? "python";
+export const VIENEU_VENV_DIR = resolve(".vieneu-venv");
+
+export function isVieneuInstalled(): boolean {
+  return existsSync(resolve(".vieneu-venv", "Lib", "site-packages", "vieneu"));
+}

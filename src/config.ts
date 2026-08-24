@@ -2,7 +2,7 @@ import { config as loadDotenv } from "dotenv";
 
 loadDotenv({ path: ".env.local" });
 
-export type TtsProvider = "omnivoice" | "edge" | "piper" | "supertonic";
+export type TtsProvider = "omnivoice" | "edge" | "piper" | "supertonic" | "vieneu";
 
 export interface Config {
     ttsProvider: TtsProvider;
