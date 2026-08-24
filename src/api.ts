@@ -1271,8 +1271,15 @@ function startAudioJob(projectId: string, jobId: string) {
       });
       const generated = await writeProjectScriptFromScenes(projectId);
       if (isCancelled()) return;
+      // Not bumping progress here on purpose — runTemplatePipeline's own
+      // onProgress reports a real 0-96 for audioOnly jobs (see its
+      // reportTts()), starting near 0% for scene 1. Jumping to a fixed 35%
+      // here first, right before that real number takes over, made the bar
+      // visibly jump forward then snap backward to ~1% a moment later —
+      // confusing to watch even though neither number was ever wrong on
+      // its own. Leaving progress where "Preparing edited script" left it
+      // means it only ever climbs from here.
       updateRenderJob(jobId, {
-        progress: 35,
         current_step: "Generating MP3 voice",
         output_dir: resolve(generated.outputDir),
         script_path: resolve(generated.scriptPath),
