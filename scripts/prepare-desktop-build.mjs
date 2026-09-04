@@ -47,6 +47,14 @@ function main() {
   copy(join(ROOT, "scripts", "install-edge-tts.mjs"), join(STAGING, "scripts", "install-edge-tts.mjs"));
   copy(join(ROOT, "scripts", "supertonic-synth.py"), join(STAGING, "scripts", "supertonic-synth.py"));
   copy(join(ROOT, "scripts", "gtts-fallback.py"), join(STAGING, "scripts", "gtts-fallback.py"));
+  copy(join(ROOT, "scripts", "vieneu-synth.py"), join(STAGING, "scripts", "vieneu-synth.py"));
+  // VieNeu is the app's default voice — its own venv (see binaries.ts's
+  // localVieneuPython comment for why it can't share .edge-tts-venv) and its
+  // ~700MB Hugging Face model cache (see VIENEU_HF_CACHE_ENV in binaries.ts)
+  // ship inside the installer so a fresh machine never needs a Python/pip
+  // setup step or an internet download just to generate its first voice line.
+  copy(join(ROOT, ".vieneu-venv"), join(STAGING, ".vieneu-venv"));
+  copy(join(ROOT, "hf-cache"), join(STAGING, "hf-cache"));
   copy(join(ROOT, "desktop", "hidden-launch.vbs"), join(STAGING, "hidden-launch.vbs"));
   copy(join(ROOT, "desktop", "electron-main.cjs"), join(STAGING, "electron-main.cjs"));
   copy(join(ROOT, "desktop", "icon.ico"), join(STAGING, "icon.ico"));

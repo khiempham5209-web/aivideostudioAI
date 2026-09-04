@@ -109,3 +109,14 @@ export const VIENEU_VENV_DIR = resolve(".vieneu-venv");
 export function isVieneuInstalled(): boolean {
   return existsSync(resolve(".vieneu-venv", "Lib", "site-packages", "vieneu"));
 }
+
+// The vieneu package downloads its ~700MB model from the Hugging Face Hub
+// into $HF_HOME/hub on first use — fine on the dev machine where that cache
+// already exists, but a fresh install (a new laptop) would otherwise need a
+// working internet connection and several minutes on its very first voice
+// generation. Bundling a pre-populated cache next to the venv and pointing
+// HF_HOME at it during the synth call sidesteps that entirely — only
+// applied when the bundled folder is actually present, so this dev
+// environment keeps using its normal ~/.cache/huggingface untouched.
+export const VIENEU_HF_CACHE_DIR = resolve("hf-cache");
+export const VIENEU_HF_CACHE_ENV = existsSync(VIENEU_HF_CACHE_DIR) ? { HF_HOME: VIENEU_HF_CACHE_DIR } : undefined;

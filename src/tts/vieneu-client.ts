@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { TtsClient } from "./tts-client.js";
-import { FFMPEG_BIN, VIENEU_PYTHON } from "../utils/binaries.js";
+import { FFMPEG_BIN, VIENEU_HF_CACHE_ENV, VIENEU_PYTHON } from "../utils/binaries.js";
 
 export interface VieneuOpts {
   /** One of VieNeu's preset voice names, e.g. "Ngọc Huyền". */
@@ -11,9 +11,9 @@ export interface VieneuOpts {
 
 const SYNTH_TIMEOUT_MS = 120_000;
 
-function run(command: string, args: string[], stdin?: string): Promise<void> {
+function run(command: string, args: string[], stdin?: string, extraEnv?: Record<string, string>): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn(command, args, { windowsHide: true });
+    const proc = spawn(command, args, { windowsHide: true, env: extraEnv ? { ...process.env, ...extraEnv } : undefined });
     let stderr = "";
     let settled = false;
     const timer = setTimeout(() => {
@@ -60,7 +60,7 @@ export class VieneuClient implements TtsClient {
   async generate(text: string, audioOutPath: string, srtOutPath?: string): Promise<void> {
     const wavPath = `${audioOutPath}.vieneu.wav`;
     const scriptPath = resolve("scripts", "vieneu-synth.py");
-    await run(VIENEU_PYTHON, [scriptPath, this.voiceName, wavPath], text);
+    await run(VIENEU_PYTHON, [scriptPath, this.voiceName, wavPath], text, VIENEU_HF_CACHE_ENV);
     await run(FFMPEG_BIN, ["-y", "-i", wavPath, "-codec:a", "libmp3lame", "-qscale:a", "4", audioOutPath]);
     await rm(wavPath, { force: true });
 
