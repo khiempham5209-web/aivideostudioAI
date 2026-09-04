@@ -12,7 +12,7 @@
 ; Task Manager, Alt-Tab); this is a genuine standalone .exe with its own icon.
 
 #define MyAppName "AI Video Studio"
-#define MyAppVersion "1.1.12"
+#define MyAppVersion "1.1.14"
 #define MyAppExeDesc "AI Video Studio"
 #define MyAppExeName "AI Video Studio.exe"
 

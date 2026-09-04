@@ -1,5 +1,5 @@
 {
-  "version": "1.1.13",
+  "version": "1.1.14",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "App doi sang Electron that (khong con qua Edge, icon rieng, khong hien trong trinh duyet); dang nhap kieu chon tai khoan voi mat khau/QR Authenticator, tu dong dang xuat luc 00h; dong cua so gio chi an xuong khay he thong (mo lai tuc thi, khong phai cho lai tu dau); ghim san pham hien dung o Kho san pham va web tinh hukiai258.com; sua loi web hukiai258.com khong hien san pham do Render build that bai am tham."
+  "notes": "Sua loi giong doc bi lac tone giua cac cau; nang cap Edit video V3 (keo-tha asset vao timeline, preview chay video that theo thoi gian thuc, bat dinh (snap) khi keo/resize clip, undo/redo that, phim tat); sua loi hien so thay vi ten du an o cac o chon du an; QR/Authenticator tu dong focus o nhap ma; Kho san pham co nut tu dong lay thong tin tu link Shopee, san pham moi co tag 'Moi'; sua loi web hukiai258.com bi trang do server mat ket noi database luc khoi dong (them co che tu cho lau hon va chan khong cho web bi ghi de thanh rong)."
 }
