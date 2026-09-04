@@ -1,5 +1,5 @@
 {
-  "version": "1.1.14",
+  "version": "1.1.15",
   "downloadUrl": "https://github.com/khiempham5209-web/aivideostudioAI/releases/latest/download/AI-Video-Studio-Setup.exe",
-  "notes": "Sua loi giong doc bi lac tone giua cac cau; nang cap Edit video V3 (keo-tha asset vao timeline, preview chay video that theo thoi gian thuc, bat dinh (snap) khi keo/resize clip, undo/redo that, phim tat); sua loi hien so thay vi ten du an o cac o chon du an; QR/Authenticator tu dong focus o nhap ma; Kho san pham co nut tu dong lay thong tin tu link Shopee, san pham moi co tag 'Moi'; sua loi web hukiai258.com bi trang do server mat ket noi database luc khoi dong (them co che tu cho lau hon va chan khong cho web bi ghi de thanh rong)."
+  "notes": "Sua loi giong doc bi lac tone giua cac cau; nang cap Edit video V3 (keo-tha asset vao timeline, preview chay video that theo thoi gian thuc, bat dinh (snap) khi keo/resize clip, undo/redo that, phim tat); sua loi hien so thay vi ten du an o cac o chon du an; QR/Authenticator tu dong focus o nhap ma; Kho san pham co nut tu dong lay thong tin tu link Shopee, san pham moi co tag 'Moi'; sua loi web hukiai258.com bi trang do server mat ket noi database luc khoi dong; dong goi san giong doc mac dinh VieNeu (khong can cai dat gi them, khong can mang khi dung lan dau)."
 }
