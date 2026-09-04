@@ -783,6 +783,11 @@
         cursor: default;
       }
 
+      .project-picker-assign {
+        width: 100%;
+        font-size: 12px;
+      }
+
       .bulk-voice-apply-list {
         display: flex;
         flex-wrap: wrap;
@@ -1221,6 +1226,8 @@
       .track-actions-v3 { display:flex; gap:4px; }
       .track-actions-v3 button { min-width:26px; height:26px; border:1px solid var(--line); border-radius:6px; background:#121a28; color:var(--muted); }
       .track-lane-v3 { position:relative; min-height:62px; background-image:linear-gradient(90deg,rgba(148,163,184,.08) 1px,transparent 1px); background-size:92px 100%; }
+      .track-lane-v3.drop-target { background-color:rgba(124,58,237,.18); outline:2px dashed #a855f7; outline-offset:-2px; }
+      .snap-guide-v3 { position:absolute; top:48px; bottom:0; width:2px; background:#a855f7; z-index:11; pointer-events:none; display:none; }
       .clip-v3 { position:absolute; top:9px; height:43px; display:flex; align-items:center; gap:8px; min-width:80px; padding:0 10px; border:1px solid rgba(255,255,255,.18); border-radius:7px; color:#fff; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; box-shadow:0 5px 16px rgba(0,0,0,.25); cursor:grab; }
       .clip-v3.selected { outline:2px solid white; outline-offset:2px; }
       .clip-v3.video { background:linear-gradient(135deg,#4338ca,#2563eb); }
@@ -1742,6 +1749,8 @@
               <div><label>Tên shop</label><input id="productShopName" /></div>
               <div><label>Link gốc sản phẩm (Shopee)</label><input id="productOriginalUrl" placeholder="https://shopee.vn/..." /></div>
               <div><label>Link Affiliate (Shopee)</label><input id="productAffiliateUrl" placeholder="https://s.shopee.vn/..." /></div>
+              <button class="btn" id="fetchShopeeInfoButton" type="button">⚡ Tự động lấy thông tin từ link gốc</button>
+              <p class="tiny" style="margin-top:-4px;">Mã sản phẩm (item_id) luôn lấy được thẳng từ link (không gọi Shopee, không lỗi). Tên/giá/ảnh bìa/tên shop lấy thêm nếu Shopee không chặn — hay bị 403, lỗi thì tự điền tay phần đó là được.</p>
               <p class="tiny" style="margin:-6px 0 0;">2 link trên chỉ cần nếu sản phẩm này đăng qua website (Shopee). Không bắt buộc nếu chỉ đăng TikTok Shop.</p>
               <div><label>Mã sản phẩm TikTok Shop Catalog</label><input id="productTiktokProductId" placeholder="Mã/ID sản phẩm trong TikTok Shop Seller Center (nếu có)" /></div>
               <p class="tiny" style="margin:-6px 0 0;">Dùng để gắn sản phẩm trực tiếp trên TikTok khi đăng video (product tagging) — không cần qua website.</p>
@@ -1793,7 +1802,7 @@
         <section class="page" id="timeline">
           <div class="page-head">
             <div><h2>Edit video V3</h2><p class="muted">Editor hoàn chỉnh: asset browser, preview, inspector động, waveform, playhead, nhiều track và AI tối ưu timeline.</p></div>
-            <div class="top-actions"><button class="btn" data-demo="undo">↶ Undo</button><button class="btn" data-demo="redo">↷ Redo</button><button class="btn primary" id="aiAutoEditButton">✨ AI Optimize Timeline</button><button class="btn primary" id="renderTimelineButton">🎬 Render video từ Timeline</button></div>
+            <div class="top-actions"><button class="btn" id="timelineUndoButton" type="button">↶ Undo</button><button class="btn" id="timelineRedoButton" type="button">↷ Redo</button><button class="btn primary" id="aiAutoEditButton">✨ AI Optimize Timeline</button><button class="btn primary" id="renderTimelineButton">🎬 Render video từ Timeline</button></div>
           </div>
           <div class="panel ai-edit-card" style="margin-bottom:12px;">
             <div class="panel-body">
@@ -1895,6 +1904,10 @@
                 <div class="progress"><div style="display:flex;justify-content:space-between;"><strong>Thanh tiến trình xử lý</strong><span id="exportPct">0%</span></div><div class="bar"><span id="exportBar" style="width:0%;"></span></div></div>
                 <div id="exportErrorMessage" style="display:none;margin-top:8px;padding:10px;border:1px solid rgba(251,113,133,.4);border-radius:8px;background:rgba(251,113,133,.1);color:#fca5a5;font-size:13px;"></div>
                 <div id="resultLinks" class="field-stack"></div>
+                <hr style="border-color:rgba(255,255,255,.08);margin:6px 0;">
+                <div><label for="thumbnailHeadline">Tiêu đề trên Thumbnail</label><input id="thumbnailHeadline" placeholder="Để trống = dùng tên project"></div>
+                <button class="btn primary" id="generateThumbnailButton" type="button">🖼️ Tạo Thumbnail</button>
+                <div id="thumbnailPreview"></div>
               </div>
             </div>
           </div>
@@ -2283,9 +2296,11 @@
           return;
         }
         const statusClass = (s) => (s === "Đã đăng" ? "ok" : s === "Cần sửa" ? "warn" : (s === "Đã tạo" || s === "Chờ đăng") ? "info" : "");
+        const NEW_BADGE_MS = 2 * 24 * 60 * 60 * 1000;
+        const isNew = (p) => p.created_at && (Date.now() - new Date(p.created_at).getTime()) < NEW_BADGE_MS;
         list.innerHTML = products.map((p) => `
           <div class="panel"${p.pinned ? ' style="border-color:#7c3aed;"' : ""}>
-            <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span>${p.pinned ? '<span class="pill" style="background:#7c3aed;color:#fff;">📌 Đã ghim</span>' : ""}</div>
+            <div class="panel-head"><span class="pill">${p.item_id}</span><span class="pill ${statusClass(p.status)}">${p.status}</span>${p.pinned ? '<span class="pill" style="background:#7c3aed;color:#fff;">📌 Đã ghim</span>' : ""}${isNew(p) ? '<span class="pill" style="background:#22c55e;color:#052e12;">🆕 Mới</span>' : ""}</div>
             ${p.image_url ? `<img src="${p.image_url}" alt="" style="width:100%;height:130px;object-fit:cover;" onerror="this.style.display='none';" />` : ""}
             <div class="panel-body field-stack">
               <strong style="overflow-wrap:anywhere;">${p.product_name}</strong>
@@ -2502,6 +2517,16 @@
         $$("#localAuthMethodTabs button").forEach((b) => b.classList.toggle("active", b.dataset.method === method));
         $("#localAuthPasswordView").style.display = method === "password" ? "grid" : "none";
         $("#localAuthTotpView").style.display = method === "totp" ? "grid" : "none";
+        // Focusing right after toggling `display` from none can be flaky in
+        // some browsers (the element isn't reliably focusable until the
+        // next paint) — a 0ms timeout pushes the focus() call to right
+        // after that reflow instead of racing it. Without this, picking an
+        // account (or switching the Password/Authenticator tab) leaves the
+        // cursor nowhere, so typing a code/password needs an extra click
+        // into the field first — reported directly by a real user as
+        // wanting to just type the 6-digit code straight away.
+        const input = method === "password" ? $("#localAuthPasswordInput") : $("#localAuthTotpInput");
+        setTimeout(() => input?.focus(), 0);
       }
 
       $("#localAuthMethodTabs")?.addEventListener("click", (e) => {
@@ -2631,9 +2656,23 @@
         return state.projects.find((project) => project.id === state.activeProjectId) || null;
       }
 
+      // Many projects were created with a throwaway title (blank, or a quick
+      // placeholder like "12") while the real subject lives in `topic` (see
+      // the KichBanYTB sheet's "Đề tài" column) — showing just that
+      // placeholder in a dropdown of 20+ projects makes them indistinguishable
+      // from each other. Falls back to topic whenever title isn't real
+      // content, same heuristic already used for the thumbnail feature's
+      // default headline.
+      function projectDisplayLabel(project) {
+        const title = (project.title || "").trim();
+        const hasRealTitle = title.length >= 4 && title !== "Untitled video";
+        const primary = hasRealTitle ? title : ((project.topic || "").trim() || title || "Untitled video");
+        return primary.length > 60 ? `${primary.slice(0, 57)}...` : primary;
+      }
+
       function syncProjectControls() {
         const options = ['<option value="">Chọn dự án để thao tác</option>'].concat(
-          state.projects.map((project) => `<option value="${project.id}">${project.title || "Untitled video"} · ${label(project.status)}</option>`),
+          state.projects.map((project) => `<option value="${project.id}">${projectDisplayLabel(project)} · ${label(project.status)}</option>`),
         ).join("");
         if ($("#activeProjectSelect")) {
           $("#activeProjectSelect").innerHTML = options;
@@ -2692,6 +2731,26 @@
           }
           state.pickedProjectSlots = Array.isArray(saved) && saved.length === 4 ? saved : [null, null, null, null];
         }
+        // A slot can hold the id of a project that's since been deleted (a
+        // real user's actual workflow: delete an old/duplicate project, then
+        // wonder why "Add" skips a slot that visually shows "Chưa chọn").
+        // renderProjectPickerInto treats an unmatched id as empty-looking
+        // ("Chưa chọn"), but addProjectToSlots' `indexOf(null)` search only
+        // recognizes a literal null as free — a dangling id isn't null, so
+        // it silently gets skipped and the next real empty slot fills
+        // instead, without any visible sign of why. Reclaim any slot whose
+        // project no longer exists once the project list has actually
+        // loaded (an empty list on first boot means "not loaded yet", not
+        // "everything was deleted" — don't wipe slots on that transient state).
+        if ((state.projects || []).length > 0) {
+          const validIds = new Set(state.projects.map((p) => p.id));
+          let changed = false;
+          state.pickedProjectSlots = state.pickedProjectSlots.map((id) => {
+            if (id && !validIds.has(id)) { changed = true; return null; }
+            return id;
+          });
+          if (changed) savePickedSlots();
+        }
         return state.pickedProjectSlots;
       }
 
@@ -2722,6 +2781,25 @@
         }
       }
 
+      // Manually put a project into ONE SPECIFIC slot index \u2014 unlike
+      // addProjectToSlots (which always fills the first free slot and is
+      // what selectProject() uses to auto-add the active project), this
+      // lets a user pick exactly which of the 4 slots a project lands in,
+      // e.g. "slot 1 and 2 are empty, slot 4 has an old project \u2014 I want
+      // this new one specifically in slot 3". Removes the project from
+      // whatever other slot it might already be sitting in first, so it
+      // never ends up duplicated across two slots.
+      function assignProjectToSlot(slotIndex, projectId) {
+        const slots = ensurePickedSlots();
+        for (let i = 0; i < slots.length; i++) {
+          if (slots[i] === projectId) slots[i] = null;
+        }
+        slots[slotIndex] = projectId;
+        savePickedSlots();
+        renderAllProjectPickers();
+        renderBulkVoiceApplyList();
+      }
+
       // Same card markup reused for both pickers (K\u1ECBch b\u1EA3n AI, T\u1EA1o voice) \u2014
       // sits next to the original <select>, which stays visible and is still
       // the thing that actually drives selection for the full project list.
@@ -2730,13 +2808,29 @@
         if (!container) return;
         const slots = ensurePickedSlots();
         const byId = new Map((state.projects || []).map((p) => [p.id, p]));
-        container.innerHTML = slots.map((id) => {
+        const usedIds = new Set(slots.filter(Boolean));
+        container.innerHTML = slots.map((id, index) => {
           const p = id ? byId.get(id) : null;
-          if (!p) return `<div class="project-picker-empty">Ch\u01B0a ch\u1ECDn</div>`;
+          if (!p) {
+            // An empty-LOOKING slot must still be pickable directly \u2014 a
+            // user emptying slot 3 on purpose (to put a specific project
+            // there, not wherever auto-add would land it) had no way to
+            // target that exact slot before this dropdown existed.
+            const options = (state.projects || [])
+              .filter((proj) => !usedIds.has(proj.id))
+              .map((proj) => `<option value="${proj.id}">${projectDisplayLabel(proj).slice(0, 50)}</option>`)
+              .join("");
+            return `<div class="project-picker-empty">
+              <select class="project-picker-assign" data-slot-index="${index}">
+                <option value="">Ch\u01B0a ch\u1ECDn \u2014 b\u1EA5m \u0111\u1EC3 ch\u1ECDn d\u1EF1 \u00E1n</option>
+                ${options}
+              </select>
+            </div>`;
+          }
           return `
             <button type="button" class="project-picker-card${p.id === state.activeProjectId ? " active" : ""}" data-project-id="${p.id}">
               <span class="project-picker-remove" data-remove-id="${p.id}">\u2715</span>
-              <strong>${p.title || p.topic || "Untitled video"}</strong>
+              <strong>${projectDisplayLabel(p)}</strong>
               <span class="pill ${p.status === "completed" ? "ok" : "warn"}" style="margin:4px 0;display:inline-block;">${label(p.status)}</span>
               <p class="tiny" style="margin:0;">${p.sceneCount || 0} scene \u00B7 ${p.wordCount || 0} t\u1EEB \u00B7 ${formatDuration(p.estimatedDurationSec)}</p>
             </button>
@@ -2755,6 +2849,11 @@
             removeProjectFromSlots(x.dataset.removeId);
             renderAllProjectPickers();
             renderBulkVoiceApplyList();
+          });
+        });
+        container.querySelectorAll(".project-picker-assign").forEach((select) => {
+          select.addEventListener("change", () => {
+            if (select.value) assignProjectToSlot(Number(select.dataset.slotIndex), select.value);
           });
         });
       }
@@ -2777,7 +2876,7 @@
           ? projects.map((p) => `
             <label class="bulk-voice-apply-item">
               <input type="checkbox" class="bulk-voice-apply-check" data-project-id="${p.id}" style="width:auto;" ${checkedIds.has(p.id) ? "checked" : ""}>
-              ${p.title || p.topic || "Untitled video"} <span class="tiny">(${p.sceneCount || 0} scene)</span>
+              ${projectDisplayLabel(p)} <span class="tiny">(${p.sceneCount || 0} scene)</span>
             </label>
           `).join("")
           : '<p class="tiny">Ch\u01B0a ch\u1ECDn d\u1EF1 \u00E1n n\u00E0o \u1EDF tr\u00EAn.</p>';
@@ -2950,7 +3049,7 @@
           $("#recentProjects").appendChild(item);
         });
         $("#statsRows").innerHTML = list.length
-          ? list.slice(0, 5).map((p) => `<tr><td>${p.title || "Untitled video"}</td><td>${p.status === "completed" ? "1" : "0"}</td><td>${p.output_path ? "Có file xuất" : "Chưa xuất"}</td></tr>`).join("")
+          ? list.slice(0, 5).map((p) => `<tr><td>${projectDisplayLabel(p)}</td><td>${p.status === "completed" ? "1" : "0"}</td><td>${p.output_path ? "Có file xuất" : "Chưa xuất"}</td></tr>`).join("")
           : '<tr><td colspan="3">Chưa có dữ liệu thống kê.</td></tr>';
       }
 
@@ -2992,7 +3091,7 @@
       }
 
       async function deleteProjectRemote(project) {
-        const ok = confirm(`Xóa hẳn dự án "${project.title || "Untitled video"}"? Toàn bộ kịch bản, media, video đã xuất của dự án này sẽ mất — không thể hoàn tác.`);
+        const ok = confirm(`Xóa hẳn dự án "${projectDisplayLabel(project)}"? Toàn bộ kịch bản, media, video đã xuất của dự án này sẽ mất — không thể hoàn tác.`);
         if (!ok) return;
         try {
           await api(`/api/projects/${project.id}`, { method: "DELETE" });
@@ -3031,6 +3130,8 @@
         updateApproveContentPanel();
         if (project.latestJob) setJob(project, project.latestJob);
         else resetJobPanel();
+        if ($("#thumbnailHeadline")) $("#thumbnailHeadline").value = "";
+        renderThumbnailPreview(project);
         loadAssets(project.id).catch(showError);
         loadScenes(project.id).catch(showError);
         loadTimeline(project.id).catch(showError);
@@ -3204,7 +3305,7 @@
           if (asset) {
             const seekTime = Math.max(0, t - videoClip.start_time + videoClip.trim_in);
             const transform = `translate(${Number(videoClip.pos_x || 0)}px, ${Number(videoClip.pos_y || 0)}px) scale(${Number(videoClip.scale || 100) / 100}) rotate(${Number(videoClip.rotation || 0)}deg)`;
-            mediaHtml = `<video id="programPreviewVideo" playsinline muted style="position:relative;z-index:1;width:100%;height:100%;object-fit:${state.previewFit};background:#000;border-radius:8px;opacity:${Number(videoClip.opacity || 100) / 100};transform:${transform};" data-seek="${seekTime}"><source src="${fileUrl(asset.file_path)}" /></video>`;
+            mediaHtml = `<video id="programPreviewVideo" playsinline muted style="position:relative;z-index:1;width:100%;height:100%;object-fit:${state.previewFit};background:#000;border-radius:8px;opacity:${Number(videoClip.opacity || 100) / 100};transform:${transform};" data-seek="${seekTime}" data-clip-id="${videoClip.id}"><source src="${fileUrl(asset.file_path)}" /></video>`;
           }
         }
         const overlayHtml = overlayClips.map((c) => {
@@ -3503,7 +3604,76 @@
         renderClipInspector();
       }
 
+      // Undo/redo: whole-timeline snapshots (not per-field inverse commands)
+      // — simpler and correct for every mutation kind (move/resize/inspector
+      // change/add/delete/split) at the cost of a coarser grain (one step =
+      // one completed user action, which matches how a real editor's Ctrl+Z
+      // actually feels — it's already only pushed once per drag/resize/apply,
+      // not once per pixel of movement). Undoing replays a diff against the
+      // server via the same create/update/delete endpoints every other
+      // mutation already uses, so there's no separate server-side history to
+      // keep in sync.
+      function snapshotTimelineClips() {
+        return (state.timelineClips || []).map((c) => ({ ...c }));
+      }
+
+      function pushUndoSnapshot() {
+        state.undoStack = state.undoStack || [];
+        state.redoStack = [];
+        state.undoStack.push(snapshotTimelineClips());
+        if (state.undoStack.length > 30) state.undoStack.shift();
+      }
+
+      async function applyClipsSnapshot(snapshot) {
+        const current = state.timelineClips || [];
+        const snapById = new Map(snapshot.map((c) => [c.id, c]));
+        const currentById = new Map(current.map((c) => [c.id, c]));
+        for (const c of current) {
+          if (!snapById.has(c.id)) await api(`/api/timeline-clips/${c.id}`, { method: "DELETE" }).catch(() => {});
+        }
+        for (const s of snapshot) {
+          const existing = currentById.get(s.id);
+          const fields = {
+            startTime: s.start_time, duration: s.duration, trimIn: s.trim_in, trimOut: s.trim_out,
+            posX: s.pos_x, posY: s.pos_y, scale: s.scale, rotation: s.rotation, opacity: s.opacity,
+            volume: s.volume, speed: s.speed, animation: s.animation, textContent: s.text_content,
+          };
+          if (!existing) {
+            // Re-created clip gets a NEW id (the original is gone) — content
+            // and position are still restored correctly, just not literally
+            // the same row, which is an acceptable v1 tradeoff for undo.
+            await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ trackId: s.track_id, sourceAssetId: s.source_asset_id, sceneId: s.scene_id, label: s.label, startTime: s.start_time, duration: s.duration, textContent: s.text_content }),
+            }).catch(() => {});
+          } else if (JSON.stringify(existing) !== JSON.stringify(s)) {
+            await api(`/api/timeline-clips/${s.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields) }).catch(() => {});
+          }
+        }
+        await loadTimeline(state.activeProjectId);
+      }
+
+      async function undoTimeline() {
+        if (!state.undoStack || !state.undoStack.length) return toast("Không còn gì để hoàn tác.");
+        state.redoStack = state.redoStack || [];
+        state.redoStack.push(snapshotTimelineClips());
+        const snapshot = state.undoStack.pop();
+        await applyClipsSnapshot(snapshot);
+        toast("Đã hoàn tác.");
+      }
+
+      async function redoTimeline() {
+        if (!state.redoStack || !state.redoStack.length) return toast("Không còn gì để làm lại.");
+        state.undoStack = state.undoStack || [];
+        state.undoStack.push(snapshotTimelineClips());
+        const snapshot = state.redoStack.pop();
+        await applyClipsSnapshot(snapshot);
+        toast("Đã làm lại.");
+      }
+
       async function updateClipRemote(clipId, payload) {
+        pushUndoSnapshot();
         try {
           const data = await api(`/api/timeline-clips/${clipId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const idx = state.timelineClips.findIndex((c) => c.id === clipId);
@@ -3545,6 +3715,7 @@
         if (playhead <= clip.start_time || playhead >= clip.start_time + clip.duration) {
           return toast("Đặt playhead nằm trong clip đang chọn rồi bấm Split.");
         }
+        pushUndoSnapshot();
         try {
           const data = await api(`/api/timeline-clips/${clip.id}/split`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ atTime: playhead }) });
           await loadTimeline(state.activeProjectId);
@@ -3556,6 +3727,7 @@
       async function deleteSelectedClip() {
         const clip = selectedClip();
         if (!clip) return toast("Chưa chọn clip để xóa.");
+        pushUndoSnapshot();
         try {
           await api(`/api/timeline-clips/${clip.id}`, { method: "DELETE" });
           state.selectedClipId = "";
@@ -3579,11 +3751,41 @@
         const asset = pool.find((a) => !usedAssetIds.has(a.id)) || pool[0];
         const startTime = trackClips.reduce((max, c) => Math.max(max, c.start_time + c.duration), 0);
         const duration = asset.duration && asset.duration > 0 ? asset.duration : 5;
+        pushUndoSnapshot();
         try {
           const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ trackId: track.id, sourceAssetId: asset.id, label: asset.file_name, startTime, duration }),
+          });
+          state.timelineClips.push(data.clip);
+          renderTimelineV3($("#timelineV3Root"));
+          selectClip(data.clip.id);
+          toast(`Đã thêm ${asset.file_name} vào timeline.`);
+        } catch (error) { showError(error); }
+      }
+
+      // Whether a track can meaningfully host a given asset type — matches
+      // what timeline-renderer.ts actually reads per track type (video/overlay
+      // tracks only render video+image source assets; voice/music/sfx tracks
+      // only render audio ones), so a drop that would render as nothing
+      // (wrong asset type on a track) is rejected up front with a clear
+      // reason instead of silently creating a clip that never shows up.
+      function trackAcceptsAssetType(trackType, assetType) {
+        if (trackType === "video" || trackType === "overlay") return assetType === "video" || assetType === "image";
+        if (trackType === "voice" || trackType === "music" || trackType === "sfx") return assetType === "audio";
+        return false;
+      }
+
+      async function addAssetToTrackAtTime(asset, trackId, startTime) {
+        if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
+        const duration = asset.duration && asset.duration > 0 ? asset.duration : 5;
+        pushUndoSnapshot();
+        try {
+          const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trackId, sourceAssetId: asset.id, label: asset.file_name, startTime, duration }),
           });
           state.timelineClips.push(data.clip);
           renderTimelineV3($("#timelineV3Root"));
@@ -3599,6 +3801,7 @@
         const trackClips = (state.timelineClips || []).filter((c) => c.track_id === track.id);
         const startTime = trackClips.reduce((max, c) => Math.max(max, c.start_time + c.duration), 0);
         const duration = asset.duration && asset.duration > 0 ? asset.duration : 15;
+        pushUndoSnapshot();
         try {
           const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
             method: "POST",
@@ -3725,7 +3928,7 @@
           if (statusPill) statusPill.textContent = "";
           return;
         }
-        if (title) title.textContent = project.title || "Untitled video";
+        if (title) title.textContent = projectDisplayLabel(project);
         if (statusPill) { statusPill.textContent = label(project.status); statusPill.className = `pill ${project.status === "completed" ? "ok" : "warn"}`; }
 
         const scenes = state.scenes || [];
@@ -3807,6 +4010,7 @@
         if (!track) return;
         const trackClips = (state.timelineClips || []).filter((c) => c.track_id === track.id);
         const startTime = trackClips.reduce((max, c) => Math.max(max, c.start_time + c.duration), 0);
+        pushUndoSnapshot();
         try {
           const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
             method: "POST",
@@ -3819,6 +4023,50 @@
         } catch (error) { showError(error); }
       }
 
+      // Snapping: every other clip's start/end plus the playhead are
+      // candidate snap points. Threshold is in pixels (constant feel at any
+      // zoom level) converted to seconds via the current px/sec so it stays
+      // a few pixels wide whether zoomed in or out.
+      const SNAP_PX_THRESHOLD = 8;
+
+      function computeSnapPoints(excludeClipId) {
+        const points = new Set([0, Math.round((state.timelinePlayhead || 0) * 100) / 100]);
+        (state.timelineClips || []).forEach((c) => {
+          if (c.id === excludeClipId) return;
+          points.add(Math.round(c.start_time * 100) / 100);
+          points.add(Math.round((c.start_time + c.duration) * 100) / 100);
+        });
+        return Array.from(points).sort((a, b) => a - b);
+      }
+
+      function findSnap(candidateSec, pxPerSec, points) {
+        const thresholdSec = SNAP_PX_THRESHOLD / pxPerSec;
+        let best = null;
+        let bestDelta = thresholdSec;
+        for (const p of points) {
+          const delta = Math.abs(p - candidateSec);
+          if (delta <= bestDelta) { best = p; bestDelta = delta; }
+        }
+        return best;
+      }
+
+      function showSnapGuide(timeSec, pxPerSec) {
+        const root = $("#timelineV3Root");
+        if (!root) return;
+        let guide = root.querySelector(".snap-guide-v3");
+        if (!guide) {
+          guide = document.createElement("div");
+          guide.className = "snap-guide-v3";
+          root.appendChild(guide);
+        }
+        guide.style.left = `${Math.round(timeSec * pxPerSec)}px`;
+        guide.style.display = "block";
+      }
+
+      function hideSnapGuide() {
+        $("#timelineV3Root")?.querySelector(".snap-guide-v3")?.style.setProperty("display", "none");
+      }
+
       function startClipDrag(event, el) {
         const clipId = el.dataset.clipId;
         const clip = (state.timelineClips || []).find((c) => c.id === clipId);
@@ -3826,19 +4074,30 @@
         const track = (state.timelineTracks || []).find((t) => t.id === clip.track_id);
         if (track?.locked) return;
         const pxPerSec = timelinePxPerSecond();
+        const snapPoints = computeSnapPoints(clipId);
         const startX = event.clientX;
         const originalStart = clip.start_time;
         let dragged = false;
         function onMove(ev) {
           const dx = ev.clientX - startX;
           if (Math.abs(dx) > 3) dragged = true;
-          const newStart = Math.max(0, originalStart + dx / pxPerSec);
+          let newStart = Math.max(0, originalStart + dx / pxPerSec);
+          // Snap either edge of the clip (start, or end = start+duration) —
+          // whichever is closer to a candidate point wins, so a clip can
+          // snap flush against the end of a preceding clip just as easily
+          // as its own start snapping to something.
+          const snapAtStart = findSnap(newStart, pxPerSec, snapPoints);
+          const snapAtEnd = findSnap(newStart + clip.duration, pxPerSec, snapPoints);
+          if (snapAtStart != null) { newStart = snapAtStart; showSnapGuide(snapAtStart, pxPerSec); }
+          else if (snapAtEnd != null) { newStart = snapAtEnd - clip.duration; showSnapGuide(snapAtEnd, pxPerSec); }
+          else hideSnapGuide();
           el.style.left = `${Math.round(newStart * pxPerSec)}px`;
           el.dataset.pendingStart = String(newStart);
         }
         function onUp() {
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
+          hideSnapGuide();
           if (!dragged) { selectClip(clipId); return; }
           const newStart = Math.round(Number(el.dataset.pendingStart || clip.start_time) * 100) / 100;
           updateClipRemote(clipId, { startTime: newStart });
@@ -3854,16 +4113,22 @@
         if (!clip) return;
         const clipEl = handle.closest(".clip-v3");
         const pxPerSec = timelinePxPerSecond();
+        const snapPoints = computeSnapPoints(clipId);
         const startX = event.clientX;
         const original = { start: clip.start_time, duration: clip.duration, trimIn: clip.trim_in, trimOut: clip.trim_out };
         function onMove(ev) {
           const deltaSec = (ev.clientX - startX) / pxPerSec;
           if (edge === "right") {
-            const newDuration = Math.max(0.2, original.duration + deltaSec);
+            let newEnd = original.start + original.duration + deltaSec;
+            const snap = findSnap(newEnd, pxPerSec, snapPoints);
+            if (snap != null) { newEnd = snap; showSnapGuide(snap, pxPerSec); } else hideSnapGuide();
+            const newDuration = Math.max(0.2, newEnd - original.start);
             clipEl.style.width = `${Math.max(24, Math.round(newDuration * pxPerSec))}px`;
             clipEl.dataset.pendingDuration = String(newDuration);
           } else {
-            const newStart = Math.max(0, original.start + deltaSec);
+            let newStart = Math.max(0, original.start + deltaSec);
+            const snap = findSnap(newStart, pxPerSec, snapPoints);
+            if (snap != null) { newStart = snap; showSnapGuide(snap, pxPerSec); } else hideSnapGuide();
             const newDuration = Math.max(0.2, original.duration - (newStart - original.start));
             clipEl.style.left = `${Math.round(newStart * pxPerSec)}px`;
             clipEl.style.width = `${Math.max(24, Math.round(newDuration * pxPerSec))}px`;
@@ -3874,6 +4139,7 @@
         function onUp() {
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
+          hideSnapGuide();
           const updates = {};
           if (clipEl.dataset.pendingDuration !== undefined) updates.duration = Math.round(Number(clipEl.dataset.pendingDuration) * 100) / 100;
           if (edge === "left") {
@@ -4035,6 +4301,30 @@
         });
         root.querySelectorAll(".track-mute-btn").forEach((btn) => btn.addEventListener("click", () => toggleTrackMute(btn.dataset.trackId)));
         root.querySelectorAll(".track-lock-btn").forEach((btn) => btn.addEventListener("click", () => toggleTrackLock(btn.dataset.trackId)));
+        root.querySelectorAll(".track-lane-v3").forEach((lane) => {
+          lane.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            lane.classList.add("drop-target");
+          });
+          lane.addEventListener("dragleave", () => lane.classList.remove("drop-target"));
+          lane.addEventListener("drop", async (event) => {
+            event.preventDefault();
+            lane.classList.remove("drop-target");
+            const assetId = event.dataTransfer.getData("text/plain");
+            const asset = state.assets.find((a) => a.id === assetId);
+            const track = tracks.find((t) => t.id === lane.dataset.trackId);
+            if (!asset || !track) return;
+            if (!trackAcceptsAssetType(track.track_type, asset.type)) {
+              toast(`Không thể thả file ${asset.type} vào track "${track.label}".`);
+              return;
+            }
+            const rect = lane.getBoundingClientRect();
+            const x = event.clientX - rect.left + lane.scrollLeft;
+            const startTime = Math.max(0, Math.round((x / pxPerSec) * 10) / 10);
+            await addAssetToTrackAtTime(asset, track.id, startTime);
+          });
+        });
         $("#timelineV3SplitButton")?.addEventListener("click", splitSelectedClipAtPlayhead);
         $("#timelineV3DeleteButton")?.addEventListener("click", deleteSelectedClip);
         $("#timelineV3AddVideoButton")?.addEventListener("click", () => addClipFromAsset("video"));
@@ -4057,11 +4347,15 @@
           return;
         }
         box.innerHTML = state.assets.slice(0, 12).map((asset, index) => `
-          <button class="editor-asset" data-asset-id="${asset.id}" style="background:${art[index % art.length]};">
+          <button class="editor-asset" data-asset-id="${asset.id}" draggable="true" style="background:${art[index % art.length]};">
             <strong>${asset.file_name}</strong>
             <span class="tiny">${asset.type} · ${asset.file_size ? `${Math.round(asset.file_size / 1024)} KB` : ""}</span>
           </button>`).join("");
         box.querySelectorAll(".editor-asset[data-asset-id]").forEach((item) => {
+          item.addEventListener("dragstart", (event) => {
+            event.dataTransfer.setData("text/plain", item.dataset.assetId);
+            event.dataTransfer.effectAllowed = "copy";
+          });
           item.addEventListener("click", () => {
             const asset = state.assets.find((row) => row.id === item.dataset.assetId);
             if (!asset) return;
@@ -4355,6 +4649,21 @@
           if (project.latestJob) setJob(project, project.latestJob);
           await Promise.all([loadAssets(project.id), loadScenes(project.id), loadTimeline(project.id)]);
         }
+        // The picker slots (Kịch bản AI / Giọng đọc AI quick-switch cards)
+        // only ever get filled by selectProject() — the active project
+        // restored here on boot (or defaulted to the first project) never
+        // went through that, so it could be the active project everywhere
+        // else (the top dropdown, the page header) while every quick-switch
+        // slot shows "Chưa chọn" — confusing on its own, and the confusion
+        // used to be masked by a stale slot entry happening to still show
+        // *something* there before ensurePickedSlots() started clearing
+        // dangling (deleted-project) slot ids. Keep the active project
+        // visible in a slot at all times so the two pickers agree.
+        if (state.activeProjectId) {
+          addProjectToSlots(state.activeProjectId);
+          renderAllProjectPickers();
+          renderBulkVoiceApplyList();
+        }
       }
 
       async function loadStats() {
@@ -4585,10 +4894,23 @@
               <div class="top-actions">
                 <a class="btn" href="${fileUrl(job.video_path)}" target="_blank">Mở tab mới</a>
                 <a class="btn" href="${fileUrl(job.video_path)}" download>Tải</a>
+                <button class="btn delete-output-btn" type="button" data-job-id="${job.id}">🗑️ Xóa</button>
               </div>
             </div>
           </div>`;
         }).join("");
+
+        grid.querySelectorAll(".delete-output-btn").forEach((btn) => btn.addEventListener("click", async () => {
+          if (!confirm("Xóa video xuất này để giải phóng dung lượng? Kịch bản, giọng đọc và cảnh của dự án vẫn được giữ — bạn vẫn xuất lại được sau này.")) return;
+          try {
+            await api(`/api/render-jobs/${btn.dataset.jobId}`, { method: "DELETE" });
+            toast("Đã xóa video.");
+            await loadStats();
+            await loadJobs();
+          } catch (error) {
+            showError(error);
+          }
+        }));
 
         grid.querySelectorAll(".toggle-script-btn").forEach((btn) => btn.addEventListener("click", async () => {
           const box = grid.querySelector(`.script-preview[data-project-id="${btn.dataset.projectId}"]`);
@@ -5750,6 +6072,30 @@
           button.textContent = "🔗 Lấy toàn bộ ảnh/video thật từ trang Shopee";
         }
       });
+      $("#fetchShopeeInfoButton")?.addEventListener("click", async () => {
+        const url = $("#productOriginalUrl").value.trim();
+        if (!url) return toast("Dán Link gốc sản phẩm (Shopee) vào ô ở trên trước.");
+        const button = $("#fetchShopeeInfoButton");
+        button.disabled = true;
+        button.textContent = "Đang lấy thông tin...";
+        try {
+          const data = await api("/api/products/fetch-shopee-info", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+          $("#productItemId").value = data.itemId;
+          const gotExtra = [];
+          if (data.name) { $("#productName").value = data.name; gotExtra.push("tên"); }
+          if (data.price) { $("#productPriceReference").value = `${Number(data.price).toLocaleString("vi-VN")} đ`; gotExtra.push("giá"); }
+          if (data.shopName) { $("#productShopName").value = data.shopName; gotExtra.push("tên shop"); }
+          if (data.imageUrl) { $("#productImageUrl").value = data.imageUrl; gotExtra.push("ảnh bìa"); }
+          toast(gotExtra.length
+            ? `Đã lấy mã sản phẩm + ${gotExtra.join(", ")} từ link.`
+            : "Đã lấy mã sản phẩm từ link. Shopee chặn phần tên/giá/ảnh (403) — điền tay các ô còn thiếu.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "⚡ Tự động lấy thông tin từ link gốc";
+        }
+      });
       $("#syncProductsButton")?.addEventListener("click", async () => {
         const button = $("#syncProductsButton");
         const status = $("#productSyncStatus");
@@ -6105,6 +6451,40 @@
           $("#createAudioButton").disabled = false;
         }
       });
+
+      function renderThumbnailPreview(project) {
+        const el = $("#thumbnailPreview");
+        if (!el) return;
+        if (project && project.thumbnail_path) {
+          const url = fileUrl(project.thumbnail_path);
+          el.innerHTML = `<img src="${url}" style="width:100%;border-radius:10px;margin-top:10px;" /><a class="btn" href="${url}" target="_blank" download style="margin-top:8px;">Tải Thumbnail</a>`;
+        } else {
+          el.innerHTML = "";
+        }
+      }
+
+      if ($("#generateThumbnailButton")) {
+        $("#generateThumbnailButton").addEventListener("click", async () => {
+          if (!state.activeProjectId) return toast("Hãy chọn 1 project trước.");
+          $("#generateThumbnailButton").disabled = true;
+          $("#generateThumbnailButton").textContent = "Đang tạo Thumbnail...";
+          try {
+            const headline = ($("#thumbnailHeadline").value || "").trim();
+            const data = await api(`/api/projects/${state.activeProjectId}/thumbnail`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(headline ? { headline } : {}),
+            });
+            renderThumbnailPreview(data.project);
+            toast("Đã tạo Thumbnail.");
+          } catch (error) {
+            showError(error);
+          } finally {
+            $("#generateThumbnailButton").disabled = false;
+            $("#generateThumbnailButton").textContent = "🖼️ Tạo Thumbnail";
+          }
+        });
+      }
       // Starts voice for exactly 1 project and polls ITS OWN job until it
       // finishes, updating that project's own result row only.
       async function runBulkVoiceJobForProject(project, voiceConfig) {
@@ -6132,7 +6512,7 @@
       }
 
       function bulkVoiceResultRowHtml(project) {
-        return `<div class="asset-row" data-bulk-voice-result="${project.id}"><div><strong>${project.title || project.topic || "Untitled video"}</strong><p class="tiny" data-bulk-voice-result-status="${project.id}">⏳ Đang bắt đầu...</p></div></div>`;
+        return `<div class="asset-row" data-bulk-voice-result="${project.id}"><div><strong>${projectDisplayLabel(project)}</strong><p class="tiny" data-bulk-voice-result-status="${project.id}">⏳ Đang bắt đầu...</p></div></div>`;
       }
 
       $("#bulkVoiceResultsList")?.addEventListener("click", (event) => {
@@ -6162,9 +6542,9 @@
           if (ok) {
             const assets = (await api(`/api/projects/${project.id}/assets`)).assets || [];
             const audio = assets.filter((a) => a.type === "audio").slice(-1)[0];
-            row.innerHTML = `<div><strong>${project.title || project.topic || "Untitled video"}</strong>${audio ? `<audio controls src="${fileUrl(audio.file_path)}" style="width:100%;margin-top:8px;"></audio>` : '<p class="tiny">Xong nhưng không tìm thấy file MP3.</p>'}</div><div class="field-stack"><button class="btn open-bulk-voice-edit" data-project-id="${project.id}" type="button">Mở Edit video với voice này</button></div>`;
+            row.innerHTML = `<div><strong>${projectDisplayLabel(project)}</strong>${audio ? `<audio controls src="${fileUrl(audio.file_path)}" style="width:100%;margin-top:8px;"></audio>` : '<p class="tiny">Xong nhưng không tìm thấy file MP3.</p>'}</div><div class="field-stack"><button class="btn open-bulk-voice-edit" data-project-id="${project.id}" type="button">Mở Edit video với voice này</button></div>`;
           } else {
-            row.innerHTML = `<div><strong>${project.title || project.topic || "Untitled video"}</strong><p class="tiny">❌ Lỗi khi tạo voice cho dự án này.</p></div>`;
+            row.innerHTML = `<div><strong>${projectDisplayLabel(project)}</strong><p class="tiny">❌ Lỗi khi tạo voice cho dự án này.</p></div>`;
           }
         }));
         button.disabled = false;
@@ -6346,7 +6726,26 @@
       });
 
       $("#clipSubBgOpacity")?.addEventListener("input", (e) => { $("#clipSubBgOpacityValue").textContent = e.target.value; });
-      $("#applyClipInspectorButton")?.addEventListener("click", async () => {
+
+      // Updates the on-screen preview instantly from whatever the sliders
+      // currently show — no network round trip, no full re-render (which
+      // would reset the <video> element and interrupt playback/seek state).
+      // Only affects the preview when the selected clip is the one actually
+      // visible at the current playhead position; otherwise there's nothing
+      // on screen to update, same as before this existed.
+      function applyLiveInspectorPreview() {
+        const clip = selectedClip();
+        const video = document.getElementById("programPreviewVideo");
+        if (!clip || !video || video.dataset.clipId !== clip.id) return;
+        const posX = Number(clip.pos_x) || 0;
+        const posY = Number(clip.pos_y) || 0;
+        const scale = Number($("#clipScale").value || 100) / 100;
+        const rotation = Number($("#clipRotation").value || 0);
+        video.style.transform = `translate(${posX}px, ${posY}px) scale(${scale}) rotate(${rotation}deg)`;
+        video.style.opacity = String(Number($("#clipOpacity").value || 100) / 100);
+      }
+
+      async function persistClipInspectorChanges({ silent = false } = {}) {
         const clip = selectedClip();
         if (!clip) return;
         const speedBtn = $("#clipSpeedGroup button.active");
@@ -6376,15 +6775,29 @@
           });
           renderProgramPreviewAtPlayhead();
         }
-        toast("Đã áp dụng thay đổi.");
-      });
+        if (!silent) toast("Đã áp dụng thay đổi.");
+      }
+      $("#applyClipInspectorButton")?.addEventListener("click", () => persistClipInspectorChanges());
       $("#deleteClipInspectorButton")?.addEventListener("click", deleteSelectedClip);
       $$("#clipSpeedGroup button").forEach((btn) => btn.addEventListener("click", () => {
         $$("#clipSpeedGroup button").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
+        persistClipInspectorChanges({ silent: true });
       }));
       [["clipScale", "clipScaleValue"], ["clipRotation", "clipRotationValue"], ["clipOpacity", "clipOpacityValue"], ["clipVolume", "clipVolumeValue"]].forEach(([inputId, labelId]) => {
-        $(`#${inputId}`)?.addEventListener("input", (event) => { const el = $(`#${labelId}`); if (el) el.textContent = event.target.value; });
+        const input = $(`#${inputId}`);
+        if (!input) return;
+        // "input" fires continuously while dragging — update the label and
+        // the live preview instantly, but don't hit the network on every
+        // pixel of drag. "change" fires once when the user releases the
+        // slider — persist then, same debounce-by-event-type trick used
+        // elsewhere in this file (e.g. the voice speed/pitch sliders).
+        input.addEventListener("input", (event) => {
+          const el = $(`#${labelId}`);
+          if (el) el.textContent = event.target.value;
+          applyLiveInspectorPreview();
+        });
+        input.addEventListener("change", () => persistClipInspectorChanges({ silent: true }));
       });
       $("#timelinePlayheadSlider")?.addEventListener("input", (event) => {
         stopPreviewPlayback();
@@ -6395,6 +6808,37 @@
       $("#previewPlayButton")?.addEventListener("click", () => {
         if (previewPlayRaf) stopPreviewPlayback();
         else startPreviewPlayback();
+      });
+      $("#timelineUndoButton")?.addEventListener("click", undoTimeline);
+      $("#timelineRedoButton")?.addEventListener("click", redoTimeline);
+      // Keyboard shortcuts — only while "Edit video V3" is the visible page,
+      // and never while the user is typing into a real form field anywhere
+      // else in the app (Delete/Space/arrows/Ctrl+Z would otherwise interfere
+      // with normal text editing on other pages).
+      document.addEventListener("keydown", (event) => {
+        if (document.querySelector(".page.active")?.id !== "timeline") return;
+        const tag = event.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || event.target.isContentEditable) return;
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+          event.preventDefault();
+          if (event.shiftKey) redoTimeline(); else undoTimeline();
+        } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+          event.preventDefault();
+          redoTimeline();
+        } else if (event.key === "Delete" || event.key === "Backspace") {
+          if (state.selectedClipId) { event.preventDefault(); deleteSelectedClip(); }
+        } else if (event.code === "Space") {
+          event.preventDefault();
+          if (previewPlayRaf) stopPreviewPlayback(); else startPreviewPlayback();
+        } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          const clip = selectedClip();
+          if (!clip) return;
+          event.preventDefault();
+          const frameStep = 1 / 30;
+          const dir = event.key === "ArrowLeft" ? -1 : 1;
+          const newStart = Math.max(0, Math.round((clip.start_time + dir * frameStep) * 1000) / 1000);
+          updateClipRemote(clip.id, { startTime: newStart });
+        }
       });
       $("#previewSkipStartButton")?.addEventListener("click", () => {
         stopPreviewPlayback();

@@ -8,6 +8,7 @@ import { extname, join, resolve } from "node:path";
 import dotenv from "dotenv";
 import { generateScriptFromPrompt, generateProductFactSheet, generateProductConcepts, callGemini, DEFAULT_MODEL, type ProductFactSheet } from "./agent/prompt-to-script.js";
 import { runTemplatePipeline } from "./render/template-pipeline.js";
+import { composeTemplate } from "./render/template-composer.js";
 import { renderProjectTimeline } from "./render/timeline-renderer.js";
 import { DEFAULT_VOICE_ID, findVoiceOption, getEffectiveVoiceOptions, VOICE_OPTIONS } from "./tts/voice-catalog.js";
 import { createTtsClient } from "./tts/tts-client.js";
@@ -1264,21 +1265,25 @@ function startAudioJob(projectId: string, jobId: string) {
     try {
       updateRenderJob(jobId, {
         status: "running",
-        progress: 10,
         current_step: "Preparing edited script",
         started_at: new Date().toISOString(),
         error_message: null,
       });
       const generated = await writeProjectScriptFromScenes(projectId);
       if (isCancelled()) return;
-      // Not bumping progress here on purpose — runTemplatePipeline's own
-      // onProgress reports a real 0-96 for audioOnly jobs (see its
-      // reportTts()), starting near 0% for scene 1. Jumping to a fixed 35%
-      // here first, right before that real number takes over, made the bar
-      // visibly jump forward then snap backward to ~1% a moment later —
-      // confusing to watch even though neither number was ever wrong on
-      // its own. Leaving progress where "Preparing edited script" left it
-      // means it only ever climbs from here.
+      // Not setting/bumping progress here on purpose — it stays at the
+      // freshly-created job's default (0) through "Preparing edited script",
+      // and runTemplatePipeline's own onProgress reports a real 0-96 for
+      // audioOnly jobs from there (see its reportTts()). A previous version
+      // of this jumped to a fixed number (10, then briefly 35) right before
+      // that real reporting takes over — on a project with many scenes,
+      // "Preparing edited script" + the first scene's TTS can take a while,
+      // so that fixed number sat on screen looking motionless/stuck for a
+      // real stretch of time before the genuine progress ever moved past it
+      // (reported directly by the user seeing it "stuck at 10%" across
+      // multiple bulk voice jobs). Leaving it at 0 here means the number the
+      // user watches only ever reflects real completed work, never a
+      // placeholder guess.
       updateRenderJob(jobId, {
         current_step: "Generating MP3 voice",
         output_dir: resolve(generated.outputDir),
@@ -1821,6 +1826,43 @@ async function handleGenerateProductConcepts(req: IncomingMessage, res: ServerRe
   }
 }
 
+/** Paste-a-link autofill for the Add Product modal, BEFORE a product row
+ *  even exists yet — handleFetchShopeeGallery below needs an already-saved
+ *  product id, which is no help while still filling out the form (that's
+ *  also the flow that requires manually typing a "mã ảo" item_id first,
+ *  the exact friction this endpoint removes). item_id only needs regex-
+ *  parsing the URL (deriveShopeeItemId) — no network call, so it always
+ *  succeeds for a well-formed Shopee link regardless of Shopee's own
+ *  scraping defenses. name/price/shopName/imageUrl come from
+ *  fetchShopeeGallery's unofficial endpoint call, which is genuinely
+ *  best-effort (Shopee 403s it often — see the UI copy next to the
+ *  existing gallery-fetch button) — the response reports which parts came
+ *  back so the frontend can tell the user exactly what still needs typing. */
+async function handleFetchShopeeInfo(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+  const url = typeof body.url === "string" ? body.url.trim() : "";
+  if (!url) {
+    sendJson(res, 400, { error: "Thiếu link sản phẩm Shopee." });
+    return;
+  }
+  const itemId = deriveShopeeItemId(url);
+  if (!itemId) {
+    sendJson(res, 400, { error: "Không nhận ra định dạng link Shopee — kiểm tra lại link gốc sản phẩm." });
+    return;
+  }
+  const gallery = await fetchShopeeGallery(url);
+  sendJson(res, 200, {
+    ok: true,
+    itemId,
+    name: gallery.name ?? null,
+    price: gallery.price ?? null,
+    shopName: gallery.shopName ?? null,
+    imageUrl: gallery.imageUrls[0] ?? null,
+  });
+}
+
 async function handleFetchShopeeGallery(req: IncomingMessage, res: ServerResponse, productId: string) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -1981,7 +2023,7 @@ async function syncProductsWithSheet(
     sheetItemIds.add(itemId);
     upsertProductFromSheet(ownerEmail, {
       item_id: itemId,
-      product_name: asText(row.product_name) ?? "",
+      product_name: asText(row.product_name),
       shop_name: asText(row.shop_name),
       original_url: asText(row.original_url),
       affiliate_url: asText(row.affiliate_url),
@@ -2658,6 +2700,7 @@ function buildDesktopConfigPayload(user: { email: string; name: string; picture:
     productSheetSyncUrl: process.env.PRODUCT_SHEET_SYNC_URL ?? "",
     productSheetSecret: process.env.PRODUCT_SHEET_SECRET ?? "",
     pexelsApiKey: process.env.PEXELS_API_KEY ?? "",
+    pixabayApiKey: process.env.PIXABAY_API_KEY ?? "",
     // Needed so the desktop instance can actually fetch media that was
     // uploaded/created via the web app (stored in R2, not on this machine) —
     // without these, rendering a project with any web-uploaded asset fails
@@ -2751,6 +2794,7 @@ async function handleDesktopReceiveConfig(req: IncomingMessage, res: ServerRespo
       `R2_BUCKET=${str("r2Bucket")}`,
       `R2_PUBLIC_BASE_URL=${str("r2PublicBaseUrl")}`,
       `PEXELS_API_KEY=${str("pexelsApiKey")}`,
+      `PIXABAY_API_KEY=${str("pixabayApiKey")}`,
       `VERCEL_SHOP_DEPLOY_HOOK_URL=${str("vercelShopDeployHookUrl")}`,
       `DEVICE_SYNC_TOKEN=${str("deviceToken")}`,
       "",
@@ -3352,6 +3396,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       await handleFetchShopeeGallery(req, res, shopeeGalleryMatch[1]);
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/products/fetch-shopee-info") {
+      await handleFetchShopeeInfo(req, res);
+      return;
+    }
     const productMatch = url.pathname.match(/^\/api\/products\/([^/]+)$/);
     if (req.method === "PUT" && productMatch) {
       await handleUpdateProduct(req, res, productMatch[1]);
@@ -3568,6 +3616,63 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       }
       const updated = setProjectReviewStatus(project.id, body.reviewStatus);
       sendJson(res, 200, { ok: true, project: updated });
+      return;
+    }
+
+    const thumbnailMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/thumbnail$/);
+    if (req.method === "POST" && thumbnailMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const project = getUserProject(user.email, thumbnailMatch[1]);
+      if (!project) {
+        sendJson(res, 404, { error: "Project not found" });
+        return;
+      }
+      const body = (await readJsonBody(req).catch(() => ({}))) as Record<string, unknown>;
+      // The template renders headline in a huge multi-line display face
+      // meant for a short phrase (its own sample is 3 words) — a full topic
+      // sentence wraps into 3 dominating lines and crowds the frame, and
+      // character-slicing it to force a shorter fit just cuts mid-word.
+      // So the default headline stays short (the project's own title, which
+      // is often just a couple words even when it's a placeholder like "3"),
+      // and the full topic goes in the smaller-type subheadline where a full
+      // sentence actually fits. A caller who wants a punchier custom headline
+      // can always pass one explicitly (the UI's headline field does this).
+      const rawTitle = (project.title || "").trim();
+      const headline = (typeof body.headline === "string" && body.headline.trim() ? body.headline.trim() : rawTitle || "AI Video Studio").slice(0, 60);
+      const subheadline = (typeof body.subheadline === "string" ? body.subheadline.trim() : (project.topic || "")).slice(0, 90);
+      const kicker = (typeof body.kicker === "string" && body.kicker.trim() ? body.kicker.trim() : "AI Video").slice(0, 30);
+      const workDir = resolve(STORAGE_DIR, project.id, "thumbnail");
+      await mkdir(workDir, { recursive: true });
+      const stamp = Date.now();
+      const clipPath = join(workDir, `clip-${stamp}.mp4`);
+      const jpgPath = join(workDir, `thumbnail-${stamp}.jpg`);
+      try {
+        // Renders the app's own "hero title card" template — same look used
+        // for a video's opening scene — then grabs its settled last frame as
+        // a static image, so the thumbnail visually matches the video it's for.
+        await composeTemplate({
+          templateId: "frame-liquid-bg-hero",
+          inputs: { kicker, brand: "AI Video Studio", headline, subheadline, cta: "" },
+          outputPath: clipPath,
+          quality: "high",
+        });
+        // Seek from end-of-file rather than an absolute timestamp so this
+        // stays correct regardless of the template's exact rendered duration/fps.
+        await runProcess(FFMPEG_BIN, ["-y", "-sseof", "-0.2", "-i", clipPath, "-frames:v", "1", "-q:v", "2", jpgPath]);
+        const uploaded = isR2Configured();
+        const storedPath = uploaded
+          ? await uploadFileToR2(jpgPath, r2Key(project.owner_email, project.id, "output", "thumbnail.jpg"), "image/jpeg")
+          : jpgPath;
+        await rm(clipPath, { force: true }).catch(() => undefined);
+        if (uploaded) await rm(jpgPath, { force: true }).catch(() => undefined);
+        updateProject(project.id, { thumbnail_path: storedPath });
+        sendJson(res, 200, { ok: true, project: getProject(project.id) });
+      } catch (error) {
+        await rm(clipPath, { force: true }).catch(() => undefined);
+        await rm(jpgPath, { force: true }).catch(() => undefined);
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+      }
       return;
     }
 
@@ -4021,6 +4126,39 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         return;
       }
       sendJson(res, 200, jobResponse(job.project_id, job.id));
+      return;
+    }
+
+    if (req.method === "DELETE" && jobMatch) {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const job = getRenderJob(jobMatch[1]);
+      if (!job) {
+        sendJson(res, 404, { error: "Render job not found" });
+        return;
+      }
+      if (!getUserProject(user.email, job.project_id)) {
+        sendJson(res, 403, { error: "Render job does not belong to the current user" });
+        return;
+      }
+      // Deletes just the exported video file to free storage — deliberately
+      // leaves output_dir (scene clips, per-scene voice mp3s, subtitles)
+      // alone so a later re-render can still reuse that cache instead of
+      // re-spending TTS/Pexels/Gemini calls redoing work that already
+      // succeeded. The job row itself stays too (keeps render history).
+      if (job.video_path) {
+        try {
+          if (isR2Path(job.video_path)) {
+            await deleteR2Object(job.video_path);
+          } else {
+            await rm(job.video_path, { force: true });
+          }
+        } catch (error) {
+          console.warn(`Failed to delete video for render job ${job.id}:`, error);
+        }
+      }
+      updateRenderJob(job.id, { video_path: null });
+      sendJson(res, 200, { ok: true, job: getRenderJob(job.id) });
       return;
     }
 

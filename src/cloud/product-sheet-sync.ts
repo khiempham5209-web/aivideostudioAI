@@ -33,6 +33,9 @@ export interface SheetPushUpdate {
   commission?: string;
   image_url?: string;
   price_reference?: string;
+  product_name?: string;
+  shop_name?: string;
+  category?: string;
 }
 
 function config() {
@@ -99,16 +102,25 @@ export async function pushProductUpdatesToSheet(updates: SheetPushUpdate[]): Pro
   if (!updates.length) return 0;
   const { url, key } = config();
   if (!url || !key) throw new Error("Missing PRODUCT_SHEET_SYNC_URL or PRODUCT_SHEET_SECRET in .env.local");
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key, updates }),
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!resp.ok) throw new Error(`Sheet sync POST failed: HTTP ${resp.status}`);
-  const data = (await resp.json()) as { ok: boolean; error?: string; updated?: number };
-  if (!data.ok) throw new Error(data.error || "Sheet sync POST failed");
-  return data.updated ?? 0;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await sleepMs(1500);
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, updates }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!resp.ok) throw new Error(`Sheet sync POST failed: HTTP ${resp.status}`);
+      const data = (await resp.json()) as { ok: boolean; error?: string; updated?: number };
+      if (!data.ok) throw new Error(data.error || "Sheet sync POST failed");
+      return data.updated ?? 0;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 // ---- "KichBanYTB" content-queue tab (AI Content backlog) — same Sheet,
@@ -128,19 +140,43 @@ export interface ApprovedContentItem {
   projectId: string;
 }
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Google Apps Script Web Apps have a real, observed flaky streak — confirmed
+ *  directly on this exact deployment (a real render's log showed a plain
+ *  "Sheet sync POST failed: HTTP 404" that was gone on the very next call
+ *  minutes later, no config change in between). Most likely Apps Script's
+ *  own execution-environment cold start or its exec->googleusercontent.com
+ *  redirect hiccuping transiently, not anything wrong with the URL/secret
+ *  (a genuinely bad secret/URL fails with a stable, real error every time,
+ *  which a retry correctly won't paper over). One retry after a short pause
+ *  turns a one-off blip into a silent success instead of a user-visible
+ *  "0 sản phẩm" that looks like nothing was found, when the check itself
+ *  never actually ran. */
 async function postAction<T>(action: string, extra: Record<string, unknown> = {}): Promise<T> {
   const { url, key } = config();
   if (!url || !key) throw new Error("Missing PRODUCT_SHEET_SYNC_URL or PRODUCT_SHEET_SECRET in .env.local");
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key, action, ...extra }),
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!resp.ok) throw new Error(`Sheet sync POST failed: HTTP ${resp.status}`);
-  const data = (await resp.json()) as { ok: boolean; error?: string } & T;
-  if (!data.ok) throw new Error(data.error || "Sheet sync POST failed");
-  return data;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await sleepMs(1500);
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, action, ...extra }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!resp.ok) throw new Error(`Sheet sync POST failed: HTTP ${resp.status}`);
+      const data = (await resp.json()) as { ok: boolean; error?: string } & T;
+      if (!data.ok) throw new Error(data.error || "Sheet sync POST failed");
+      return data;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 /** Rows in "KichBanYTB" with an Đề tài but no kịch bản written yet

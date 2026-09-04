@@ -34,6 +34,10 @@ export interface ProjectRecord {
   voice_pitch: number;
   /** 0-150 (percent), 100 = no change. Same post-processing caveat as pitch. */
   voice_volume: number;
+  /** Cover-art thumbnail image (r2:// URI when R2 is configured, else a local
+   *  disk path) — generated on demand by rendering a HyperFrames title-card
+   *  template and extracting its last frame. Null until first generated. */
+  thumbnail_path: string | null;
   /** Second voice for dialogue/Q&A-style scripts (see template-script-schema.ts's
    *  `voice2`/scene `speaker`). Null means single-voice mode — the default. */
   voice_2_id: string | null;
@@ -288,6 +292,7 @@ db.exec(`
     voice_speed REAL NOT NULL,
     voice_pitch REAL NOT NULL DEFAULT 0,
     voice_volume REAL NOT NULL DEFAULT 100,
+    thumbnail_path TEXT,
     voice_2_id TEXT,
     voice_2_name TEXT,
     aspect_ratio TEXT NOT NULL DEFAULT '9:16',
@@ -545,6 +550,7 @@ for (const statement of [
   "ALTER TABLE scenes ADD COLUMN speaker TEXT",
   "ALTER TABLE projects ADD COLUMN voice_pitch REAL NOT NULL DEFAULT 0",
   "ALTER TABLE projects ADD COLUMN voice_volume REAL NOT NULL DEFAULT 100",
+  "ALTER TABLE projects ADD COLUMN thumbnail_path TEXT",
 ]) {
   try {
     db.exec(statement);
@@ -903,6 +909,7 @@ async function initPostgresMirror() {
     { label: "projects.voice_speed", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_speed DOUBLE PRECISION NOT NULL DEFAULT 1` },
     { label: "projects.voice_pitch", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_pitch DOUBLE PRECISION NOT NULL DEFAULT 0` },
     { label: "projects.voice_volume", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS voice_volume DOUBLE PRECISION NOT NULL DEFAULT 100` },
+    { label: "projects.thumbnail_path", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS thumbnail_path TEXT` },
     { label: "projects.output_path", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS output_path TEXT` },
     { label: "projects.error_message", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS error_message TEXT` },
     { label: "projects.product_id", sql: `ALTER TABLE projects ADD COLUMN IF NOT EXISTS product_id TEXT` },
@@ -1083,29 +1090,39 @@ export async function loadPostgresIntoSqlite() {
 
 // Neon/Render free-tier databases can "cold start" — the very first connection
 // attempt right after a period of inactivity can fail even though the DB is
-// fine a moment later. Retry a few times before giving up on Postgres, since
-// giving up too early looks like real data loss to the user.
-const PG_BOOT_RETRIES = 4;
-for (let attempt = 1; attempt <= PG_BOOT_RETRIES; attempt++) {
-  try {
-    await loadPostgresIntoSqlite();
-    break;
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    if (attempt < PG_BOOT_RETRIES) {
-      const delayMs = attempt * 1500;
-      console.warn(`Postgres mirror load failed (attempt ${attempt}/${PG_BOOT_RETRIES}), retrying in ${delayMs}ms. Cause: ${cause}`);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    } else {
-      console.error(
-        "Postgres mirror failed to initialize after retries — continuing on local SQLite only. " +
-          "Data will NOT persist across restarts until this is fixed. " +
-          `Cause: ${cause}`,
-      );
-      pgPool = null;
+// fine a moment later. Confirmed live on this exact deployment: Render's own
+// free-tier instance ALSO spins down after inactivity and takes up to ~50s
+// to wake, so a boot that follows a real idle period can face both delays
+// stacked — the previous ~9s total retry budget gave up long before either
+// side was actually ready, which silently fell back to an empty local
+// mirror and made the public storefront show zero products despite the real
+// data being untouched in Postgres the whole time. Runs in the background
+// (not awaited at module scope) specifically so this generous retry budget
+// never delays the HTTP server's own startup/health-check.
+const PG_BOOT_RETRIES = 10;
+async function connectPostgresWithRetry() {
+  for (let attempt = 1; attempt <= PG_BOOT_RETRIES; attempt++) {
+    try {
+      await loadPostgresIntoSqlite();
+      return;
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      if (attempt < PG_BOOT_RETRIES) {
+        const delayMs = Math.min(attempt * 3000, 15000);
+        console.warn(`Postgres mirror load failed (attempt ${attempt}/${PG_BOOT_RETRIES}), retrying in ${delayMs}ms. Cause: ${cause}`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      } else {
+        console.error(
+          "Postgres mirror failed to initialize after retries — continuing on local SQLite only. " +
+            "Data will NOT persist across restarts until this is fixed. " +
+            `Cause: ${cause}`,
+        );
+        pgPool = null;
+      }
     }
   }
 }
+void connectPostgresWithRetry();
 
 function nowIso() {
   return new Date().toISOString();
@@ -1152,6 +1169,7 @@ export function createProject(data: {
     duration_mode: data.durationMode === "auto" ? "auto" : "fixed",
     output_path: null,
     error_message: null,
+    thumbnail_path: null,
     product_id: data.productId ?? null,
     content_queue_row: data.contentQueueRow ?? null,
     // Explicit mode wins; otherwise infer from whether a product was attached
@@ -1439,7 +1457,7 @@ export function deleteProductsByIds(ownerEmail: string, ids: string[]): number {
  *  "Sheet has nothing new to say about this field" rather than "clear it". */
 export function upsertProductFromSheet(ownerEmail: string, sheet: {
   item_id: string;
-  product_name: string;
+  product_name?: string;
   shop_name?: string;
   original_url?: string;
   affiliate_url?: string;
@@ -1455,7 +1473,15 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
     const updated = nowIso();
     const merged: ProductRecord = {
       ...existing,
-      product_name: sheet.product_name,
+      // Treated the same as shop_name/price_reference/image_url/category
+      // below: a blank Sheet cell must NOT blow away a name the app already
+      // fetched from Shopee (product_name is fillable/enrichable, same as
+      // those — see SheetRowFill's own product_name comment in
+      // product-sheet-sync.ts). Confirmed as a real bug via a live test: an
+      // auto-fetched name got silently wiped back to "" on the very next
+      // sync because this line used to overwrite unconditionally instead of
+      // falling back to the existing value like every other field here does.
+      product_name: sheet.product_name ?? existing.product_name,
       shop_name: sheet.shop_name ?? existing.shop_name,
       original_url: sheet.original_url ?? null,
       affiliate_url: sheet.affiliate_url ?? null,
@@ -1477,7 +1503,9 @@ export function upsertProductFromSheet(ownerEmail: string, sheet: {
   return createProduct({
     ownerEmail,
     itemId: sheet.item_id,
-    productName: sheet.product_name,
+    // No "existing" row to fall back to here — a brand-new row with no
+    // name yet on the Sheet just starts blank, same as before.
+    productName: sheet.product_name ?? "",
     shopName: sheet.shop_name,
     originalUrl: sheet.original_url,
     affiliateUrl: sheet.affiliate_url,
@@ -2039,7 +2067,7 @@ export function deleteClipsForAsset(assetId: string) {
   void pgExec("DELETE FROM timeline_clips WHERE source_asset_id = $1", [assetId]);
 }
 
-export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "voice_pitch" | "voice_volume" | "voice_2_id" | "voice_2_name" | "aspect_ratio" | "target_duration_sec" | "output_path" | "error_message">>) {
+export function updateProject(projectId: string, data: Partial<Pick<ProjectRecord, "title" | "topic" | "status" | "voice_id" | "voice_name" | "voice_speed" | "voice_pitch" | "voice_volume" | "voice_2_id" | "voice_2_name" | "aspect_ratio" | "target_duration_sec" | "output_path" | "error_message" | "thumbnail_path">>) {
   const current = getProject(projectId);
   if (!current) return;
   // voice_2_id/voice_2_name use "key present in data" rather than "??" so a
@@ -2050,7 +2078,7 @@ export function updateProject(projectId: string, data: Partial<Pick<ProjectRecor
   const voice2Name = "voice_2_name" in data ? data.voice_2_name ?? null : current.voice_2_name;
   db.prepare(`
     UPDATE projects
-    SET title = ?, topic = ?, status = ?, voice_id = ?, voice_name = ?, voice_speed = ?, voice_pitch = ?, voice_volume = ?, voice_2_id = ?, voice_2_name = ?, aspect_ratio = ?, target_duration_sec = ?, output_path = ?, error_message = ?, updated_at = ?
+    SET title = ?, topic = ?, status = ?, voice_id = ?, voice_name = ?, voice_speed = ?, voice_pitch = ?, voice_volume = ?, voice_2_id = ?, voice_2_name = ?, aspect_ratio = ?, target_duration_sec = ?, output_path = ?, error_message = ?, thumbnail_path = ?, updated_at = ?
     WHERE id = ?
   `).run(
     data.title ?? current.title,
@@ -2067,6 +2095,7 @@ export function updateProject(projectId: string, data: Partial<Pick<ProjectRecor
     data.target_duration_sec ?? current.target_duration_sec,
     data.output_path ?? current.output_path,
     data.error_message ?? current.error_message,
+    data.thumbnail_path ?? current.thumbnail_path,
     nowIso(),
     projectId,
   );
@@ -2101,6 +2130,12 @@ export function deleteProject(projectId: string): AssetRecord[] {
 export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecord, "id" | "project_id" | "created_at" | "updated_at">>) {
   const current = getRenderJob(jobId);
   if (!current) return;
+  // video_path uses "key present in data" rather than "??" so a caller can
+  // explicitly pass null to clear it (deleting just the exported video to
+  // free storage while keeping the render job's history/cache intact) —
+  // "??" would treat an explicit null the same as "not provided" and
+  // silently keep the old path instead of clearing it.
+  const videoPath = "video_path" in data ? data.video_path ?? null : current.video_path;
   db.prepare(`
     UPDATE render_jobs
     SET status = ?, progress = ?, current_step = ?, output_dir = ?, script_path = ?, video_path = ?, audio_path = ?,
@@ -2112,7 +2147,7 @@ export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecor
     data.current_step ?? current.current_step,
     data.output_dir ?? current.output_dir,
     data.script_path ?? current.script_path,
-    data.video_path ?? current.video_path,
+    videoPath,
     data.audio_path ?? current.audio_path,
     data.error_message ?? current.error_message,
     data.started_at ?? current.started_at,
@@ -2386,7 +2421,13 @@ export function isUserFile(ownerEmail: string, filePath: string): boolean {
       )
     LIMIT 1
   `).get(ownerEmail, filePath, filePath, filePath, filePath);
-  return Boolean(job);
+  if (job) return true;
+
+  const project = db.prepare(`
+    SELECT id FROM projects WHERE owner_email = ? AND (output_path = ? OR thumbnail_path = ?)
+    LIMIT 1
+  `).get(ownerEmail, filePath, filePath);
+  return Boolean(project);
 }
 
 export function listUserStoragePaths(ownerEmail: string): string[] {

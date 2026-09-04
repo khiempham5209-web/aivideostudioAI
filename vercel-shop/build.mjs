@@ -24,7 +24,19 @@ async function fetchProductsWithRetry(maxAttempts = 5, delayMs = 8000) {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       if (!data.ok) throw new Error(data.error || "API returned ok:false");
-      return data.products ?? [];
+      const products = data.products ?? [];
+      // A real incident: Render answered 200 with ok:true but products:[]
+      // because ITS OWN database connection was down at that moment (not
+      // because the shop genuinely has zero products) — that's a valid HTTP
+      // response, so it never hit the catch/retry below, and got baked
+      // straight into the static file, wiping the live site blank. This
+      // store always has real products, so an empty result here is always
+      // suspicious, never a legitimate state — treat it as a failure so it
+      // retries (giving Render's own backend time to recover), and if it's
+      // still empty after every retry, throw so main() below aborts the
+      // build entirely rather than publish an empty catalog.
+      if (products.length === 0) throw new Error("API returned 0 products (likely the backend's own DB isn't connected right now)");
+      return products;
     } catch (error) {
       const isLast = attempt === maxAttempts;
       console.warn(`[build] fetch products attempt ${attempt}/${maxAttempts} failed: ${error.message}`);

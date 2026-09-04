@@ -21,7 +21,16 @@ def main():
     text = sys.stdin.buffer.read().decode("utf-8")
 
     client = get_client()
-    audio = client.infer(text, voice=voice_name)
+    # VieNeu-TTS samples speech tokens autoregressively (temperature=0.8
+    # default) — every infer() call is an independent random draw, so two
+    # scenes read back to back with the same voice preset can still land on
+    # noticeably different prosody/energy ("lạc tone" — reported directly by
+    # a real user hearing two adjacent lines sound like different moods).
+    # Lowering temperature tightens that per-call variance toward the
+    # model's most likely (average) rendering, trading a little expressive
+    # range for take-to-take consistency, without touching pronunciation
+    # accuracy (that's governed by the reference voice codes, not sampling).
+    audio = client.infer(text, voice=voice_name, temperature=0.5)
     client.save(audio, output_path)
 
 if __name__ == "__main__":

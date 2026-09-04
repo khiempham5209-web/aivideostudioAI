@@ -70,8 +70,6 @@ export interface TimelineRenderResult {
  * `drawtext`; Subtitle clips are written to an .srt and burned in via the
  * same subtitle filter used by the scene-based pipeline; Voice/Music/SFX
  * clips are delayed to their start_time and mixed with `amix`.
- *
- * Rotation is stored on the clip but not yet applied at render time (v1).
  */
 export async function renderProjectTimeline(
   projectId: string,
@@ -218,17 +216,27 @@ async function renderVisualComposite(
       fadeInDur > 0 ? `fade=t=in:st=${startExpr}:d=${fadeInDur.toFixed(3)}:alpha=1` : "",
       fadeOutDur > 0 ? `fade=t=out:st=${(endTimeNum - fadeOutDur).toFixed(3)}:d=${fadeOutDur.toFixed(3)}:alpha=1` : "",
     ].filter(Boolean).map((f) => `,${f}`).join("");
+    // Rotation was stored on the clip and shown in the editor's live preview
+    // (CSS transform there) but never applied here, so the exported video
+    // never matched what the editor showed for a rotated clip. Matches the
+    // preview's own convention — rotates in place within the clip's own
+    // scaled box (ow/oh unchanged), exposed corners transparent — rather
+    // than growing the frame to fit the rotated bounding box.
+    const rotationDeg = Number(clip.rotation) || 0;
+    const rotateStep = rotationDeg !== 0
+      ? `,rotate=${(rotationDeg * Math.PI / 180).toFixed(6)}:ow=${scaledW}:oh=${scaledH}:c=black@0`
+      : "";
 
     if (asset.type === "image") {
       filterParts.push(
-        `[${idx}:v]scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity},` +
+        `[${idx}:v]scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity}${rotateStep},` +
           `trim=duration=${clip.duration.toFixed(3)},setpts=PTS-STARTPTS+${startExpr}/TB${fadeSteps}[${label}]`,
       );
     } else {
       const sourceSpan = clip.duration * speed;
       filterParts.push(
         `[${idx}:v]trim=${trimIn.toFixed(3)}:${(trimIn + sourceSpan).toFixed(3)},setpts=(PTS-STARTPTS)/${speed}+${startExpr}/TB,` +
-          `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity}${fadeSteps}[${label}]`,
+          `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease,setsar=1,format=rgba,colorchannelmixer=aa=${opacity}${rotateStep}${fadeSteps}[${label}]`,
       );
     }
 
