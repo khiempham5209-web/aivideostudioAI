@@ -43,6 +43,7 @@ import {
   getLocalAuth,
   setLocalAuthPassword,
   setLocalAuthTotp,
+  deleteLocalAuth,
   createDeviceToken,
   getDeviceTokenEmail,
   addProjectScene,
@@ -2518,6 +2519,23 @@ async function handleListLocalAccounts(req: IncomingMessage, res: ServerResponse
   sendJson(res, 200, { ok: true, accounts: listLocalAuthAccounts() });
 }
 
+/** Removes an entry from the account picker (password/TOTP credential
+ *  only — the account's projects/products stay untouched under
+ *  users/projects and reappear if the same email is set up again).
+ *  Deliberately no session required, same reasoning as setup-password: this
+ *  IS the screen a locked-out user reaches for, so requiring a login first
+ *  would defeat the point — still gated by ALLOWED_EMAILS. */
+async function handleDeleteLocalAccount(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJsonBody(req);
+  const email = String((body as { email?: unknown }).email ?? "").trim().toLowerCase();
+  if (!email || !isAllowedEmail(email)) {
+    sendJson(res, 403, { error: "Email này không được phép dùng app" });
+    return;
+  }
+  deleteLocalAuth(email);
+  sendJson(res, 200, { ok: true });
+}
+
 /** First-time setup or reset: (re)sets a self-chosen password for an
  *  allowed email. Deliberately does not require an existing session — this
  *  IS how a user first gets one — but still gated by ALLOWED_EMAILS so a
@@ -2943,6 +2961,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === "GET" && url.pathname === "/api/auth/local/accounts") {
       await handleListLocalAccounts(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/local/delete-account") {
+      await handleDeleteLocalAccount(req, res);
       return;
     }
 

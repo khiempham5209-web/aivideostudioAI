@@ -2476,18 +2476,35 @@
           list.innerHTML = accounts
             .map(
               (a) => `
-              <button type="button" class="btn local-account-row" data-email="${a.email}" data-has-password="${a.has_password}" data-has-totp="${a.has_totp}" data-display-name="${a.display_name}"
-                style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;">
-                <div class="logo" style="width:32px;height:32px;font-size:14px;flex-shrink:0;">${(a.display_name || a.email)[0].toUpperCase()}</div>
-                <div style="overflow:hidden;">
-                  <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display_name}</div>
-                  <div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.email}</div>
-                </div>
-              </button>`,
+              <div style="display:flex;align-items:stretch;gap:6px;">
+                <button type="button" class="btn local-account-row" data-email="${a.email}" data-has-password="${a.has_password}" data-has-totp="${a.has_totp}" data-display-name="${a.display_name}"
+                  style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;">
+                  <div class="logo" style="width:32px;height:32px;font-size:14px;flex-shrink:0;">${(a.display_name || a.email)[0].toUpperCase()}</div>
+                  <div style="overflow:hidden;">
+                    <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display_name}</div>
+                    <div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.email}</div>
+                  </div>
+                </button>
+                <button type="button" class="btn local-account-delete" data-email="${a.email}" title="Xoá tài khoản này khỏi danh sách"
+                  style="flex-shrink:0;width:40px;color:#f87171;">✕</button>
+              </div>`,
             )
             .join("");
           list.querySelectorAll(".local-account-row").forEach((row) => {
             row.addEventListener("click", () => openLocalAuthView(row.dataset));
+          });
+          list.querySelectorAll(".local-account-delete").forEach((btn) => {
+            btn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              const email = btn.dataset.email;
+              if (!confirm(`Xoá tài khoản đăng nhập ${email} khỏi danh sách này?\n\nCác dự án/sản phẩm của tài khoản này KHÔNG bị mất — chỉ xoá mục đăng nhập, có thể thêm lại sau.`)) return;
+              try {
+                await api("/api/auth/local/delete-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+                await loadLocalAccounts();
+              } catch (error) {
+                showError(error);
+              }
+            });
           });
         } catch {
           // Best-effort — the picker just stays empty; Google/dev-login fallback still works.

@@ -2290,6 +2290,17 @@ export function setLocalAuthTotp(email: string, displayName: string, totpSecret:
   return upsertLocalAuth(email, displayName, { totp_secret: totpSecret });
 }
 
+/** Removes a login entry from the account picker — only the password/TOTP
+ *  credential row, not the user's actual projects/products (those stay
+ *  under `users`/`projects` etc., untouched, matched by owner_email; the
+ *  account can be re-added later with a fresh password or QR code and will
+ *  see the same data again). */
+export function deleteLocalAuth(email: string): boolean {
+  const result = db.prepare("DELETE FROM local_auth WHERE email = ?").run(email);
+  if ((result.changes ?? 0) > 0) void pgExec("DELETE FROM local_auth WHERE email = $1", [email]);
+  return (result.changes ?? 0) > 0;
+}
+
 export function getSession(sessionId: string): (SessionRecord & { name: string; picture: string | null }) | undefined {
   const session = db.prepare(`
     SELECT sessions.*, users.name, users.picture
