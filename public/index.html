@@ -2490,9 +2490,10 @@
                     </div>
                   </button>
                   <button type="button" class="btn local-account-toggle" data-email="${a.email}" title="Tuỳ chọn khác"
-                    style="flex-shrink:0;width:36px;">⌄</button>
+                    style="flex-shrink:0;width:36px;">›</button>
                 </div>
-                <div class="local-account-extra" data-email="${a.email}" style="display:none;padding-top:6px;">
+                <div class="local-account-extra" data-email="${a.email}" data-display-name="${a.display_name}" style="display:none;padding-top:6px;flex-direction:column;gap:6px;">
+                  <button type="button" class="btn local-account-reset" data-email="${a.email}" style="width:100%;">🔑 Đặt lại mật khẩu / mã QR</button>
                   <button type="button" class="btn local-account-delete" data-email="${a.email}" style="width:100%;color:#f87171;">🗑 Xoá tài khoản này khỏi danh sách</button>
                 </div>
               </div>`,
@@ -2506,8 +2507,15 @@
               e.stopPropagation();
               const extra = list.querySelector(`.local-account-extra[data-email="${btn.dataset.email}"]`);
               const isOpen = extra.style.display !== "none";
-              extra.style.display = isOpen ? "none" : "block";
-              btn.textContent = isOpen ? "⌄" : "⌃";
+              extra.style.display = isOpen ? "none" : "flex";
+              btn.textContent = isOpen ? "›" : "⌄";
+            });
+          });
+          list.querySelectorAll(".local-account-reset").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const extra = btn.closest(".local-account-extra");
+              openResetView(btn.dataset.email, extra.dataset.displayName, null);
             });
           });
           list.querySelectorAll(".local-account-delete").forEach((btn) => {
@@ -2615,11 +2623,7 @@
       // setup-totp endpoints an existing account already goes through
       // (they overwrite, not just create), just pre-filled so the user
       // doesn't have to retype the email by hand via "+ Thêm tài khoản khác".
-      $("#localAuthResetLink")?.addEventListener("click", (e) => {
-        e.preventDefault();
-        const email = $("#localAccountAuthView").dataset.email;
-        const displayName = $("#localAuthEmailLabel").textContent;
-        const activeMethod = $("#localAuthMethodTabs button.active")?.dataset.method || "password";
+      function openResetView(email, displayName, method) {
         $("#localAccountPickerView").style.display = "none";
         $("#localAccountAuthView").style.display = "none";
         $("#localAddAccountView").style.display = "block";
@@ -2627,7 +2631,14 @@
         $("#localNewDisplayName").value = displayName || "";
         $("#localSetupPassword").value = "";
         $("#localQrDisplay").style.display = "none";
-        setLocalSetupMethod(activeMethod);
+        setLocalSetupMethod(method || "password");
+      }
+      $("#localAuthResetLink")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        const email = $("#localAccountAuthView").dataset.email;
+        const displayName = $("#localAuthEmailLabel").textContent;
+        const activeMethod = $("#localAuthMethodTabs button.active")?.dataset.method || "password";
+        openResetView(email, displayName, activeMethod);
       });
 
       // Guards against exactly the typo that once split one person's data
