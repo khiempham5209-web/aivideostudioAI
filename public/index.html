@@ -1316,6 +1316,9 @@
               <input id="localAuthTotpInput" type="text" inputmode="numeric" maxlength="6" placeholder="123456" />
               <button class="btn primary" id="localAuthTotpSubmit" type="button">Đăng nhập</button>
             </div>
+            <p class="tiny muted" style="margin-top:14px;text-align:center;">
+              Quên mật khẩu / mất mã QR? <a href="#" id="localAuthResetLink" style="color:inherit;text-decoration:underline;">Đặt lại tại đây</a>
+            </p>
           </div>
           <div id="localAddAccountView" style="display:none;">
             <button class="btn" id="localAddBackButton" type="button" style="margin-bottom:12px;">← Quay lại</button>
@@ -2476,22 +2479,36 @@
           list.innerHTML = accounts
             .map(
               (a) => `
-              <div style="display:flex;align-items:stretch;gap:6px;">
-                <button type="button" class="btn local-account-row" data-email="${a.email}" data-has-password="${a.has_password}" data-has-totp="${a.has_totp}" data-display-name="${a.display_name}"
-                  style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;">
-                  <div class="logo" style="width:32px;height:32px;font-size:14px;flex-shrink:0;">${(a.display_name || a.email)[0].toUpperCase()}</div>
-                  <div style="overflow:hidden;">
-                    <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display_name}</div>
-                    <div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.email}</div>
-                  </div>
-                </button>
-                <button type="button" class="btn local-account-delete" data-email="${a.email}" title="Xoá tài khoản này khỏi danh sách"
-                  style="flex-shrink:0;width:40px;color:#f87171;">✕</button>
+              <div class="local-account-item">
+                <div style="display:flex;align-items:stretch;gap:6px;">
+                  <button type="button" class="btn local-account-row" data-email="${a.email}" data-has-password="${a.has_password}" data-has-totp="${a.has_totp}" data-display-name="${a.display_name}"
+                    style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;">
+                    <div class="logo" style="width:32px;height:32px;font-size:14px;flex-shrink:0;">${(a.display_name || a.email)[0].toUpperCase()}</div>
+                    <div style="overflow:hidden;">
+                      <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.display_name}</div>
+                      <div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.email}</div>
+                    </div>
+                  </button>
+                  <button type="button" class="btn local-account-toggle" data-email="${a.email}" title="Tuỳ chọn khác"
+                    style="flex-shrink:0;width:36px;">⌄</button>
+                </div>
+                <div class="local-account-extra" data-email="${a.email}" style="display:none;padding-top:6px;">
+                  <button type="button" class="btn local-account-delete" data-email="${a.email}" style="width:100%;color:#f87171;">🗑 Xoá tài khoản này khỏi danh sách</button>
+                </div>
               </div>`,
             )
             .join("");
           list.querySelectorAll(".local-account-row").forEach((row) => {
             row.addEventListener("click", () => openLocalAuthView(row.dataset));
+          });
+          list.querySelectorAll(".local-account-toggle").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const extra = list.querySelector(`.local-account-extra[data-email="${btn.dataset.email}"]`);
+              const isOpen = extra.style.display !== "none";
+              extra.style.display = isOpen ? "none" : "block";
+              btn.textContent = isOpen ? "⌄" : "⌃";
+            });
           });
           list.querySelectorAll(".local-account-delete").forEach((btn) => {
             btn.addEventListener("click", async (e) => {
@@ -2593,6 +2610,25 @@
       $("#localAuthTotpSubmit")?.addEventListener("click", () => submitLocalLogin("totp"));
       $("#localAuthPasswordInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLocalLogin("password"); });
       $("#localAuthTotpInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLocalLogin("totp"); });
+
+      // "Quên mật khẩu / mất mã QR" — reuses the same setup-password /
+      // setup-totp endpoints an existing account already goes through
+      // (they overwrite, not just create), just pre-filled so the user
+      // doesn't have to retype the email by hand via "+ Thêm tài khoản khác".
+      $("#localAuthResetLink")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        const email = $("#localAccountAuthView").dataset.email;
+        const displayName = $("#localAuthEmailLabel").textContent;
+        const activeMethod = $("#localAuthMethodTabs button.active")?.dataset.method || "password";
+        $("#localAccountPickerView").style.display = "none";
+        $("#localAccountAuthView").style.display = "none";
+        $("#localAddAccountView").style.display = "block";
+        $("#localNewEmail").value = email || "";
+        $("#localNewDisplayName").value = displayName || "";
+        $("#localSetupPassword").value = "";
+        $("#localQrDisplay").style.display = "none";
+        setLocalSetupMethod(activeMethod);
+      });
 
       // Guards against exactly the typo that once split one person's data
       // into two accounts: "khiempham5209gmail.com" (missing @) silently
