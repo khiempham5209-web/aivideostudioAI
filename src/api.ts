@@ -2347,7 +2347,7 @@ type BioProfile = {
   avatarPosition: "left" | "center";
   bgColor: string;
   accentColor: string;
-  socials: { label: string; url: string }[];
+  socials: { platform: string; label: string; url: string }[];
   showPrice: boolean;
   showName: boolean;
 };
@@ -2367,6 +2367,11 @@ const DEFAULT_BIO_PROFILE: BioProfile = {
 };
 
 const MAX_AVATAR_CHARS = 400_000;
+
+// Platform picked in the editor decides the logo on the page (more reliable
+// than guessing from the link's domain — e.g. Shopee storefront links live on
+// collshp.com). "" = older saved link, page falls back to the domain guess.
+const SOCIAL_PLATFORMS = ["tiktok", "instagram", "facebook", "youtube", "zalo", "shopee", "x", "threads", "other"];
 
 function cleanText(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -2397,7 +2402,8 @@ function sanitizeBioProfile(input: unknown): BioProfile {
     ? raw.socials
         .map((s) => {
           const item = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
-          return { label: cleanText(item.label, 40), url: cleanHttpUrl(item.url) };
+          const platform = SOCIAL_PLATFORMS.includes(item.platform as string) ? (item.platform as string) : "";
+          return { platform, label: cleanText(item.label, 40), url: cleanHttpUrl(item.url) };
         })
         .filter((s) => s.label && s.url)
         .slice(0, 12)

@@ -1786,7 +1786,7 @@
                 <label>Liên kết (TikTok, Instagram, Facebook, YouTube, Zalo…)</label>
                 <div id="bioSocialRows" class="field-stack" style="gap:8px;"></div>
                 <button class="btn" id="bioAddSocial" type="button" style="margin-top:8px;">+ Thêm liên kết</button>
-                <p class="tiny" style="margin-top:6px;">Logo tự gắn theo link (TikTok, Instagram, Facebook, YouTube, Zalo, Shopee, X, Threads). Dòng nào thiếu tên hoặc link sẽ bị bỏ qua.</p>
+                <p class="tiny" style="margin-top:6px;">Chọn nền tảng là có logo đúng; nền tảng khác thì chọn "Khác" rồi tự đặt tên. Dòng nào thiếu tên hoặc link sẽ bị bỏ qua.</p>
               </div>
               <p class="tiny" id="bioEditorStatus"></p>
             </div>
@@ -2362,12 +2362,60 @@
           : escBio(($("#bioName").value || "?").trim().charAt(0).toUpperCase() || "?");
       }
 
-      function addBioSocialRow(label = "", url = "") {
+      // Nền tảng chọn sẵn: chọn là có logo + tên đúng; "Khác" thì tự đặt tên.
+      const BIO_PLATFORMS = [
+        { key: "tiktok", name: "TikTok", hint: "https://www.tiktok.com/@..." },
+        { key: "shopee", name: "Shopee", hint: "https://collshp.com/... hoặc https://shopee.vn/..." },
+        { key: "facebook", name: "Facebook", hint: "https://www.facebook.com/..." },
+        { key: "instagram", name: "Instagram", hint: "https://www.instagram.com/..." },
+        { key: "youtube", name: "YouTube", hint: "https://www.youtube.com/@..." },
+        { key: "zalo", name: "Zalo", hint: "https://zalo.me/..." },
+        { key: "threads", name: "Threads", hint: "https://www.threads.net/@..." },
+        { key: "x", name: "X (Twitter)", hint: "https://x.com/..." },
+        { key: "other", name: "Khác (tự đặt tên)", hint: "https://..." },
+      ];
+
+      function guessBioPlatform(url) {
+        let host = "";
+        try { host = new URL(url).hostname.toLowerCase(); } catch {}
+        if (/tiktok\./.test(host)) return "tiktok";
+        if (/shopee\.|collshp\.|shp\.ee|shope\.ee/.test(host)) return "shopee";
+        if (/facebook\.|(^|\.)fb\./.test(host)) return "facebook";
+        if (/instagram\./.test(host)) return "instagram";
+        if (/youtube\.|youtu\.be/.test(host)) return "youtube";
+        if (/zalo\./.test(host)) return "zalo";
+        if (/threads\./.test(host)) return "threads";
+        if (/(^|\.)x\.com$|twitter\./.test(host)) return "x";
+        return "other";
+      }
+
+      function addBioSocialRow(label = "", url = "", platform = "") {
+        const key = platform || (url ? guessBioPlatform(url) : "tiktok");
         const row = document.createElement("div");
-        row.style.cssText = "display:flex;gap:8px;";
-        row.innerHTML = `<input class="bio-social-label" placeholder="Tên (vd TikTok)" maxlength="40" style="flex:0 0 32%;" value="${escBio(label)}" />`
-          + `<input class="bio-social-url" placeholder="https://www.tiktok.com/@..." style="flex:1;" value="${escBio(url)}" />`
+        row.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;";
+        row.innerHTML = `<select class="bio-social-platform" style="flex:0 0 150px;">${BIO_PLATFORMS.map((p) => `<option value="${p.key}"${p.key === key ? " selected" : ""}>${escBio(p.name)}</option>`).join("")}</select>`
+          + `<input class="bio-social-label" placeholder="Tên hiển thị" maxlength="40" style="flex:0 0 130px;" value="${escBio(label)}" />`
+          + `<input class="bio-social-url" style="flex:1 1 200px;min-width:0;" value="${escBio(url)}" />`
           + `<button class="btn" type="button" title="Xoá dòng này">✕</button>`;
+        const select = row.querySelector(".bio-social-platform");
+        const labelInput = row.querySelector(".bio-social-label");
+        const urlInput = row.querySelector(".bio-social-url");
+        const platformName = (k) => {
+          const p = BIO_PLATFORMS.find((x) => x.key === k);
+          return k === "other" || !p ? "" : p.name.replace(/ \(.*\)$/, "");
+        };
+        const sync = (previousKey) => {
+          const p = BIO_PLATFORMS.find((x) => x.key === select.value);
+          urlInput.placeholder = p ? p.hint : "https://...";
+          // Tên trống hoặc đang là tên nền tảng cũ thì tự đổi theo nền tảng mới;
+          // tên bạn tự gõ thì giữ nguyên.
+          const current = labelInput.value.trim();
+          if (!current || current === platformName(previousKey)) labelInput.value = platformName(select.value);
+          if (select.value === "other" && !labelInput.value) labelInput.focus();
+        };
+        let lastKey = select.value;
+        select.addEventListener("change", () => { sync(lastKey); lastKey = select.value; });
+        sync("");
         row.querySelector("button").addEventListener("click", () => row.remove());
         $("#bioSocialRows").appendChild(row);
       }
@@ -2387,8 +2435,8 @@
         $("#bioShowName").checked = p.showName !== false;
         $("#bioShowPrice").checked = p.showPrice !== false;
         $("#bioSocialRows").innerHTML = "";
-        const socials = p.socials && p.socials.length ? p.socials : [{ label: "TikTok", url: "" }];
-        socials.forEach((sItem) => addBioSocialRow(sItem.label, sItem.url));
+        const socials = p.socials && p.socials.length ? p.socials : [{ platform: "tiktok", label: "TikTok", url: "" }];
+        socials.forEach((sItem) => addBioSocialRow(sItem.label, sItem.url, sItem.platform));
         renderBioAvatarPreview();
       }
 
@@ -2405,6 +2453,7 @@
           showName: $("#bioShowName").checked,
           showPrice: $("#bioShowPrice").checked,
           socials: $$("#bioSocialRows > div").map((row) => ({
+            platform: row.querySelector(".bio-social-platform").value,
             label: row.querySelector(".bio-social-label").value.trim(),
             url: row.querySelector(".bio-social-url").value.trim(),
           })).filter((sItem) => sItem.label || sItem.url),
