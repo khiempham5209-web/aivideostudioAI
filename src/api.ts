@@ -97,6 +97,8 @@ import {
   incrementProductClicks,
   logPageView,
   getPageViewCount,
+  getSiteSetting,
+  setSiteSetting,
   deletePostgresProductsById,
   createProduct,
   updateProduct,
@@ -2330,7 +2332,38 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
     pinned: p.pinned,
     pinned_at: p.pinned_at,
   }));
-  sendJson(res, 200, { ok: true, products });
+  sendJson(res, 200, { ok: true, products, shopView: await getShopView() });
+}
+
+// Which layout hukiai258.com shows — toggled by the owner from the Kho sản
+// phẩm page. "catalog" = the full category/filter storefront, "bio" = the
+// compact link-in-bio grid. Same single domain either way.
+const SHOP_VIEWS = ["catalog", "bio"] as const;
+type ShopView = (typeof SHOP_VIEWS)[number];
+
+async function getShopView(): Promise<ShopView> {
+  const value = await getSiteSetting("shop_view");
+  return SHOP_VIEWS.includes(value as ShopView) ? (value as ShopView) : "catalog";
+}
+
+async function handleGetShopSettings(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  sendJson(res, 200, { ok: true, shopView: await getShopView() });
+}
+
+async function handleUpdateShopSettings(req: IncomingMessage, res: ServerResponse) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const body = (await readJsonBody(req).catch(() => ({}))) as { shopView?: unknown };
+  if (!SHOP_VIEWS.includes(body.shopView as ShopView)) {
+    sendJson(res, 400, { error: `shopView phải là một trong: ${SHOP_VIEWS.join(", ")}` });
+    return;
+  }
+  await setSiteSetting("shop_view", body.shopView as ShopView);
+  sendJson(res, 200, { ok: true, shopView: body.shopView });
+  // The static mirror bakes shopView into products.json, so rebuild it.
+  void triggerVercelShopRebuild();
 }
 
 async function handlePublicProductClick(_req: IncomingMessage, res: ServerResponse, productId: string) {
@@ -3447,6 +3480,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     }
     if (req.method === "GET" && url.pathname === "/api/site-stats") {
       await handleGetSiteStats(req, res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/shop-settings") {
+      await handleGetShopSettings(req, res);
+      return;
+    }
+    if (req.method === "PUT" && url.pathname === "/api/shop-settings") {
+      await handleUpdateShopSettings(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/shop-snapshot-status") {

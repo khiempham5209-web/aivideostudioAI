@@ -1724,6 +1724,14 @@
 
           <div id="productsTabPanel">
             <div class="top-actions" style="margin-bottom:12px;align-items:center;"><button class="btn" id="syncProductsButton" type="button">🔄 Đồng bộ Google Sheet</button><button class="btn" id="autoFetchImagesButton" type="button">🖼️ Tự động lấy thông tin</button><button class="btn primary" id="addProductButton" type="button">+ Thêm sản phẩm</button><span class="tiny" id="siteVisitCount" style="margin-left:auto;opacity:0.8;"></span><span class="tiny" id="shopSnapshotStatus" style="opacity:0.8;"></span></div>
+            <div class="top-actions" style="margin-bottom:12px;align-items:center;gap:10px;">
+              <span class="tiny" style="font-weight:600;">🌐 Giao diện web hukiai258.com:</span>
+              <div class="segmented" id="shopViewPicker" style="margin:0;">
+                <button type="button" data-view="catalog">🗂️ Danh mục</button>
+                <button type="button" data-view="bio">🔗 Rút gọn</button>
+              </div>
+              <span class="tiny" id="shopViewStatus" style="opacity:0.8;"></span>
+            </div>
             <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
             <div class="grid" id="productList" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
               <div class="empty">Chưa có sản phẩm nào — bấm "Đồng bộ Google Sheet" hoặc "+ Thêm sản phẩm".</div>
@@ -2261,7 +2269,35 @@
           if (el && typeof data.totalVisits === "number") el.textContent = `👁️ ${data.totalVisits.toLocaleString("en-US")} lượt vào web`;
         }).catch(() => {});
         loadShopSnapshotStatus();
+        loadShopView();
       }
+
+      // Công tắc chọn màn của hukiai258.com — cùng 1 tên miền, chủ shop bật
+      // "Danh mục" (đầy đủ, có lọc) hoặc "Rút gọn" (kiểu link in bio).
+      function showShopView(view) {
+        $$("#shopViewPicker button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      }
+      function loadShopView() {
+        api("/api/shop-settings").then((data) => showShopView(data.shopView || "catalog")).catch(() => {});
+      }
+      $("#shopViewPicker")?.addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-view]");
+        if (!btn) return;
+        const status = $("#shopViewStatus");
+        status.textContent = "Đang lưu...";
+        try {
+          const data = await api("/api/shop-settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ shopView: btn.dataset.view }),
+          });
+          showShopView(data.shopView);
+          status.textContent = "✅ Đã lưu — web đổi giao diện sau khoảng 1-2 phút.";
+        } catch (error) {
+          loadShopView();
+          status.textContent = `❌ Không lưu được: ${error.error || error.message || error}`;
+        }
+      });
 
       // Shows when the hukiai258.com static mirror was last rebuilt — admin-only
       // (fetched server-side via our own backend, never shown on the public

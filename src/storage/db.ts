@@ -477,6 +477,12 @@ db.exec(`
     visited_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS timeline_clips (
     id TEXT PRIMARY KEY,
     track_id TEXT NOT NULL,
@@ -889,6 +895,14 @@ async function initPostgresMirror() {
         visited_at TEXT NOT NULL
       )`,
     },
+    {
+      label: "site_settings",
+      sql: `CREATE TABLE IF NOT EXISTS site_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
     { label: "products.image_url", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT` },
     { label: "products.category", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT` },
     { label: "products.rating", sql: `ALTER TABLE products ADD COLUMN IF NOT EXISTS rating TEXT` },
@@ -1295,6 +1309,37 @@ export async function getPageViewCount(): Promise<number> {
   }
   const row = db.prepare("SELECT COUNT(*) AS count FROM page_views").get() as { count: number };
   return row.count;
+}
+
+/** Global (not per-user) settings for the public storefront, e.g. which
+ *  layout hukiai258.com shows ("catalog" vs the link-in-bio "bio" view).
+ *  Same live-Postgres-first read as listPublicProductsLive: the process that
+ *  answers the public request may not be the one the owner toggled it on. */
+export async function getSiteSetting(key: string): Promise<string | null> {
+  const pool = pgPool;
+  if (pool) {
+    try {
+      const result = await pool.query("SELECT value FROM site_settings WHERE key = $1", [key]);
+      if (result.rows[0]) return String(result.rows[0].value);
+    } catch (error) {
+      console.warn("Live Postgres site-setting read failed, falling back to local mirror:", error instanceof Error ? error.message : String(error));
+    }
+  }
+  const row = db.prepare("SELECT value FROM site_settings WHERE key = ?").get(key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export async function setSiteSetting(key: string, value: string): Promise<void> {
+  const updatedAt = nowIso();
+  db.prepare(
+    "INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+  ).run(key, value, updatedAt);
+  // Awaited (unlike most mirror writes) so the static-site rebuild that the
+  // caller triggers right after reads the new value, not the old one.
+  await pgExec(
+    "INSERT INTO site_settings (key, value, updated_at) VALUES ($1, $2, $3) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at",
+    [key, value, updatedAt],
+  );
 }
 
 export function createProduct(data: {
