@@ -1730,6 +1730,7 @@
                 <button type="button" data-view="catalog">🗂️ Danh mục</button>
                 <button type="button" data-view="bio">🔗 Rút gọn</button>
               </div>
+              <button class="btn" id="openBioEditorButton" type="button">⚙️ Tùy chỉnh trang Rút gọn</button>
               <span class="tiny" id="shopViewStatus" style="opacity:0.8;"></span>
             </div>
             <div class="empty" id="productSyncStatus" style="text-align:left;margin-bottom:12px;display:none;"></div>
@@ -1747,6 +1748,54 @@
             </div>
           </div>
         </section>
+
+        <div class="modal-backdrop" id="bioEditorModal">
+          <section class="modal">
+            <div class="panel-head">
+              <div><h3>Tùy chỉnh trang Rút gọn</h3><p class="tiny">Phần đầu trang hukiai258.com khi bật giao diện "Rút gọn". Lưu xong web cập nhật sau khoảng 1-2 phút.</p></div>
+              <button class="btn" id="closeBioEditorButton" type="button">Đóng</button>
+            </div>
+            <div class="panel-body field-stack">
+              <div>
+                <label>Ảnh đại diện</label>
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div id="bioAvatarPreview" style="flex:0 0 auto;width:64px;height:64px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#fff;background:linear-gradient(135deg,#7c3aed,#ec4899);"></div>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    <label class="btn" style="cursor:pointer;margin:0;">📁 Chọn ảnh từ máy<input id="bioAvatarFile" type="file" accept="image/*" style="display:none;" /></label>
+                    <button class="btn" id="bioAvatarClear" type="button">Xoá ảnh</button>
+                  </div>
+                </div>
+                <input id="bioAvatarUrl" placeholder="…hoặc dán link ảnh (https://...)" style="margin-top:8px;" />
+              </div>
+              <div><label>Vị trí ảnh đại diện</label>
+                <select id="bioAvatarPosition"><option value="left">Góc trái (chữ bên phải)</option><option value="center">Ở giữa</option></select>
+              </div>
+              <div><label>Tên hiển thị</label><input id="bioName" maxlength="60" placeholder="hukiai258" /></div>
+              <div><label>ID (hiện dạng @id)</label><input id="bioHandle" maxlength="40" placeholder="hukiai258" /></div>
+              <div><label>Giới thiệu</label><textarea id="bioText" maxlength="300" placeholder="Đồ mình dùng & review ở đây nha ✨"></textarea></div>
+              <div><label>Tag (cách nhau bằng dấu phẩy)</label><input id="bioTags" placeholder="review, skincare, đồ gia dụng" /></div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                <label><input type="checkbox" id="bioShowName" checked /> Hiện tên sản phẩm</label>
+                <label><input type="checkbox" id="bioShowPrice" checked /> Hiện giá</label>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                <div><label><input type="checkbox" id="bioBgCustom" /> Màu nền riêng</label><input type="color" id="bioBgColor" value="#0a0d14" style="width:80px;height:36px;padding:2px;" /></div>
+                <div><label><input type="checkbox" id="bioAccentCustom" /> Màu nhấn (giá, tag)</label><input type="color" id="bioAccentColor" value="#7c3aed" style="width:80px;height:36px;padding:2px;" /></div>
+              </div>
+              <div>
+                <label>Liên kết (TikTok, Instagram, Facebook, YouTube, Zalo…)</label>
+                <div id="bioSocialRows" class="field-stack" style="gap:8px;"></div>
+                <button class="btn" id="bioAddSocial" type="button" style="margin-top:8px;">+ Thêm liên kết</button>
+                <p class="tiny" style="margin-top:6px;">Icon tự gắn theo link (tiktok.com → 🎵, instagram.com → 📸…). Dòng nào thiếu tên hoặc link sẽ bị bỏ qua.</p>
+              </div>
+              <p class="tiny" id="bioEditorStatus"></p>
+            </div>
+            <footer>
+              <a class="btn" href="https://hukiai258.com/?view=bio" target="_blank" rel="noopener">👀 Xem trang</a>
+              <button class="btn primary" id="saveBioEditorButton" type="button">Lưu</button>
+            </footer>
+          </section>
+        </div>
 
         <div class="modal-backdrop" id="productEditorModal">
           <section class="modal">
@@ -2296,6 +2345,147 @@
         } catch (error) {
           loadShopView();
           status.textContent = `❌ Không lưu được: ${error.error || error.message || error}`;
+        }
+      });
+
+      // ===== Tùy chỉnh trang Rút gọn (phần đầu trang hukiai258.com) =====
+      let bioAvatarValue = "";
+
+      function escBio(str) {
+        return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function renderBioAvatarPreview() {
+        const box = $("#bioAvatarPreview");
+        box.innerHTML = bioAvatarValue
+          ? `<img src="${escBio(bioAvatarValue)}" alt="" style="width:100%;height:100%;object-fit:cover;" />`
+          : escBio(($("#bioName").value || "?").trim().charAt(0).toUpperCase() || "?");
+      }
+
+      function addBioSocialRow(label = "", url = "") {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;gap:8px;";
+        row.innerHTML = `<input class="bio-social-label" placeholder="Tên (vd TikTok)" maxlength="40" style="flex:0 0 32%;" value="${escBio(label)}" />`
+          + `<input class="bio-social-url" placeholder="https://www.tiktok.com/@..." style="flex:1;" value="${escBio(url)}" />`
+          + `<button class="btn" type="button" title="Xoá dòng này">✕</button>`;
+        row.querySelector("button").addEventListener("click", () => row.remove());
+        $("#bioSocialRows").appendChild(row);
+      }
+
+      function fillBioEditor(p) {
+        bioAvatarValue = p.avatar || "";
+        $("#bioAvatarUrl").value = bioAvatarValue.startsWith("data:") ? "" : bioAvatarValue;
+        $("#bioAvatarPosition").value = p.avatarPosition === "center" ? "center" : "left";
+        $("#bioName").value = p.name || "";
+        $("#bioHandle").value = p.handle || "";
+        $("#bioText").value = p.bio || "";
+        $("#bioTags").value = (p.tags || []).join(", ");
+        $("#bioBgCustom").checked = Boolean(p.bgColor);
+        if (p.bgColor) $("#bioBgColor").value = p.bgColor;
+        $("#bioAccentCustom").checked = Boolean(p.accentColor);
+        if (p.accentColor) $("#bioAccentColor").value = p.accentColor;
+        $("#bioShowName").checked = p.showName !== false;
+        $("#bioShowPrice").checked = p.showPrice !== false;
+        $("#bioSocialRows").innerHTML = "";
+        const socials = p.socials && p.socials.length ? p.socials : [{ label: "TikTok", url: "" }];
+        socials.forEach((sItem) => addBioSocialRow(sItem.label, sItem.url));
+        renderBioAvatarPreview();
+      }
+
+      function readBioEditor() {
+        return {
+          name: $("#bioName").value.trim(),
+          handle: $("#bioHandle").value.trim().replace(/^@+/, ""),
+          bio: $("#bioText").value.trim(),
+          tags: $("#bioTags").value.split(",").map((t) => t.trim().replace(/^#+/, "")).filter(Boolean),
+          avatar: bioAvatarValue,
+          avatarPosition: $("#bioAvatarPosition").value,
+          bgColor: $("#bioBgCustom").checked ? $("#bioBgColor").value : "",
+          accentColor: $("#bioAccentCustom").checked ? $("#bioAccentColor").value : "",
+          showName: $("#bioShowName").checked,
+          showPrice: $("#bioShowPrice").checked,
+          socials: $$("#bioSocialRows > div").map((row) => ({
+            label: row.querySelector(".bio-social-label").value.trim(),
+            url: row.querySelector(".bio-social-url").value.trim(),
+          })).filter((sItem) => sItem.label || sItem.url),
+        };
+      }
+
+      // Thu ảnh về 256x256 (cắt vuông giữa ảnh) để lưu gọn, tải trang nhanh.
+      function shrinkAvatar(file) {
+        return new Promise((resolveImg, rejectImg) => {
+          const reader = new FileReader();
+          reader.onerror = () => rejectImg(new Error("Không đọc được file ảnh"));
+          reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => rejectImg(new Error("File không phải ảnh hợp lệ"));
+            img.onload = () => {
+              const size = 256;
+              const side = Math.min(img.width, img.height);
+              const canvas = document.createElement("canvas");
+              canvas.width = size;
+              canvas.height = size;
+              canvas.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+              resolveImg(canvas.toDataURL("image/jpeg", 0.85));
+            };
+            img.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      $("#openBioEditorButton")?.addEventListener("click", async () => {
+        $("#bioEditorStatus").textContent = "Đang tải cấu hình...";
+        $("#bioEditorModal").classList.add("show");
+        try {
+          const data = await api("/api/shop-settings");
+          fillBioEditor(data.bioProfile || {});
+          $("#bioEditorStatus").textContent = "";
+        } catch (error) {
+          fillBioEditor({});
+          $("#bioEditorStatus").textContent = `❌ Không tải được cấu hình: ${error.error || error.message || error}`;
+        }
+      });
+      $("#closeBioEditorButton")?.addEventListener("click", () => $("#bioEditorModal").classList.remove("show"));
+      $("#bioAddSocial")?.addEventListener("click", () => addBioSocialRow());
+      $("#bioName")?.addEventListener("input", renderBioAvatarPreview);
+      $("#bioAvatarClear")?.addEventListener("click", () => {
+        bioAvatarValue = "";
+        $("#bioAvatarUrl").value = "";
+        renderBioAvatarPreview();
+      });
+      $("#bioAvatarUrl")?.addEventListener("change", () => {
+        bioAvatarValue = $("#bioAvatarUrl").value.trim();
+        renderBioAvatarPreview();
+      });
+      $("#bioAvatarFile")?.addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        try {
+          bioAvatarValue = await shrinkAvatar(file);
+          $("#bioAvatarUrl").value = "";
+          renderBioAvatarPreview();
+        } catch (error) {
+          $("#bioEditorStatus").textContent = `❌ ${error.message || error}`;
+        }
+      });
+      $("#saveBioEditorButton")?.addEventListener("click", async () => {
+        const btn = $("#saveBioEditorButton");
+        btn.disabled = true;
+        $("#bioEditorStatus").textContent = "Đang lưu...";
+        try {
+          const data = await api("/api/shop-settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bioProfile: readBioEditor() }),
+          });
+          fillBioEditor(data.bioProfile || {});
+          $("#bioEditorStatus").textContent = "✅ Đã lưu — hukiai258.com cập nhật sau khoảng 1-2 phút.";
+        } catch (error) {
+          $("#bioEditorStatus").textContent = `❌ Không lưu được: ${error.error || error.message || error}`;
+        } finally {
+          btn.disabled = false;
         }
       });
 

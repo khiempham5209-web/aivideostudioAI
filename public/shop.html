@@ -483,11 +483,15 @@
   html.bio-mode #bioView { display: block; }
   html.bio-mode .header-wrap,
   html.bio-mode #catalogView { display: none; }
-  .bio-profile { text-align: center; padding: 26px 16px 8px; max-width: 560px; margin: 0 auto; }
+  .bio-profile { padding: 26px 16px 8px; max-width: 720px; margin: 0 auto; }
+  /* Mặc định ảnh ở góc trái, chữ bên phải; chủ shop đổi sang "giữa" được. */
+  .bio-head { display: flex; align-items: center; gap: 16px; text-align: left; margin-bottom: 14px; }
+  .bio-profile.center .bio-head { flex-direction: column; text-align: center; gap: 10px; }
+  .bio-info { min-width: 0; }
   .bio-avatar {
+    flex: 0 0 auto;
     width: 84px;
     height: 84px;
-    margin: 0 auto 10px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -500,9 +504,26 @@
     overflow: hidden;
   }
   .bio-avatar img { width: 100%; height: 100%; object-fit: cover; }
-  .bio-profile h1 { font-size: 19px; margin: 0 0 6px; }
-  .bio-profile p { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin: 0 0 14px; }
-  .bio-socials { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .bio-profile h1 { font-size: 20px; margin: 0 0 2px; }
+  .bio-handle { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .bio-handle:empty { display: none; }
+  .bio-profile p { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin: 0 0 8px; white-space: pre-line; }
+  .bio-profile p:empty { display: none; }
+  .bio-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bio-profile.center .bio-tags { justify-content: center; }
+  .bio-tags span {
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--cta-2);
+    background: color-mix(in srgb, var(--cta-2) 14%, transparent);
+  }
+  .bio-socials { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .bio-profile.center .bio-socials { justify-content: center; }
+  .bio-socials:empty { display: none; }
+  /* Màu nền riêng do chủ shop chọn — nền phẳng thay cho nền gradient mặc định. */
+  html.custom-bg.bio-mode body { background: var(--bg); }
   .bio-socials a {
     display: inline-flex;
     align-items: center;
@@ -556,10 +577,16 @@
 
   <!-- Màn rút gọn kiểu "link in bio" — chỉ hiện ở /bio (xem bio-mode ở <head>). -->
   <div id="bioView">
-    <div class="bio-profile">
-      <div class="bio-avatar" id="bioAvatar"></div>
-      <h1 id="bioName"></h1>
-      <p id="bioText"></p>
+    <div class="bio-profile" id="bioProfile">
+      <div class="bio-head">
+        <div class="bio-avatar" id="bioAvatar"></div>
+        <div class="bio-info">
+          <h1 id="bioName"></h1>
+          <div class="bio-handle" id="bioHandle"></div>
+          <p id="bioText"></p>
+          <div class="bio-tags" id="bioTags"></div>
+        </div>
+      </div>
       <div class="bio-socials" id="bioSocials"></div>
     </div>
     <div class="bio-main">
@@ -706,15 +733,17 @@
       `;
     }
 
-    // Ô gọn cho màn /bio: chỉ ảnh + tên + giá.
+    // Ô gọn cho màn Rút gọn: ảnh + tên + giá; tên/giá ẩn được theo cấu hình
+    // của chủ shop (bioProfile.showName / showPrice, khai báo phía dưới).
     function tileHtml(p) {
+      const showName = bioProfile.showName !== false;
+      const showPrice = bioProfile.showPrice !== false && p.price_reference;
+      const body = (showName ? `<h3>${escapeHtml(p.product_name || "")}</h3>` : "")
+        + (showPrice ? `<div class="price">${escapeHtml(formatPrice(p.price_reference))}</div>` : "");
       return `
-        <a class="card tile" ${cardLinkAttrs(p)}>
+        <a class="card tile" ${cardLinkAttrs(p)} title="${escapeAttr(p.product_name || "")}">
           ${thumbHtml(p)}
-          <div class="body">
-            <h3>${escapeHtml(p.product_name || "")}</h3>
-            ${p.price_reference ? `<div class="price">${escapeHtml(formatPrice(p.price_reference))}</div>` : ""}
-          </div>
+          ${body ? `<div class="body">${body}</div>` : ""}
         </a>
       `;
     }
@@ -987,24 +1016,29 @@
     }
 
     // ===== Màn rút gọn (bio) =====
-    // Thông tin hiện ở đầu màn /bio. Điền link mạng xã hội vào `url`; mục nào
-    // để trống thì tự ẩn. avatar: link ảnh (để trống thì hiện chữ cái đầu).
-    const BIO_PROFILE = {
+    // Phần đầu trang (ảnh, tên, ID, giới thiệu, tag, màu, liên kết) do chủ
+    // shop sửa trong app: Kho sản phẩm → "Tùy chỉnh trang Rút gọn". Giá trị
+    // dưới đây chỉ dùng khi chưa có cấu hình nào gửi kèm products.json.
+    let bioProfile = {
       name: "hukiai258",
+      handle: "hukiai258",
       bio: "Đồ mình dùng & review ở đây nha ✨ Bấm vào sản phẩm là sang Shopee luôn!",
+      tags: [],
       avatar: "",
-      socials: [
-        { label: "🎵 TikTok", url: "" },
-        { label: "📸 Instagram", url: "" },
-        { label: "📘 Facebook", url: "" },
-      ],
+      avatarPosition: "left",
+      bgColor: "",
+      accentColor: "",
+      socials: [],
+      showPrice: true,
+      showName: true,
     };
     const FORCED_VIEW = new URLSearchParams(location.search).get("view");
     let isBio = FORCED_VIEW === "bio";
 
     // Chốt chế độ hiển thị: ?view trên URL thắng, không thì theo cài đặt
     // của chủ shop gửi kèm products.json (mặc định "catalog").
-    function applyView(settingView) {
+    function applyView(settingView, profile) {
+      if (profile && typeof profile === "object") bioProfile = { ...bioProfile, ...profile };
       const view = FORCED_VIEW === "bio" || FORCED_VIEW === "catalog" ? FORCED_VIEW : settingView;
       isBio = view === "bio";
       document.documentElement.classList.toggle("bio-mode", isBio);
@@ -1014,18 +1048,69 @@
     // Phòng khi mạng chậm/lỗi: quá 2.5s chưa biết thì cứ hiện màn đang có.
     setTimeout(() => document.documentElement.classList.remove("view-pending"), 2500);
 
+    // Icon tự gắn theo tên miền của liên kết.
+    function socialIcon(url) {
+      let host = "";
+      try { host = new URL(url).hostname; } catch {}
+      if (/tiktok\./.test(host)) return "🎵";
+      if (/instagram\./.test(host)) return "📸";
+      if (/facebook\.|(^|\.)fb\./.test(host)) return "📘";
+      if (/youtube\.|youtu\.be/.test(host)) return "▶️";
+      if (/zalo\./.test(host)) return "💬";
+      if (/shopee\./.test(host)) return "🛍️";
+      if (/lazada\./.test(host)) return "🛒";
+      return "🔗";
+    }
+
+    function hexToRgb(hex) {
+      const n = parseInt(hex.slice(1), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    // Màu nền riêng: tự chọn màu chữ sáng/tối cho dễ đọc trên nền đó.
+    function applyBioColors(p) {
+      const root = document.documentElement;
+      ["--bg", "--text", "--muted", "--panel", "--panel-2", "--line", "--cta-1", "--cta-2", "--purple"]
+        .forEach((v) => root.style.removeProperty(v));
+      root.classList.remove("custom-bg");
+      if (!isBio) return;
+      if (/^#[0-9a-f]{6}$/i.test(p.bgColor || "")) {
+        const [r, g, b] = hexToRgb(p.bgColor);
+        const light = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6;
+        root.classList.add("custom-bg");
+        root.style.setProperty("--bg", p.bgColor);
+        root.style.setProperty("--text", light ? "#0f172a" : "#f8fafc");
+        root.style.setProperty("--muted", light ? "#475569" : "#cbd5e1");
+        root.style.setProperty("--panel", light ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.07)");
+        root.style.setProperty("--panel-2", light ? "rgba(15,23,42,0.05)" : "rgba(255,255,255,0.04)");
+        root.style.setProperty("--line", light ? "rgba(15,23,42,0.12)" : "rgba(255,255,255,0.14)");
+      }
+      if (/^#[0-9a-f]{6}$/i.test(p.accentColor || "")) {
+        root.style.setProperty("--cta-1", p.accentColor);
+        root.style.setProperty("--cta-2", p.accentColor);
+        root.style.setProperty("--purple", p.accentColor);
+      }
+    }
+
     function renderBioProfile() {
+      const p = bioProfile;
+      document.getElementById("bioProfile").classList.toggle("center", p.avatarPosition === "center");
       const avatar = document.getElementById("bioAvatar");
-      avatar.innerHTML = BIO_PROFILE.avatar
-        ? `<img src="${escapeAttr(BIO_PROFILE.avatar)}" alt="" />`
-        : escapeHtml((BIO_PROFILE.name || "?").charAt(0).toUpperCase());
-      document.getElementById("bioName").textContent = "@" + BIO_PROFILE.name;
-      document.getElementById("bioText").textContent = BIO_PROFILE.bio;
-      document.getElementById("bioSocials").innerHTML = BIO_PROFILE.socials
-        .filter((s) => s.url)
-        .map((s) => `<a href="${escapeAttr(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.label)}</a>`)
+      avatar.innerHTML = p.avatar
+        ? `<img src="${escapeAttr(p.avatar)}" alt="" />`
+        : escapeHtml((p.name || "?").charAt(0).toUpperCase());
+      document.getElementById("bioName").textContent = p.name || "";
+      document.getElementById("bioHandle").textContent = p.handle ? "@" + p.handle : "";
+      document.getElementById("bioText").textContent = p.bio || "";
+      document.getElementById("bioTags").innerHTML = (p.tags || [])
+        .map((t) => `<span>#${escapeHtml(String(t).replace(/^#+/, ""))}</span>`)
         .join("");
-      document.title = `@${BIO_PROFILE.name} | Sản phẩm mình dùng`;
+      document.getElementById("bioSocials").innerHTML = (p.socials || [])
+        .filter((s) => s && s.url && s.label)
+        .map((s) => `<a href="${escapeAttr(s.url)}" target="_blank" rel="noopener">${socialIcon(s.url)} ${escapeHtml(s.label)}</a>`)
+        .join("");
+      applyBioColors(p);
+      document.title = `${p.handle ? "@" + p.handle : p.name} | Sản phẩm mình dùng`;
     }
 
     // Ghim đứng đầu, sau đó theo lượt bấm (giống "Phổ biến" ở màn Catalog).
@@ -1072,7 +1157,7 @@
       .catch(() => fetch("/api/public/products").then((r) => r.json()))
       .then((data) => {
         allProducts = data.products || [];
-        applyView(data.shopView);
+        applyView(data.shopView, data.bioProfile);
         if (isBio) { renderBioGrid(); return; }
         renderDrawer();
         renderSections();

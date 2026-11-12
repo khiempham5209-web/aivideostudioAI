@@ -36,7 +36,7 @@ async function fetchProductsWithRetry(maxAttempts = 5, delayMs = 8000) {
       // still empty after every retry, throw so main() below aborts the
       // build entirely rather than publish an empty catalog.
       if (products.length === 0) throw new Error("API returned 0 products (likely the backend's own DB isn't connected right now)");
-      return { products, shopView: data.shopView === "bio" ? "bio" : "catalog" };
+      return { products, shopView: data.shopView === "bio" ? "bio" : "catalog", bioProfile: data.bioProfile ?? null };
     } catch (error) {
       const isLast = attempt === maxAttempts;
       console.warn(`[build] fetch products attempt ${attempt}/${maxAttempts} failed: ${error.message}`);
@@ -47,16 +47,16 @@ async function fetchProductsWithRetry(maxAttempts = 5, delayMs = 8000) {
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
-  return { products: [], shopView: "catalog" };
+  return { products: [], shopView: "catalog", bioProfile: null };
 }
 
 async function main() {
   await mkdir(path.join(__dirname, "public"), { recursive: true });
 
-  const { products, shopView } = await fetchProductsWithRetry();
+  const { products, shopView, bioProfile } = await fetchProductsWithRetry();
   await writeFile(
     path.join(__dirname, "public", "products.json"),
-    JSON.stringify({ ok: true, generatedAt: new Date().toISOString(), shopView, products }),
+    JSON.stringify({ ok: true, generatedAt: new Date().toISOString(), shopView, bioProfile, products }),
   );
   console.log(`[build] wrote products.json with ${products.length} products (view: ${shopView})`);
 

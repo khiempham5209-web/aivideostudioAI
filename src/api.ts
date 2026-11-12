@@ -2332,7 +2332,100 @@ async function handlePublicProducts(_req: IncomingMessage, res: ServerResponse) 
     pinned: p.pinned,
     pinned_at: p.pinned_at,
   }));
-  sendJson(res, 200, { ok: true, products, shopView: await getShopView() });
+  sendJson(res, 200, { ok: true, products, shopView: await getShopView(), bioProfile: await getBioProfile() });
+}
+
+// Owner-editable header of the "bio" layout (avatar, name, handle, bio,
+// tags, colors, social links). Stored as one JSON blob in site_settings and
+// re-validated on every read so a bad stored value can never break the page.
+type BioProfile = {
+  name: string;
+  handle: string;
+  bio: string;
+  tags: string[];
+  avatar: string;
+  avatarPosition: "left" | "center";
+  bgColor: string;
+  accentColor: string;
+  socials: { label: string; url: string }[];
+  showPrice: boolean;
+  showName: boolean;
+};
+
+const DEFAULT_BIO_PROFILE: BioProfile = {
+  name: "hukiai258",
+  handle: "hukiai258",
+  bio: "Đồ mình dùng & review ở đây nha ✨ Bấm vào sản phẩm là sang Shopee luôn!",
+  tags: [],
+  avatar: "",
+  avatarPosition: "left",
+  bgColor: "",
+  accentColor: "",
+  socials: [],
+  showPrice: true,
+  showName: true,
+};
+
+const MAX_AVATAR_CHARS = 400_000;
+
+function cleanText(value: unknown, max: number): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+function cleanColor(value: unknown): string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : "";
+}
+function cleanHttpUrl(value: unknown): string {
+  const text = cleanText(value, 1000);
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+function cleanAvatar(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (/^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i.test(text) && text.length <= MAX_AVATAR_CHARS) return text;
+  return cleanHttpUrl(text);
+}
+
+function sanitizeBioProfile(input: unknown): BioProfile {
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const tags = Array.isArray(raw.tags) ? raw.tags.map((t) => cleanText(t, 40)).filter(Boolean).slice(0, 12) : [];
+  const socials = Array.isArray(raw.socials)
+    ? raw.socials
+        .map((s) => {
+          const item = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
+          return { label: cleanText(item.label, 40), url: cleanHttpUrl(item.url) };
+        })
+        .filter((s) => s.label && s.url)
+        .slice(0, 12)
+    : [];
+  return {
+    name: cleanText(raw.name, 60) || DEFAULT_BIO_PROFILE.name,
+    handle: cleanText(raw.handle, 40).replace(/^@+/, ""),
+    bio: cleanText(raw.bio, 300),
+    tags,
+    avatar: cleanAvatar(raw.avatar),
+    avatarPosition: raw.avatarPosition === "center" ? "center" : "left",
+    bgColor: cleanColor(raw.bgColor),
+    accentColor: cleanColor(raw.accentColor),
+    socials,
+    // Missing = shown, so older saved profiles keep showing both.
+    showPrice: raw.showPrice !== false,
+    showName: raw.showName !== false,
+  };
+}
+
+async function getBioProfile(): Promise<BioProfile> {
+  const stored = await getSiteSetting("bio_profile");
+  if (!stored) return DEFAULT_BIO_PROFILE;
+  try {
+    return sanitizeBioProfile(JSON.parse(stored));
+  } catch {
+    return DEFAULT_BIO_PROFILE;
+  }
 }
 
 // Which layout hukiai258.com shows — toggled by the owner from the Kho sản
@@ -2349,20 +2442,33 @@ async function getShopView(): Promise<ShopView> {
 async function handleGetShopSettings(req: IncomingMessage, res: ServerResponse) {
   const user = requireUser(req, res);
   if (!user) return;
-  sendJson(res, 200, { ok: true, shopView: await getShopView() });
+  sendJson(res, 200, { ok: true, shopView: await getShopView(), bioProfile: await getBioProfile() });
 }
 
+// Accepts either or both of shopView / bioProfile, so the layout toggle and
+// the "Tùy chỉnh trang Rút gọn" editor can each save just their own part.
 async function handleUpdateShopSettings(req: IncomingMessage, res: ServerResponse) {
   const user = requireUser(req, res);
   if (!user) return;
-  const body = (await readJsonBody(req).catch(() => ({}))) as { shopView?: unknown };
-  if (!SHOP_VIEWS.includes(body.shopView as ShopView)) {
+  let body: { shopView?: unknown; bioProfile?: unknown };
+  try {
+    body = (await readJsonBody(req)) as typeof body;
+  } catch (error) {
+    sendJson(res, 400, { error: error instanceof Error && /too large/i.test(error.message) ? "Ảnh đại diện quá lớn, chọn ảnh nhỏ hơn." : "Dữ liệu gửi lên không hợp lệ" });
+    return;
+  }
+  if (body.shopView === undefined && body.bioProfile === undefined) {
+    sendJson(res, 400, { error: "Không có gì để lưu" });
+    return;
+  }
+  if (body.shopView !== undefined && !SHOP_VIEWS.includes(body.shopView as ShopView)) {
     sendJson(res, 400, { error: `shopView phải là một trong: ${SHOP_VIEWS.join(", ")}` });
     return;
   }
-  await setSiteSetting("shop_view", body.shopView as ShopView);
-  sendJson(res, 200, { ok: true, shopView: body.shopView });
-  // The static mirror bakes shopView into products.json, so rebuild it.
+  if (body.shopView !== undefined) await setSiteSetting("shop_view", body.shopView as ShopView);
+  if (body.bioProfile !== undefined) await setSiteSetting("bio_profile", JSON.stringify(sanitizeBioProfile(body.bioProfile)));
+  sendJson(res, 200, { ok: true, shopView: await getShopView(), bioProfile: await getBioProfile() });
+  // The static mirror bakes these into products.json, so rebuild it.
   void triggerVercelShopRebuild();
 }
 
