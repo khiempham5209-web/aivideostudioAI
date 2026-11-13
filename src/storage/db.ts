@@ -177,6 +177,26 @@ export interface RenderJobRecord {
   updated_at: string;
 }
 
+export type VideoGenJobStatus = "pending" | "running" | "completed" | "failed";
+
+/** A Veo3 (Gemini API generateVideos) generation job — tracks the async
+ *  operation name returned by Google so a later poll can pick it back up
+ *  from a fresh HTTP request (the SDK's own Operation object isn't
+ *  something we can keep in memory between requests). */
+export interface VideoGenJobRecord {
+  id: string;
+  project_id: string;
+  scene_id: string | null;
+  clip_id: string | null;
+  prompt: string;
+  status: VideoGenJobStatus;
+  operation_name: string | null;
+  asset_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AssetRecord {
   id: string;
   project_id: string;
@@ -381,6 +401,21 @@ db.exec(`
     error_message TEXT,
     started_at TEXT,
     finished_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS video_gen_jobs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    scene_id TEXT,
+    clip_id TEXT,
+    prompt TEXT NOT NULL,
+    status TEXT NOT NULL,
+    operation_name TEXT,
+    asset_id TEXT,
+    error_message TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -756,6 +791,22 @@ async function initPostgresMirror() {
         error_message TEXT,
         started_at TEXT,
         finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    },
+    {
+      label: "video_gen_jobs",
+      sql: `CREATE TABLE IF NOT EXISTS video_gen_jobs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        scene_id TEXT,
+        clip_id TEXT,
+        prompt TEXT NOT NULL,
+        status TEXT NOT NULL,
+        operation_name TEXT,
+        asset_id TEXT,
+        error_message TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
@@ -2202,6 +2253,60 @@ export function updateRenderJob(jobId: string, data: Partial<Omit<RenderJobRecor
   );
   const updated = getRenderJob(jobId);
   if (updated) mirrorUpsert("render_jobs", updated as unknown as DbRow, "id");
+}
+
+export function createVideoGenJob(data: { projectId: string; sceneId?: string | null; clipId?: string | null; prompt: string }): VideoGenJobRecord {
+  const created = nowIso();
+  const job: VideoGenJobRecord = {
+    id: id("veojob"),
+    project_id: data.projectId,
+    scene_id: data.sceneId ?? null,
+    clip_id: data.clipId ?? null,
+    prompt: data.prompt,
+    status: "pending",
+    operation_name: null,
+    asset_id: null,
+    error_message: null,
+    created_at: created,
+    updated_at: created,
+  };
+  db.prepare(`
+    INSERT INTO video_gen_jobs
+    (id, project_id, scene_id, clip_id, prompt, status, operation_name, asset_id, error_message, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    job.id, job.project_id, job.scene_id, job.clip_id, job.prompt, job.status,
+    job.operation_name, job.asset_id, job.error_message, job.created_at, job.updated_at,
+  );
+  mirrorUpsert("video_gen_jobs", job as unknown as DbRow, "id");
+  return job;
+}
+
+export function getVideoGenJob(jobId: string): VideoGenJobRecord | undefined {
+  return db.prepare("SELECT * FROM video_gen_jobs WHERE id = ?").get(jobId) as VideoGenJobRecord | undefined;
+}
+
+export function updateVideoGenJob(jobId: string, data: Partial<Omit<VideoGenJobRecord, "id" | "project_id" | "created_at" | "updated_at">>): VideoGenJobRecord | undefined {
+  const current = getVideoGenJob(jobId);
+  if (!current) return undefined;
+  db.prepare(`
+    UPDATE video_gen_jobs
+    SET scene_id = ?, clip_id = ?, prompt = ?, status = ?, operation_name = ?, asset_id = ?, error_message = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    data.scene_id ?? current.scene_id,
+    data.clip_id ?? current.clip_id,
+    data.prompt ?? current.prompt,
+    data.status ?? current.status,
+    "operation_name" in data ? data.operation_name ?? null : current.operation_name,
+    "asset_id" in data ? data.asset_id ?? null : current.asset_id,
+    "error_message" in data ? data.error_message ?? null : current.error_message,
+    nowIso(),
+    jobId,
+  );
+  const updated = getVideoGenJob(jobId);
+  if (updated) mirrorUpsert("video_gen_jobs", updated as unknown as DbRow, "id");
+  return updated;
 }
 
 export function getUser(email: string): UserRecord | undefined {
