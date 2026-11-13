@@ -1942,7 +1942,7 @@
             </div>
           </div>
           <div class="editor-shell">
-            <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Kéo thả tài nguyên vào timeline</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body"><div class="library-tabs"><button class="btn active">Media</button><button class="btn">Text</button><button class="btn">Audio</button><button class="btn">FX</button></div><div class="editor-assets"><div class="editor-asset" style="background:linear-gradient(135deg,#1e3a8a,#111827);"><strong>Scene 01</strong><span class="tiny">Video · 12.4s</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#065f46,#111827);"><strong>Voice chính</strong><span class="tiny">MP3 · 1:58</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#7c2d12,#111827);"><strong>Ảnh bìa</strong><span class="tiny">PNG · 1080×1920</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#581c87,#111827);"><strong>Logo</strong><span class="tiny">Overlay</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#713f12,#111827);"><strong>Tiêu đề</strong><span class="tiny">Text preset</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#164e63,#111827);"><strong>Fade Zoom</strong><span class="tiny">Transition</span></div></div><div class="top-actions" style="margin-top:12px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button><button class="btn" id="timelineAddTextButton" type="button">+ Text</button><button class="btn primary" id="timelineAutoTextButton" type="button" title="Tự động thêm chữ hook từ tiêu đề/đề tài dự án">✨ Tự động thêm chữ</button></div><audio id="editorAssetAudioPreview" controls style="display:none;width:100%;margin-top:10px;"></audio></div></section>
+            <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Kéo thả tài nguyên vào timeline</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body"><div class="library-tabs"><button class="btn active">Media</button><button class="btn">Text</button><button class="btn">Audio</button><button class="btn">FX</button></div><div class="editor-assets"><div class="editor-asset" style="background:linear-gradient(135deg,#1e3a8a,#111827);"><strong>Scene 01</strong><span class="tiny">Video · 12.4s</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#065f46,#111827);"><strong>Voice chính</strong><span class="tiny">MP3 · 1:58</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#7c2d12,#111827);"><strong>Ảnh bìa</strong><span class="tiny">PNG · 1080×1920</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#581c87,#111827);"><strong>Logo</strong><span class="tiny">Overlay</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#713f12,#111827);"><strong>Tiêu đề</strong><span class="tiny">Text preset</span></div><div class="editor-asset" style="background:linear-gradient(135deg,#164e63,#111827);"><strong>Fade Zoom</strong><span class="tiny">Transition</span></div></div><div class="top-actions" style="margin-top:12px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button><button class="btn primary" id="timelineAutoTextButton" type="button" title="Tự động thêm chữ hook từ tiêu đề dự án">✨ Tự động thêm chữ</button><button class="btn primary" id="timelineAutoSubtitleButton" type="button" title="Tạo phụ đề cho TOÀN BỘ scene, đúng thời gian thật trong voice.mp3">🪄 Tự động thêm phụ đề cả video</button></div><audio id="editorAssetAudioPreview" controls style="display:none;width:100%;margin-top:10px;"></audio></div></section>
 
             <section class="panel" id="builtinLibraryPanel">
               <div class="panel-head"><div><h3>Sticker &amp; SFX có sẵn</h3><p class="tiny">Miễn phí, rõ nguồn gốc (xem public/assets/LICENSES.md) — bấm ➕ để chèn thẳng vào Timeline của dự án đang chọn.</p></div></div>
@@ -7825,32 +7825,71 @@ A believable, high-retention product advertisement shot that can be edited direc
       renderBuiltinLibrary();
 
       // ---------- Text clips: manual "+ Text" and "✨ Tự động thêm chữ" ----------
-      async function insertTextClip(content) {
-        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo dự án trước.");
-        try {
-          await loadTimeline(state.activeProjectId);
-          let track = (state.timelineTracks || []).find((t) => t.track_type === "text");
-          if (!track) {
-            const created = await api(`/api/projects/${state.activeProjectId}/timeline/tracks`, {
-              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "text", label: "Text" }),
-            });
-            track = created.track;
-          }
-          await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ trackId: track.id, label: "Text", textContent: content, startTime: state.timelinePlayhead || 0, duration: 3 }),
-          });
-          await loadTimeline(state.activeProjectId);
-          toast("Đã thêm chữ vào Timeline — chọn clip đó ở Inspector để sửa nội dung/màu/cỡ chữ.");
-        } catch (error) {
-          showError(error);
-        }
+      async function findOrCreateTrack(trackType, label) {
+        let track = (state.timelineTracks || []).find((t) => t.track_type === trackType);
+        if (track) return track;
+        const created = await api(`/api/projects/${state.activeProjectId}/timeline/tracks`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: trackType, label }),
+        });
+        state.timelineTracks.push(created.track);
+        return created.track;
       }
-      $("#timelineAddTextButton")?.addEventListener("click", () => insertTextClip("Chữ mới"));
-      $("#timelineAutoTextButton")?.addEventListener("click", () => {
+      $("#timelineAutoTextButton")?.addEventListener("click", async () => {
+        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo dự án trước.");
         const project = activeProject();
         const hook = (project?.title || project?.topic || "").trim().slice(0, 60) || "Xem ngay!";
-        insertTextClip(hook);
+        pushUndoSnapshot();
+        try {
+          const track = await findOrCreateTrack("text", "Text");
+          const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trackId: track.id, label: hook.slice(0, 24), textContent: hook, startTime: 0, duration: 3 }),
+          });
+          state.timelineClips.push(data.clip);
+          renderTimelineV3($("#timelineV3Root"));
+          selectClip(data.clip.id);
+          toast("Đã thêm chữ hook — chọn Inspector để đổi vị trí/màu/cỡ chữ.");
+        } catch (error) { showError(error); }
+      });
+      // Tự động thêm phụ đề cho TOÀN BỘ video: 1 clip phụ đề / scene, đúng thời
+      // gian thật trong voice.mp3 (cùng công thức SCENE_GAP_SEC=0.3 mà
+      // /scene-timeline dùng ở backend — xem api.ts). Cỡ chữ/màu/font áp dụng
+      // chung cho mọi phụ đề qua Inspector (chọn 1 clip phụ đề bất kỳ).
+      $("#timelineAutoSubtitleButton")?.addEventListener("click", async () => {
+        if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo dự án trước.");
+        const scenes = state.scenes || [];
+        if (!scenes.length) return toast("Dự án chưa có scene nào.");
+        const missing = scenes.filter((s) => !s.voice_duration_sec).length;
+        if (missing === scenes.length) return toast("Chưa có voice MP3 — tạo voice trước để có đúng thời gian từng scene.");
+        pushUndoSnapshot();
+        const button = $("#timelineAutoSubtitleButton");
+        button.disabled = true;
+        const originalText = button.textContent;
+        button.textContent = "Đang tạo phụ đề...";
+        try {
+          const track = await findOrCreateTrack("subtitle", "Subtitle");
+          const SCENE_GAP_SEC = 0.3;
+          let cursor = SCENE_GAP_SEC;
+          let created = 0;
+          for (let i = 0; i < scenes.length; i++) {
+            const scene = scenes[i];
+            const duration = scene.voice_duration_sec || 3;
+            const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ trackId: track.id, sceneId: scene.id, label: `Scene ${i + 1}`, textContent: scene.voice_text || "", startTime: cursor, duration }),
+            });
+            state.timelineClips.push(data.clip);
+            cursor += duration + SCENE_GAP_SEC;
+            created++;
+          }
+          renderTimelineV3($("#timelineV3Root"));
+          toast(`Đã tạo ${created} phụ đề. Chọn 1 clip phụ đề bất kỳ ở Inspector để đổi cỡ chữ/màu/font — áp dụng chung cho tất cả.`);
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
       });
 
       document.addEventListener("click", (event) => {
