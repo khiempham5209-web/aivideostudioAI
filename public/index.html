@@ -2140,8 +2140,9 @@
         }
         if (!$("#timelineSceneList")) {
           (document.querySelector("#timeline .timeline-v3") || document.querySelector("#timeline .editor-shell"))?.insertAdjacentHTML("beforebegin", `
-            <div class="field-stack" style="margin-bottom:14px;">
-              <div class="voice-top"><strong>Media & track chỉnh sửa</strong><span class="tiny">Thêm MP4, voice/MP3, bật phụ đề và chuẩn bị xuất</span></div>
+            <details class="field-stack panel" style="margin-bottom:14px;padding:10px 14px;">
+              <summary style="cursor:pointer;font-weight:600;">🔧 Công cụ scene cũ (gắn MP4/voice theo từng scene, trim, đổi thứ tự) — bấm để mở, Timeline bên dưới mới là nơi chỉnh sửa chính</summary>
+              <div class="field-stack" style="margin-top:12px;">
               <div class="top-actions">
                 <button class="btn" id="timelineToolbarAddVideoButton" type="button">+ Add video MP4</button>
                 <button class="btn" id="timelineToolbarAddAudioButton" type="button">+ Add voice/MP3</button>
@@ -2158,7 +2159,8 @@
                 <button class="btn" id="splitSceneButton" type="button">Split scene</button>
               </div>
               <div class="top-actions"><button class="btn" id="moveSceneUpButton" type="button">Move trái</button><button class="btn" id="moveSceneDownButton" type="button">Move phải</button></div>
-            </div>
+              </div>
+            </details>
           `);
           $("#timelineAssetStatus")?.insertAdjacentHTML("beforebegin", `<label style="display:flex;gap:10px;align-items:center;margin:0;"><input id="editBurnSubtitles" type="checkbox" checked /> Phu de: bat/tat tai man Edit va dung khi xuat MP4</label>`);
           setupSceneStripDragScroll($("#timelineSceneList"));
@@ -3888,6 +3890,15 @@
       function startPreviewPlayback() {
         if (!(state.timelineTracks || []).length) return toast("Chưa có timeline để phát.");
         const duration = timelineDuration();
+        // Bấm Play sau khi đã phát hết video (playhead đang đứng ở cuối) sẽ
+        // dừng ngay lập tức ở vòng tick đầu tiên nếu không reset — cảm giác
+        // như nút Play "chết". Coi đây là phát lại từ đầu.
+        if ((state.timelinePlayhead || 0) >= duration) {
+          state.timelinePlayhead = 0;
+          if ($("#timelinePlayheadSlider")) $("#timelinePlayheadSlider").value = "0";
+          syncPlayheadUi();
+          renderProgramPreviewAtPlayhead();
+        }
         timelineIsPlaying = true;
         if ($("#previewPlayButton")) $("#previewPlayButton").textContent = "⏸";
         let last = performance.now();
@@ -4706,6 +4717,29 @@
         `;
         if ($("#timelinePlayheadSlider")) $("#timelinePlayheadSlider").max = String(Math.ceil(duration));
         syncPlayheadUi();
+        // Click/kéo trực tiếp trên thước thời gian để tua playhead — trước đây
+        // chỉ có thanh trượt nhỏ ở Preview mới tua được, ruler/playhead trên
+        // chính timeline chỉ để nhìn, không bấm được.
+        const ruler = root.querySelector(".time-ruler-v3");
+        if (ruler) {
+          const scrubAt = (clientX) => {
+            const rect = ruler.getBoundingClientRect();
+            const scrollLeft = root.closest(".timeline-v3")?.scrollLeft || 0;
+            const x = clientX - rect.left + scrollLeft - 180;
+            const seconds = Math.max(0, x / pxPerSec);
+            stopPreviewPlayback();
+            state.timelinePlayhead = seconds;
+            syncPlayheadUi();
+            renderProgramPreviewAtPlayhead();
+          };
+          ruler.addEventListener("mousedown", (event) => {
+            scrubAt(event.clientX);
+            const onMove = (moveEvent) => scrubAt(moveEvent.clientX);
+            const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+          });
+        }
         root.querySelectorAll(".clip-v3").forEach((el) => {
           el.addEventListener("mousedown", (event) => {
             if (event.target.classList.contains("clip-resize-handle")) return;
@@ -7823,6 +7857,16 @@ A believable, high-retention product advertisement shot that can be edited direc
         if (btn) apInsertBuiltinAsset(btn.dataset.insertSfx, "sfx");
       });
       renderBuiltinLibrary();
+
+      // ---------- Timeline: lăn chuột để cuộn ngang (trước đây không có) ----------
+      // Gắn 1 lần — .timeline-v3 là khung tĩnh, không bị vẽ lại mỗi lần
+      // renderTimelineV3() chạy (chỉ .timeline-inner bên trong nó bị thay).
+      document.querySelector("#timeline .timeline-v3")?.addEventListener("wheel", (event) => {
+        const el = event.currentTarget;
+        if (el.scrollWidth <= el.clientWidth) return;
+        event.preventDefault();
+        el.scrollLeft += event.deltaY + event.deltaX;
+      }, { passive: false });
 
       // ---------- Asset Browser tabs (Media / Text / Sticker-SFX) — previously decorative ----------
       $$(".library-tabs [data-lib-tab]").forEach((btn) => {
