@@ -1170,16 +1170,17 @@
       /* ===== Editor V2 + additional screens ===== */
       .editor-shell {
         display:grid;
-        grid-template-columns:minmax(0,1fr) 320px;
+        grid-template-columns:minmax(0,1fr) 360px;
         grid-template-areas:"stage inspector" "stage library";
+        grid-template-rows:auto 1fr;
         gap:12px;
         align-items:start;
       }
       .editor-stage { grid-area:stage; }
-      .editor-inspector { grid-area:inspector; max-height:280px; overflow-y:auto; }
-      .editor-library { grid-area:library; max-height:280px; overflow-y:auto; }
+      .editor-inspector { grid-area:inspector; max-height:340px; overflow-y:auto; }
+      .editor-library { grid-area:library; max-height:460px; overflow-y:auto; }
       .editor-stage .panel-body { display:grid; gap:12px; }
-      .editor-preview-wrap { display:grid; place-items:center; height:420px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
+      .editor-preview-wrap { display:grid; place-items:center; height:360px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
       .editor-preview-canvas { height:100%; width:auto; max-width:100%; aspect-ratio:16/9; position:relative; display:grid; place-items:center; background:linear-gradient(135deg,#111827,#0f766e 48%,#581c87); }
       .editor-controls { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
       .editor-controls-group { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0; }
@@ -1246,8 +1247,9 @@
       .track-mute-btn, .track-lock-btn { cursor:pointer; }
       .clip-thumb { width:34px; height:28px; flex:0 0 34px; border-radius:4px; background:linear-gradient(135deg,rgba(255,255,255,.45),rgba(0,0,0,.2)); }
       .waveform { width:100%; height:24px; opacity:.75; background:repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 2px,transparent 2px 5px); mask-image:linear-gradient(0deg,transparent 10%,#000 10% 90%,transparent 90%); }
-      .playhead-v3 { position:absolute; z-index:12; top:48px; bottom:0; left:526px; width:2px; background:#fb7185; pointer-events:none; }
-      .playhead-v3:before { content:""; position:absolute; top:-7px; left:-6px; width:14px; height:14px; transform:rotate(45deg); background:#fb7185; border-radius:2px; }
+      .playhead-v3 { position:absolute; z-index:12; top:48px; bottom:0; left:526px; width:9px; margin-left:-4px; cursor:ew-resize; }
+      .playhead-v3:after { content:""; position:absolute; top:0; bottom:0; left:4px; width:2px; background:#fb7185; }
+      .playhead-v3:before { content:""; position:absolute; top:-7px; left:-2px; width:14px; height:14px; transform:rotate(45deg); background:#fb7185; border-radius:2px; }
       .inspector-tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
       .inspector-tabs button.active { border-color:rgba(168,85,247,.7); background:rgba(124,58,237,.2); color:#fff; }
       .ai-check-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:12px; }
@@ -1942,14 +1944,23 @@
             </div>
           </div>
           <div class="editor-shell">
-            <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Kéo thả tài nguyên vào timeline</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body"><div class="library-tabs"><button class="btn active" data-lib-tab="media">Media</button><button class="btn" data-lib-tab="text">Text</button><button class="btn" data-lib-tab="fx">Sticker/SFX</button></div>
-              <div id="libTabMedia" class="lib-tab-panel"><div class="editor-assets"></div><div class="top-actions" style="margin-top:12px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button></div><audio id="editorAssetAudioPreview" controls style="display:none;width:100%;margin-top:10px;"></audio></div>
-              <div id="libTabText" class="lib-tab-panel" style="display:none;"><p class="tiny" style="margin-bottom:8px;">Thêm chữ/phụ đề vào Timeline:</p><div class="field-stack"><button class="btn primary" id="timelineAutoTextButton" type="button" style="width:100%;" title="Tự động thêm chữ hook từ tiêu đề dự án">✨ Tự động thêm chữ hook</button><button class="btn primary" id="timelineAutoSubtitleButton" type="button" style="width:100%;" title="Tạo phụ đề cho TOÀN BỘ scene, đúng thời gian thật trong voice.mp3">🪄 Tự động thêm phụ đề cả video</button></div></div>
-              <div id="libTabFx" class="lib-tab-panel" style="display:none;">
-                <p class="tiny" style="margin-bottom:8px;">Miễn phí, rõ nguồn gốc (xem public/assets/LICENSES.md).</p>
-                <div class="tiny" style="margin-bottom:6px;font-weight:600;">Sticker (chèn vào track Overlay, 2 giây)</div>
+            <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Tất cả công cụ chèn nhanh vào Timeline — không cần đổi tab, cuộn xuống là thấy hết.</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body field-stack">
+              <div><div class="tiny" style="font-weight:600;margin-bottom:6px;">📁 Media đã upload</div><div class="editor-assets"></div><div class="top-actions" style="margin-top:10px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button></div><audio id="editorAssetAudioPreview" controls style="display:none;width:100%;margin-top:10px;"></audio></div>
+              <div><div class="tiny" style="font-weight:600;margin-bottom:6px;">✍️ Chữ &amp; phụ đề</div><div class="field-stack"><button class="btn primary" id="timelineAutoTextButton" type="button" style="width:100%;" title="Tự động thêm chữ hook từ tiêu đề dự án">✨ Tự động thêm chữ hook</button><button class="btn primary" id="timelineAutoSubtitleButton" type="button" style="width:100%;" title="Tạo phụ đề cho TOÀN BỘ scene, đúng thời gian thật trong voice.mp3">🪄 Tự động thêm phụ đề cả video</button><p class="tiny" style="margin:2px 0 0;">Đổi cỡ chữ/màu/font: chọn 1 clip chữ hoặc phụ đề trên Timeline, xem khung Inspector phía trên.</p></div></div>
+              <div><div class="tiny" style="font-weight:600;margin-bottom:6px;">🔀 Chuyển cảnh (chèn tại vị trí playhead)</div><div class="editor-assets" style="grid-template-columns:repeat(3,1fr);">
+                <button class="btn add-transition-btn" data-transition="fade" type="button">Fade</button>
+                <button class="btn add-transition-btn" data-transition="flash" type="button">Flash</button>
+                <button class="btn add-transition-btn" data-transition="zoom" type="button">Zoom</button>
+                <button class="btn add-transition-btn" data-transition="slide" type="button">Slide</button>
+                <button class="btn add-transition-btn" data-transition="blur" type="button">Blur</button>
+                <button class="btn add-transition-btn" data-transition="spin" type="button">Spin</button>
+              </div></div>
+              <div>
+                <div class="tiny" style="font-weight:600;margin-bottom:6px;">😀 Sticker có sẵn (track Overlay, 2 giây) — miễn phí, nguồn rõ ràng xem public/assets/LICENSES.md</div>
                 <div id="builtinStickerGrid" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-                <div class="tiny" style="margin:12px 0 6px;font-weight:600;">SFX (chèn vào track SFX)</div>
+              </div>
+              <div>
+                <div class="tiny" style="font-weight:600;margin-bottom:6px;">🔊 SFX có sẵn (track SFX)</div>
                 <div class="field-stack" id="builtinSfxList"></div>
               </div>
             </div></section>
@@ -4732,13 +4743,19 @@
             syncPlayheadUi();
             renderProgramPreviewAtPlayhead();
           };
-          ruler.addEventListener("mousedown", (event) => {
+          const bindScrubDrag = (el) => el.addEventListener("mousedown", (event) => {
+            event.stopPropagation();
             scrubAt(event.clientX);
             const onMove = (moveEvent) => scrubAt(moveEvent.clientX);
             const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
             document.addEventListener("mousemove", onMove);
             document.addEventListener("mouseup", onUp);
           });
+          bindScrubDrag(ruler);
+          // Vạch đỏ chạy dọc hết chiều cao các track — kéo được ở bất kỳ
+          // đoạn nào của vạch, không chỉ riêng hàng ruler mỏng phía trên.
+          const playheadEl = root.querySelector("#timelinePlayheadV3");
+          if (playheadEl) bindScrubDrag(playheadEl);
         }
         root.querySelectorAll(".clip-v3").forEach((el) => {
           el.addEventListener("mousedown", (event) => {
@@ -7329,7 +7346,7 @@
         if (!state.activeProjectId) return toast("Hãy chọn dự án trước.");
         const track = (state.timelineTracks || []).find((t) => t.track_type === "transition");
         if (!track) return;
-        const label = button.closest(".template-card")?.querySelector("h3")?.textContent || "Transition";
+        const label = button.closest(".template-card")?.querySelector("h3")?.textContent || button.textContent.trim() || "Transition";
         const startTime = state.timelinePlayhead || 0;
         try {
           const data = await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
@@ -7867,17 +7884,6 @@ A believable, high-retention product advertisement shot that can be edited direc
         event.preventDefault();
         el.scrollLeft += event.deltaY + event.deltaX;
       }, { passive: false });
-
-      // ---------- Asset Browser tabs (Media / Text / Sticker-SFX) — previously decorative ----------
-      $$(".library-tabs [data-lib-tab]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          $$(".library-tabs [data-lib-tab]").forEach((b) => b.classList.toggle("active", b === btn));
-          ["media", "text", "fx"].forEach((name) => {
-            const panel = $(`#libTab${name[0].toUpperCase()}${name.slice(1)}`);
-            if (panel) panel.style.display = name === btn.dataset.libTab ? "block" : "none";
-          });
-        });
-      });
 
       // ---------- Text clips: manual "+ Text" and "✨ Tự động thêm chữ" ----------
       async function findOrCreateTrack(trackType, label) {
