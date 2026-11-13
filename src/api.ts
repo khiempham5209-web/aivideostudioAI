@@ -576,6 +576,64 @@ async function handleUploadAsset(req: IncomingMessage, res: ServerResponse, proj
   sendJson(res, 201, { ok: true, asset });
 }
 
+// Built-in sticker/SFX pack shipped with the app (public/assets/stickers,
+// public/assets/sfx) — see public/assets/LICENSES.md for sourcing/licensing.
+// A fixed allowlist, not a free-form path, so this route can never be used
+// to register an arbitrary file on the server's disk as a project asset.
+const LIBRARY_ASSETS = new Set<string>([
+  "assets/stickers/fire.png", "assets/stickers/laugh.png", "assets/stickers/wow.png",
+  "assets/stickers/eyes.png", "assets/stickers/heart.png", "assets/stickers/thumbsup.png",
+  "assets/stickers/check.png", "assets/stickers/cross.png", "assets/stickers/party.png",
+  "assets/stickers/money.png", "assets/stickers/cart.png", "assets/stickers/star.png",
+  "assets/stickers/pin.png", "assets/stickers/love_eyes.png", "assets/stickers/clap.png",
+  "assets/stickers/point_right.png", "assets/stickers/warning.png", "assets/stickers/100.png",
+  "assets/stickers/thinking.png", "assets/stickers/cry.png",
+  "assets/sfx/ding.mp3", "assets/sfx/pop.mp3", "assets/sfx/whoosh.mp3",
+  "assets/sfx/error.mp3", "assets/sfx/success.mp3", "assets/sfx/click.mp3",
+]);
+
+async function handleAddLibraryAsset(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  const body = await readJsonBody(req) as { libraryPath?: unknown };
+  const libraryPath = typeof body.libraryPath === "string" ? body.libraryPath : "";
+  if (!LIBRARY_ASSETS.has(libraryPath)) {
+    sendJson(res, 400, { error: "Unknown built-in asset" });
+    return;
+  }
+  // Idempotent: re-clicking "Chèn" for the same sticker/SFX reuses the asset
+  // already registered for this project instead of piling up duplicate rows.
+  const fileName = libraryPath.split("/").pop()!;
+  const existing = listAssets(project.id).find((a) => a.file_name === fileName && a.file_path.endsWith(libraryPath));
+  if (existing) {
+    sendJson(res, 200, { ok: true, asset: existing });
+    return;
+  }
+  const filePath = resolve(PUBLIC_DIR, libraryPath);
+  const stats = await stat(filePath).catch(() => null);
+  if (!stats) {
+    sendJson(res, 404, { error: "Built-in asset file missing on server" });
+    return;
+  }
+  const type = assetType(libraryPath.endsWith(".mp3") ? "audio/mpeg" : "image/png", fileName);
+  const duration = type === "audio" ? await getDurationSec(filePath).catch(() => undefined) : undefined;
+  const asset = createAsset({
+    projectId: project.id,
+    type,
+    fileName,
+    mimeType: libraryPath.endsWith(".mp3") ? "audio/mpeg" : "image/png",
+    filePath,
+    fileSize: stats.size,
+    duration,
+  });
+  sendJson(res, 201, { ok: true, asset });
+}
+
 async function handleCreateDirectAssetUpload(req: IncomingMessage, res: ServerResponse, projectId: string) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -4253,6 +4311,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === "POST" && assetsMatch) {
       await handleUploadAsset(req, res, assetsMatch[1]);
+      return;
+    }
+
+    const fromLibraryMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/assets\/from-library$/);
+    if (req.method === "POST" && fromLibraryMatch) {
+      await handleAddLibraryAsset(req, res, fromLibraryMatch[1]);
       return;
     }
 

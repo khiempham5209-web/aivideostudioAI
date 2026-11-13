@@ -25,8 +25,12 @@ api-smoke-*.*
 /*.wav
 /*.srt
 
-# Big SFX library (downloaded by `npm run sfx:download` — too large to commit)
-SFX/
+# Big SFX library (downloaded by `npm run sfx:download` — too large to commit).
+# Anchored to the repo root: do NOT widen this back to a bare "SFX/", or it
+# will also swallow the small, curated, license-safe public/assets/sfx/
+# pack that ships with the app (self-generated via ffmpeg, see
+# public/assets/LICENSES.md) — that one is meant to be committed.
+/SFX/
 
 # Stock media downloaded on demand during render (Pexels) — runtime cache, not source.
 assets/pexels-cache/
