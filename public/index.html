@@ -1170,12 +1170,11 @@
       /* ===== Editor V2 + additional screens ===== */
       .editor-shell {
         display:grid;
-        /* Stage was minmax(0,1fr) — on any wide screen that ate almost all
-           the width even though a 9:16 canvas only needs ~height*9/16 of
-           it, leaving the real tools (inspector/library) squeezed into a
-           fixed 360px sidebar. Capping stage and giving the remainder to
-           the tools column is the actual fix, not just a bigger number. */
-        grid-template-columns:minmax(260px,420px) minmax(460px,1fr);
+        /* 50:50 giữa Preview và cột công cụ, theo đúng yêu cầu — cả 2 đều
+           1fr (bằng nhau), không ai chiếm hơn ai, tỉ lệ giữ nguyên ở mọi
+           độ rộng màn hình. Lần trước cap cứng 420px làm Preview co quá
+           nhỏ trên màn rộng — đổi hẳn sang tỉ lệ bằng nhau cho chắc. */
+        grid-template-columns:minmax(320px,1fr) minmax(320px,1fr);
         grid-template-areas:"stage inspector" "stage library";
         grid-template-rows:auto 1fr;
         gap:12px;
