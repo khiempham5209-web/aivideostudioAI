@@ -1419,6 +1419,7 @@
           <button data-page="voice">Giọng đọc AI</button>
           <button data-page="media">Thư viện Media</button>
           <button data-page="assets">Kho tài nguyên</button>
+          <button data-page="ai-prompt">AI Prompt</button>
           <button data-page="project-explorer">Project Explorer</button>
           <button data-page="timeline">Edit video V3</button>
           <button data-page="transitions">Transition</button>
@@ -1484,6 +1485,7 @@
           <button data-page="voice">Voice</button>
           <button data-page="media">Media</button>
           <button data-page="assets">Assets</button>
+          <button data-page="ai-prompt">AI Prompt</button>
           <button data-page="project-explorer">Project</button>
           <button data-page="timeline">Edit V3</button>
           <button data-page="transitions">Transition</button>
@@ -1710,6 +1712,57 @@
         </section>
 
         <section class="page" id="assets"><div class="page-head"><div><h2>Kho tài nguyên</h2><p class="muted">Toàn bộ file thật đã upload vào dự án đang chọn (video, audio, hình ảnh).</p></div><div class="top-actions"><button class="btn" id="assetsRefreshButton">Làm mới</button><button class="btn primary" id="assetsUploadButton">+ Upload tài nguyên</button></div></div><div class="grid asset-browser-grid"><div class="panel"><div class="panel-head"><h3>Danh mục</h3></div><div class="panel-body asset-category" id="assetCategoryList"><button class="btn primary" data-category="all">Tất cả</button><button class="btn" data-category="video">Video</button><button class="btn" data-category="audio">Audio</button><button class="btn" data-category="image">Hình ảnh</button><button class="btn" data-category="other">Khác</button></div></div><div class="panel"><div class="panel-head"><h3>Tài nguyên sẵn sàng</h3><input class="search" id="assetSearchInput" placeholder="Tìm asset..."></div><div class="panel-body"><div class="asset-item-grid" id="assetLibraryGrid"><div class="empty">Chưa có tài nguyên nào trong dự án.</div></div></div></div><div class="panel"><div class="panel-head"><h3>Thông tin asset</h3></div><div class="panel-body field-stack" id="assetInfoPanel"><div class="empty">Chọn 1 tài nguyên bên trái để xem chi tiết.</div></div></div></div></section>
+
+        <section class="page" id="ai-prompt">
+          <div class="page-head"><div><h2>AI Prompt</h2><p class="muted">Soạn prompt tạo video AI kiểu Flow/Veo ngay trong app. Điền thông tin, lấy prompt hoàn chỉnh để dán vào Flow — sau này kết nối API Veo3 sẽ dùng thẳng prompt này, không cần đổi lại.</p></div></div>
+          <div class="grid dashboard-grid">
+            <div class="panel">
+              <div class="panel-head"><h3>Nhân vật, phong cách &amp; giọng (cố định — dùng lại cho mọi video)</h3></div>
+              <div class="panel-body field-stack">
+                <div><label for="apCharacter">Mô tả nhân vật / presenter</label><textarea id="apCharacter" rows="3"></textarea></div>
+                <div><label for="apStyle">Phong cách hình ảnh chung</label><textarea id="apStyle" rows="2"></textarea></div>
+                <div class="field-stack" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+                  <div><label for="apVoiceGender">Giới tính giọng</label><select id="apVoiceGender"><option>Female voice</option><option>Male voice</option></select></div>
+                  <div><label for="apVoiceAccent">Giọng vùng miền</label><select id="apVoiceAccent"><option value="natural Northern Vietnamese accent">Bắc</option><option value="natural Southern Vietnamese accent">Nam</option><option value="natural Central Vietnamese accent">Trung</option></select></div>
+                  <div><label for="apVoiceTone">Tông giọng</label><input type="text" id="apVoiceTone"></div>
+                  <div><label for="apVoicePace">Tốc độ nói</label><input type="text" id="apVoicePace"></div>
+                </div>
+                <div class="top-actions"><button class="btn" id="apResetLockButton" type="button">Khôi phục mặc định</button></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>Ảnh nhân vật tham chiếu (tùy chọn)</h3></div>
+              <div class="panel-body field-stack">
+                <input type="file" id="apRefImage" accept="image/*">
+                <img id="apRefPreview" style="max-width:160px;border-radius:8px;display:none;" alt="Ảnh nhân vật tham chiếu">
+                <p class="tiny">Ảnh này chỉ xem trước trong trình duyệt, chưa được gửi đi đâu — tải lên Flow/Veo thủ công khi tạo. Không chọn ảnh thì prompt sẽ ghi rõ "để AI tự tạo nhân vật mới".</p>
+              </div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px;">
+            <div class="panel-head"><h3>Nội dung cảnh (điền lại cho mỗi cảnh/clip)</h3></div>
+            <div class="panel-body field-stack">
+              <div><label for="apSceneId">Lấy lời thoại từ scene có sẵn (tùy chọn)</label><select id="apSceneId"><option value="">— Không gắn với scene nào —</option></select></div>
+              <div><label for="apProductName">Tên sản phẩm</label><input type="text" id="apProductName"></div>
+              <div><label for="apProductFacts">Thông tin sản phẩm cần thể hiện</label><textarea id="apProductFacts" rows="2"></textarea></div>
+              <div><label for="apVoiceText">Lời thoại (tiếng Việt)</label><textarea id="apVoiceText" rows="2"></textarea></div>
+              <div><label for="apVisual">Mô tả hình ảnh (những gì cần thấy)</label><textarea id="apVisual" rows="2"></textarea></div>
+              <div><label for="apAction">Hành động (theo thứ tự)</label><textarea id="apAction" rows="2"></textarea></div>
+              <div class="field-stack" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+                <div><label for="apCamera">Góc máy</label><input type="text" id="apCamera" placeholder="vd: medium shot -> close-up"></div>
+                <div><label for="apSetting">Bối cảnh</label><input type="text" id="apSetting"></div>
+              </div>
+              <div class="field-stack" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+                <div><label for="apLipsync">Khớp môi</label><select id="apLipsync"><option value="A">Mặt rõ, cần khớp môi</option><option value="B" selected>Không thấy mặt / chỉ voice-over</option></select></div>
+                <div><label for="apDuration">Thời lượng (giây)</label><input type="number" id="apDuration" value="8" min="2" max="60"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px;">
+            <div class="panel-head"><h3>Prompt hoàn chỉnh</h3><button class="btn primary" id="apCopyButton" type="button">Sao chép prompt</button></div>
+            <div class="panel-body"><pre id="apOutput" style="white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12.5px;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:10px;max-height:50vh;overflow:auto;"></pre></div>
+          </div>
+        </section>
 
         <section class="page" id="project-explorer"><div class="page-head"><div><h2>Project Explorer</h2><p class="muted">Cây thành phần thật của dự án đang chọn: scene, media, timeline, export.</p></div><button class="btn primary" data-page="timeline">Mở trong Editor</button></div><div class="grid dashboard-grid"><div class="panel"><div class="panel-head"><h3 id="explorerProjectTitle">Chưa chọn dự án</h3><span class="pill" id="explorerProjectStatus"></span></div><div class="panel-body field-stack" id="explorerTree"><div class="empty">Hãy chọn 1 dự án ở thanh trên.</div></div></div><div class="panel"><div class="panel-head"><h3>Chi tiết</h3></div><div class="panel-body field-stack" id="explorerDetail"><div class="empty">Chọn 1 mục trong cây bên trái để xem chi tiết.</div></div></div></div></section>
 
@@ -2169,6 +2222,7 @@
         if (page === "ai-settings") loadSettingsStatus().catch(showError);
         if (page === "music") renderMusicLibrary();
         if (page === "assets") renderAssetLibrary();
+        if (page === "ai-prompt") apInit();
         if (page === "voice") refreshVoicePageStatus().catch(showError);
         if (page === "project-explorer") { loadJobs().then(renderProjectExplorer).catch(showError); renderProjectExplorer(); }
         if (page === "products") { loadProducts().catch(showError); loadContentQueue().catch(() => {}); }
@@ -5728,6 +5782,7 @@
         { page: "voice", label: "Giọng đọc AI", group: "main" },
         { page: "media", label: "Thư viện Media", group: "main" },
         { page: "assets", label: "Kho tài nguyên", group: "main" },
+        { page: "ai-prompt", label: "AI Prompt", group: "main" },
         { page: "products", label: "Kho sản phẩm", group: "main" },
         { page: "timeline", label: "Edit video V3", group: "main" },
         { page: "music", label: "Nhạc nền", group: "main" },
@@ -7433,6 +7488,169 @@
           $("#bootLoading")?.remove();
         }
       })();
+
+      // ---------- AI Prompt builder (Flow/Veo-style template, in-app) ----------
+      // Pure client-side composer — no backend call, no API key needed. It
+      // assembles the same "AdScene Pro VN" style template the user already
+      // uses by hand on Flow, so switching to a real Veo3 API call later only
+      // means wiring this same text to a new endpoint, not rewriting it.
+      const AP_DEFAULTS = {
+        apCharacter: "Young Vietnamese woman presenter, friendly and natural, mid-20s, casual home outfit, warm expression.",
+        apStyle: "Realistic Vietnamese UGC / social-commerce advertisement. Natural lighting, handheld smartphone look, believable skin tones, natural body language.",
+        apVoiceGender: "Female voice",
+        apVoiceAccent: "natural Northern Vietnamese accent",
+        apVoiceTone: "calm, warm and friendly, speaks like talking to a close friend",
+        apVoicePace: "normal conversational pace",
+      };
+      function apLoadLocks() {
+        Object.keys(AP_DEFAULTS).forEach((key) => {
+          const el = $("#" + key);
+          if (!el) return;
+          const saved = localStorage.getItem("aiPrompt_" + key);
+          el.value = saved !== null ? saved : AP_DEFAULTS[key];
+        });
+      }
+      function apSaveLock(key) {
+        const el = $("#" + key);
+        if (el) localStorage.setItem("aiPrompt_" + key, el.value);
+      }
+      function apResetLocks() {
+        Object.keys(AP_DEFAULTS).forEach((key) => localStorage.removeItem("aiPrompt_" + key));
+        apLoadLocks();
+        apBuildPrompt();
+      }
+      function renderAiPromptScenes() {
+        const select = $("#apSceneId");
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">— Không gắn với scene nào —</option>' +
+          (state.scenes || []).map((s, i) => `<option value="${s.id}">Scene ${i + 1}: ${(s.voice_text || "").replace(/"/g, "'").slice(0, 40)}</option>`).join("");
+        select.value = current;
+      }
+      function apBuildPrompt() {
+        const v = (id) => ($("#" + id)?.value || "").trim();
+        const hasRefImage = ($("#apRefImage")?.files?.length || 0) > 0;
+        const presenterBlock = hasRefImage
+          ? `If a presenter reference image has been uploaded for this scene:
+- Use that exact same person as the presenter.
+- Preserve the exact same face, hairstyle, skin tone, body proportions and signature details as shown in the reference image.
+- Do not invent a different person. Do not alter facial features.
+- Only adjust wardrobe, pose and expression as needed for this scene.`
+          : `No presenter reference image uploaded for this scene:
+- Create a new, realistic Vietnamese presenter that naturally fits the product, setting and target audience: ${v("apCharacter") || "(mô tả ở trên)"}.
+- Keep this invented presenter's face, hairstyle and outfit identical across all scenes of the same video.`;
+        const lipsyncRule = v("apLipsync") === "A"
+          ? "Presenter mouth is clearly visible. Accurate Vietnamese lip-sync is required."
+          : "Presenter mouth is not visible. Use Vietnamese voice-over; no lip-sync required.";
+        const text = `Create one realistic vertical 9:16 product advertisement scene using the uploaded product image as the primary visual reference.
+
+PRODUCT CONSISTENCY:
+Preserve the exact product shape, proportions, color, logo, packaging, labels, visible text, materials and design from the reference image.
+Do not redesign, simplify, replace or invent any part of the product.
+
+PRESENTER CONSISTENCY:
+${presenterBlock}
+
+SCENE PURPOSE:
+Introduce the product and explain its main use.
+
+PRODUCT:
+${v("apProductName") || "[Tên sản phẩm]"}
+
+PRODUCT FACTS TO SHOW:
+${v("apProductFacts") || "[Thông tin sản phẩm]"}
+
+VOICE / DIALOGUE IN VIETNAMESE:
+"${v("apVoiceText") || "[Lời thoại]"}"
+
+VOICE SETTINGS:
+Gender: ${v("apVoiceGender")}
+Tone and pitch: ${v("apVoiceTone")}
+Speaking pace: ${v("apVoicePace")}
+Accent: ${v("apVoiceAccent")}
+Keep this exact voice description identical across every scene of the same video so the voice does not change between clips.
+
+VISUAL DIRECTION:
+${v("apVisual") || "[Mô tả hình ảnh]"}
+
+ACTION:
+${v("apAction") || "[Hành động]"}
+
+PRESENTER:
+${v("apCharacter") || "[Mô tả nhân vật]"}
+
+CAMERA:
+${v("apCamera") || "medium shot -> close-up"}
+
+SETTING:
+${v("apSetting") || "[Bối cảnh]"}
+
+LIGHTING:
+Natural realistic commercial lighting, believable skin tones and accurate product details.
+
+STYLE:
+${v("apStyle")}
+
+VOICE-TO-VISUAL SYNC:
+Every spoken claim must be visually supported by what is shown on screen. When the voice mentions a feature, benefit or action, immediately show that exact feature, benefit or action.
+
+LIP-SYNC RULE:
+${lipsyncRule}
+
+CONTINUITY:
+Maintain the exact same presenter identity, wardrobe, product appearance, environment style and voice characteristics as adjacent scenes when references are supplied.
+
+NEGATIVE CONSTRAINTS:
+No distorted hands. No extra fingers. No duplicated products unless explicitly requested. No floating objects. No fake labels. No random text. No altered logo. No incorrect product colors. No unrealistic product behavior. No unrelated background action. No exaggerated acting. Do not change the presenter's face between scenes.
+
+DURATION:
+${v("apDuration") || "8"} seconds.
+
+OUTPUT GOAL:
+Create a believable, high-retention product advertisement shot that can be edited directly before or after the neighboring scenes in a 30-60 second TikTok/Shopee-style product video.`;
+        if ($("#apOutput")) $("#apOutput").textContent = text;
+      }
+      function apInit() {
+        renderAiPromptScenes();
+        if (apInit._wired) { apBuildPrompt(); return; }
+        apInit._wired = true;
+        apLoadLocks();
+        Object.keys(AP_DEFAULTS).forEach((key) => {
+          $("#" + key)?.addEventListener("input", () => { apSaveLock(key); apBuildPrompt(); });
+        });
+        ["apProductName", "apProductFacts", "apVoiceText", "apVisual", "apAction", "apCamera", "apSetting", "apLipsync", "apDuration"].forEach((id) => {
+          $("#" + id)?.addEventListener("input", apBuildPrompt);
+        });
+        $("#apSceneId")?.addEventListener("change", () => {
+          const scene = (state.scenes || []).find((s) => s.id === $("#apSceneId").value);
+          if (scene && $("#apVoiceText")) {
+            $("#apVoiceText").value = scene.voice_text || "";
+            apBuildPrompt();
+          }
+        });
+        $("#apRefImage")?.addEventListener("change", (event) => {
+          const file = event.target.files?.[0];
+          const img = $("#apRefPreview");
+          if (file && img) {
+            img.src = URL.createObjectURL(file);
+            img.style.display = "block";
+          } else if (img) {
+            img.style.display = "none";
+          }
+          apBuildPrompt();
+        });
+        $("#apResetLockButton")?.addEventListener("click", apResetLocks);
+        $("#apCopyButton")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText($("#apOutput").textContent || "");
+            toast("Đã sao chép prompt");
+          } catch {
+            toast("Không sao chép được — hãy bôi đen và Ctrl+C");
+          }
+        });
+        apBuildPrompt();
+      }
+
       document.addEventListener("click", (event) => {
         const demoButton = event.target.closest("[data-demo]");
         if (demoButton) {
