@@ -1170,21 +1170,22 @@
       /* ===== Editor V2 + additional screens ===== */
       .editor-shell {
         display:grid;
-        /* 50:50 giữa Preview và cột công cụ, theo đúng yêu cầu — cả 2 đều
-           1fr (bằng nhau), không ai chiếm hơn ai, tỉ lệ giữ nguyên ở mọi
-           độ rộng màn hình. Lần trước cap cứng 420px làm Preview co quá
-           nhỏ trên màn rộng — đổi hẳn sang tỉ lệ bằng nhau cho chắc. */
-        grid-template-columns:minmax(320px,1fr) minmax(320px,1fr);
+        /* 50:50 tuyệt đối — dùng minmax(0,1fr) chứ không phải minmax(320px,1fr):
+           với 1 số min-width > 0, nội dung bên trong (vd lưới media nhiều
+           item) có thể đẩy track đó rộng hơn 1fr "danh nghĩa", làm 2 cột
+           lệch nhau dù tỉ lệ fr bằng nhau. minmax(0,1fr) ép nội dung phải
+           tự co/cuộn bên trong, không được phép làm lệch cột. */
+        grid-template-columns:minmax(0,1fr) minmax(0,1fr);
         grid-template-areas:"stage inspector" "stage library";
         grid-template-rows:auto 1fr;
         gap:12px;
         align-items:start;
       }
       .editor-stage { grid-area:stage; }
-      .editor-inspector { grid-area:inspector; max-height:340px; overflow-y:auto; }
-      .editor-library { grid-area:library; max-height:460px; overflow-y:auto; }
+      .editor-inspector { grid-area:inspector; max-height:400px; overflow-y:auto; }
+      .editor-library { grid-area:library; max-height:520px; overflow-y:auto; }
       .editor-stage .panel-body { display:grid; gap:12px; }
-      .editor-preview-wrap { display:grid; place-items:center; height:360px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
+      .editor-preview-wrap { display:grid; place-items:center; height:400px; border-radius:10px; background:#030712; overflow:hidden; border:1px solid var(--line); }
       .editor-preview-canvas { height:100%; width:auto; max-width:100%; aspect-ratio:16/9; position:relative; display:grid; place-items:center; background:linear-gradient(135deg,#111827,#0f766e 48%,#581c87); }
       .editor-controls { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
       .editor-controls-group { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0; }
@@ -1263,6 +1264,7 @@
       .ai-check input[type="checkbox"] { width:16px; height:16px; flex:0 0 16px; accent-color:#a855f7; }
       .ai-check .ai-check-icon { font-size:15px; flex:0 0 auto; }
       .ai-edit-head { display:flex; justify-content:space-between; gap:14px; align-items:center; flex-wrap:wrap; }
+      #aiAutoEditCard summary::-webkit-details-marker { display:none; }
       .ai-edit-head h4 { margin:0; font-size:15px; }
       .source-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
       .source-card { min-height:150px; padding:15px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(180deg,rgba(21,28,41,.96),rgba(9,14,22,.96)); }
@@ -1931,12 +1933,12 @@
             <div><h2>Edit video V3</h2><p class="muted">Editor hoàn chỉnh: asset browser, preview, inspector động, waveform, playhead, nhiều track và AI tối ưu timeline.</p></div>
             <div class="top-actions"><button class="btn" id="timelineUndoButton" type="button">↶ Undo</button><button class="btn" id="timelineRedoButton" type="button">↷ Redo</button><button class="btn primary" id="aiAutoEditButton">✨ AI Optimize Timeline</button><button class="btn primary" id="renderTimelineButton">🎬 Render video từ Timeline</button></div>
           </div>
-          <div class="panel ai-edit-card" style="margin-bottom:12px;">
-            <div class="panel-body">
-              <div class="ai-edit-head">
-                <div><h4>✨ AI Auto Edit</h4><p class="tiny" style="margin-top:5px;">Tự chia scene, khớp voice, xóa khoảng lặng, crop đúng tỷ lệ, sinh subtitle, thêm transition và ducking nhạc nền.</p></div>
-                <span class="pill ok">Project ready</span>
-              </div>
+          <details class="panel ai-edit-card" id="aiAutoEditCard" style="margin-bottom:12px;">
+            <summary class="ai-edit-head" style="cursor:pointer;list-style:none;padding:14px 16px;">
+              <div><h4 style="display:inline;">✨ AI Auto Edit</h4><p class="tiny" style="margin-top:5px;">Tự chia scene, khớp voice, xóa khoảng lặng, crop đúng tỷ lệ, sinh subtitle, thêm transition và ducking nhạc nền. Bấm để ẩn/hiện.</p></div>
+              <span class="pill ok">Project ready</span>
+            </summary>
+            <div class="panel-body" style="padding-top:0;">
               <div class="ai-check-grid">
                 <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">📝</span> Sync subtitle</label>
                 <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">✂️</span> Auto cut</label>
@@ -1946,7 +1948,7 @@
                 <label class="ai-check"><input type="checkbox" checked><span class="ai-check-icon">🎚</span> Music ducking</label>
               </div>
             </div>
-          </div>
+          </details>
           <div class="editor-shell">
             <section class="panel editor-library"><div class="panel-head"><div><h3>Asset Browser</h3><p class="tiny">Tất cả công cụ chèn nhanh vào Timeline — không cần đổi tab, cuộn xuống là thấy hết.</p></div><button class="btn" data-page="assets">Mở kho</button></div><div class="panel-body field-stack">
               <div><div class="tiny" style="font-weight:600;margin-bottom:6px;">📁 Media đã upload</div><div class="editor-assets"></div><div class="top-actions" style="margin-top:10px;"><button class="btn" id="timelineAddVideoButton">+ Video</button><button class="btn" id="timelineAddAudioButton">+ Audio</button></div><audio id="editorAssetAudioPreview" controls style="display:none;width:100%;margin-top:10px;"></audio></div>
