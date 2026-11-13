@@ -1721,13 +1721,13 @@
               <div class="panel-body field-stack">
                 <div><label for="apCharacter">Mô tả nhân vật / presenter</label><textarea id="apCharacter" rows="3"></textarea></div>
                 <div><label for="apStyle">Phong cách hình ảnh chung</label><textarea id="apStyle" rows="2"></textarea></div>
-                <div class="field-stack" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
-                  <div><label for="apVoiceGender">Giới tính giọng</label><select id="apVoiceGender"><option>Female voice</option><option>Male voice</option></select></div>
-                  <div><label for="apVoiceAccent">Giọng vùng miền</label><select id="apVoiceAccent"><option value="natural Northern Vietnamese accent">Bắc</option><option value="natural Southern Vietnamese accent">Nam</option><option value="natural Central Vietnamese accent">Trung</option></select></div>
-                  <div><label for="apVoiceTone">Tông giọng</label><input type="text" id="apVoiceTone"></div>
-                  <div><label for="apVoicePace">Tốc độ nói</label><input type="text" id="apVoicePace"></div>
+                <div><label for="apVoiceId">Giọng đọc (lấy từ Giọng đọc AI của app)</label><select id="apVoiceId"><option value="">— Chọn giọng —</option></select></div>
+                <div class="top-actions">
+                  <button class="btn" id="apPreviewVoiceButton" type="button">🔊 Nghe thử giọng này đọc lời thoại</button>
+                  <button class="btn" id="apResetLockButton" type="button">Khôi phục mặc định</button>
                 </div>
-                <div class="top-actions"><button class="btn" id="apResetLockButton" type="button">Khôi phục mặc định</button></div>
+                <audio id="apVoicePreviewPlayer" controls style="display:none;width:100%;margin-top:6px;"></audio>
+                <p class="tiny">Giọng này dùng để <b>app tự tạo file MP3 đọc lời thoại</b> (đã hoạt động ngay bây giờ, không cần chờ API). Video hình ảnh (câm) thì do Veo3 tạo — app sẽ tự ghép 2 phần lại thành 1 clip hoàn chỉnh.</p>
               </div>
             </div>
             <div class="panel">
@@ -1762,6 +1762,13 @@
           <div class="panel" style="margin-top:14px;">
             <div class="panel-head"><h3>Prompt hoàn chỉnh</h3><button class="btn primary" id="apCopyButton" type="button">Sao chép prompt</button></div>
             <div class="panel-body"><pre id="apOutput" style="white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12.5px;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:10px;max-height:50vh;overflow:auto;"></pre></div>
+          </div>
+          <div class="panel" style="margin-top:14px;">
+            <div class="panel-head"><h3>Tạo video AI</h3></div>
+            <div class="panel-body field-stack">
+              <button class="btn primary" id="apGenerateButton" type="button" style="width:100%;">🎬 Tạo video AI cho cảnh này (Veo3)</button>
+              <p class="tiny">Hiện tại API Veo3 <b>chưa được nối</b> — bấm nút này sẽ chỉ nhắc bạn sao chép prompt và dán sang Flow như bình thường. Khi nối API xong, nút này sẽ tự gọi Veo3, tải video về, ghép với giọng MP3 ở trên, và đặt thẳng vào Timeline của cảnh này — không cần đổi gì khác trên màn này cả.</p>
+            </div>
           </div>
         </section>
 
@@ -7513,10 +7520,6 @@
       const AP_DEFAULTS = {
         apCharacter: "Young Vietnamese woman presenter, friendly and natural, mid-20s, casual home outfit, warm expression.",
         apStyle: "Realistic Vietnamese UGC / social-commerce advertisement. Natural lighting, handheld smartphone look, believable skin tones, natural body language.",
-        apVoiceGender: "Female voice",
-        apVoiceAccent: "natural Northern Vietnamese accent",
-        apVoiceTone: "calm, warm and friendly, speaks like talking to a close friend",
-        apVoicePace: "normal conversational pace",
       };
       function apLoadLocks() {
         Object.keys(AP_DEFAULTS).forEach((key) => {
@@ -7546,18 +7549,25 @@
       function apBuildPrompt() {
         const v = (id) => ($("#" + id)?.value || "").trim();
         const hasRefImage = ($("#apRefImage")?.files?.length || 0) > 0;
+        const voiceLabel = $("#apVoiceId")?.selectedOptions?.[0]?.textContent?.trim() || "";
         const presenterBlock = hasRefImage
-          ? `If a presenter reference image has been uploaded for this scene:
+          ? `A presenter reference image is attached:
 - Use that exact same person as the presenter.
 - Preserve the exact same face, hairstyle, skin tone, body proportions and signature details as shown in the reference image.
 - Do not invent a different person. Do not alter facial features.
 - Only adjust wardrobe, pose and expression as needed for this scene.`
-          : `No presenter reference image uploaded for this scene:
-- Create a new, realistic Vietnamese presenter that naturally fits the product, setting and target audience: ${v("apCharacter") || "(mô tả ở trên)"}.
-- Keep this invented presenter's face, hairstyle and outfit identical across all scenes of the same video.`;
-        const lipsyncRule = v("apLipsync") === "A"
-          ? "Presenter mouth is clearly visible. Accurate Vietnamese lip-sync is required."
-          : "Presenter mouth is not visible. Use Vietnamese voice-over; no lip-sync required.";
+          : `No presenter reference image is attached:
+- Create a new, realistic Vietnamese presenter that naturally fits the product, setting and target audience: ${v("apCharacter") || "(mô tả ở phần Nhân vật/phong cách)"}.
+- Keep this invented presenter's face, hairstyle and outfit identical across every scene of the same video.`;
+        // The app's own text-to-speech generates the real voice track
+        // separately (from VOICE_TEXT, with the voice picked above) and mixes
+        // it onto the clip afterward — so Veo/Flow is always asked for a MUTE
+        // clip by default (option B). Option A ("khớp môi") is only for the
+        // rare case where you want Veo itself to perform the line on camera
+        // instead of the app's TTS, so its instruction stays separate.
+        const audioBlock = v("apLipsync") === "A"
+          ? `The presenter's mouth is clearly visible and speaks this exact Vietnamese line out loud, with accurate lip-sync:\n"${v("apVoiceText") || "[Lời thoại]"}"`
+          : `No spoken dialogue — ambient sound only. The presenter's mouth should not be the focus (face turned away, off-camera, or hands/product in close-up). A Vietnamese voice-over will be added afterward by the app's own text-to-speech using this exact line, so everything shown on screen must visually match it:\n"${v("apVoiceText") || "[Lời thoại]"}"`;
         const text = `Create one realistic vertical 9:16 product advertisement scene using the uploaded product image as the primary visual reference.
 
 PRODUCT CONSISTENCY:
@@ -7567,24 +7577,14 @@ Do not redesign, simplify, replace or invent any part of the product.
 PRESENTER CONSISTENCY:
 ${presenterBlock}
 
-SCENE PURPOSE:
-Introduce the product and explain its main use.
-
 PRODUCT:
 ${v("apProductName") || "[Tên sản phẩm]"}
 
 PRODUCT FACTS TO SHOW:
 ${v("apProductFacts") || "[Thông tin sản phẩm]"}
 
-VOICE / DIALOGUE IN VIETNAMESE:
-"${v("apVoiceText") || "[Lời thoại]"}"
-
-VOICE SETTINGS:
-Gender: ${v("apVoiceGender")}
-Tone and pitch: ${v("apVoiceTone")}
-Speaking pace: ${v("apVoicePace")}
-Accent: ${v("apVoiceAccent")}
-Keep this exact voice description identical across every scene of the same video so the voice does not change between clips.
+AUDIO:
+${audioBlock}
 
 VISUAL DIRECTION:
 ${v("apVisual") || "[Mô tả hình ảnh]"}
@@ -7608,13 +7608,10 @@ STYLE:
 ${v("apStyle")}
 
 VOICE-TO-VISUAL SYNC:
-Every spoken claim must be visually supported by what is shown on screen. When the voice mentions a feature, benefit or action, immediately show that exact feature, benefit or action.
-
-LIP-SYNC RULE:
-${lipsyncRule}
+Every claim in the Vietnamese line above must be visually supported by what is shown on screen — when it mentions a feature, benefit or action, show that exact feature, benefit or action at that moment.
 
 CONTINUITY:
-Maintain the exact same presenter identity, wardrobe, product appearance, environment style and voice characteristics as adjacent scenes when references are supplied.
+Maintain the exact same presenter identity, wardrobe, product appearance and environment style as adjacent scenes when references are supplied.
 
 NEGATIVE CONSTRAINTS:
 No distorted hands. No extra fingers. No duplicated products unless explicitly requested. No floating objects. No fake labels. No random text. No altered logo. No incorrect product colors. No unrealistic product behavior. No unrelated background action. No exaggerated acting. Do not change the presenter's face between scenes.
@@ -7623,7 +7620,7 @@ DURATION:
 ${v("apDuration") || "8"} seconds.
 
 OUTPUT GOAL:
-Create a believable, high-retention product advertisement shot that can be edited directly before or after the neighboring scenes in a 30-60 second TikTok/Shopee-style product video.`;
+A believable, high-retention product advertisement shot that can be edited directly before or after the neighboring scenes in a 30-60 second TikTok/Shopee-style product video.${voiceLabel ? `\n\n(Giọng đọc sẽ dùng khi ghép: ${voiceLabel})` : ""}`;
         if ($("#apOutput")) $("#apOutput").textContent = text;
       }
       function renderAiPromptProducts() {
@@ -7658,9 +7655,21 @@ Create a believable, high-retention product advertisement shot that can be edite
         apBuildPrompt();
         toast(`Đã điền sẵn từ ${scene.label || "scene đã chọn"}.`);
       }
+      function renderAiPromptVoices() {
+        const select = $("#apVoiceId");
+        if (!select) return;
+        const current = select.value || localStorage.getItem("aiPrompt_apVoiceId") || "";
+        select.innerHTML = '<option value="">— Chọn giọng —</option>' +
+          (state.voices || []).map((v) => {
+            const l = `${v.label} - ${label(v.gender)} - ${label(v.region)} - ${label(v.tone)}`;
+            return `<option value="${v.id}"${v.status !== "ready" ? " disabled" : ""}>${l}</option>`;
+          }).join("");
+        if ((state.voices || []).some((v) => v.id === current)) select.value = current;
+      }
       function apInit() {
         renderAiPromptScenes();
         renderAiPromptProducts();
+        renderAiPromptVoices();
         if (apInit._wired) { apBuildPrompt(); return; }
         apInit._wired = true;
         apLoadLocks();
@@ -7669,6 +7678,10 @@ Create a believable, high-retention product advertisement shot that can be edite
         });
         ["apProductName", "apProductFacts", "apVoiceText", "apVisual", "apAction", "apCamera", "apSetting", "apLipsync", "apDuration"].forEach((id) => {
           $("#" + id)?.addEventListener("input", apBuildPrompt);
+        });
+        $("#apVoiceId")?.addEventListener("change", () => {
+          localStorage.setItem("aiPrompt_apVoiceId", $("#apVoiceId").value);
+          apBuildPrompt();
         });
         $("#apSceneId")?.addEventListener("change", () => apApplyScene($("#apSceneId").value));
         $("#apProductSelect")?.addEventListener("change", () => {
@@ -7698,6 +7711,37 @@ Create a believable, high-retention product advertisement shot that can be edite
           } catch {
             toast("Không sao chép được — hãy bôi đen và Ctrl+C");
           }
+        });
+        $("#apPreviewVoiceButton")?.addEventListener("click", async () => {
+          const voiceId = $("#apVoiceId")?.value;
+          if (!voiceId) return toast("Hãy chọn 1 giọng trước.");
+          const text = ($("#apVoiceText")?.value || "").slice(0, 220) || "Xin chào, đây là giọng đọc thử trong AI Video Studio.";
+          const button = $("#apPreviewVoiceButton");
+          button.disabled = true;
+          const originalText = button.textContent;
+          button.textContent = "Đang tạo giọng đọc...";
+          try {
+            const resp = await fetch("/api/voices/preview", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ voiceId, text, speed: 1 }),
+            });
+            if (!resp.ok) throw await resp.json().catch(() => ({ error: resp.statusText }));
+            const blob = await resp.blob();
+            const player = $("#apVoicePreviewPlayer");
+            if (state.apVoicePreviewUrl) URL.revokeObjectURL(state.apVoicePreviewUrl);
+            state.apVoicePreviewUrl = URL.createObjectURL(blob);
+            player.src = state.apVoicePreviewUrl;
+            player.style.display = "block";
+            await player.play();
+          } catch (error) {
+            showError(error);
+          } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+          }
+        });
+        $("#apGenerateButton")?.addEventListener("click", () => {
+          toast("Chưa nối API Veo3 — sao chép prompt ở trên rồi dán sang Flow để tạo video, như hiện tại.");
         });
         apBuildPrompt();
       }
