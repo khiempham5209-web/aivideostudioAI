@@ -1743,7 +1743,8 @@
             <div class="panel-head"><h3>Nội dung cảnh (điền lại cho mỗi cảnh/clip)</h3></div>
             <div class="panel-body field-stack">
               <div><label for="apSceneId">Lấy lời thoại từ scene có sẵn (tùy chọn)</label><select id="apSceneId"><option value="">— Không gắn với scene nào —</option></select></div>
-              <div><label for="apProductName">Tên sản phẩm</label><input type="text" id="apProductName"></div>
+              <div><label for="apProductSelect">Chọn sản phẩm từ Kho sản phẩm (tùy chọn)</label><select id="apProductSelect"><option value="">— Sản phẩm khác (tự nhập tên bên dưới) —</option></select></div>
+              <div><label for="apProductName">Tên sản phẩm</label><input type="text" id="apProductName" placeholder="Tự nhập, hoặc chọn ở ô trên để tự điền"></div>
               <div><label for="apProductFacts">Thông tin sản phẩm cần thể hiện</label><textarea id="apProductFacts" rows="2"></textarea></div>
               <div><label for="apVoiceText">Lời thoại (tiếng Việt)</label><textarea id="apVoiceText" rows="2"></textarea></div>
               <div><label for="apVisual">Mô tả hình ảnh (những gì cần thấy)</label><textarea id="apVisual" rows="2"></textarea></div>
@@ -4944,7 +4945,7 @@
         rows.forEach((row, index) => {
           const item = document.createElement("div");
           item.className = "scene";
-          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><div class="voice-top"><strong>${row.label}</strong><span><button class="btn edit-scene" data-id="${row.id}">Sửa tay</button> <button class="btn delete-scene" data-id="${row.id}">Xóa</button></span></div><p class="muted" style="margin-top:8px;">${row.voice_text || ""}</p></div>`;
+          item.innerHTML = `<div class="mini" style="--art:${art[index % art.length]}"></div><div><div class="voice-top"><strong>${row.label}</strong><span><button class="btn scene-ai-prompt" data-id="${row.id}" title="Soạn prompt AI (Flow/Veo) cho riêng cảnh này">🎬 Prompt AI</button> <button class="btn edit-scene" data-id="${row.id}">Sửa tay</button> <button class="btn delete-scene" data-id="${row.id}">Xóa</button></span></div><p class="muted" style="margin-top:8px;">${row.voice_text || ""}</p></div>`;
           $("#sceneList").appendChild(item);
         });
       }
@@ -6226,6 +6227,11 @@
             await loadScenes(state.activeProjectId);
             toast("Đã xóa scene.");
           }).catch(showError);
+        }
+        if (target.classList.contains("scene-ai-prompt")) {
+          switchPage("ai-prompt");
+          apInit();
+          apApplyScene(sceneId);
         }
       });
       $("#previewVoiceButton").addEventListener("click", async () => {
@@ -7610,8 +7616,41 @@ OUTPUT GOAL:
 Create a believable, high-retention product advertisement shot that can be edited directly before or after the neighboring scenes in a 30-60 second TikTok/Shopee-style product video.`;
         if ($("#apOutput")) $("#apOutput").textContent = text;
       }
+      function renderAiPromptProducts() {
+        const select = $("#apProductSelect");
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">— Sản phẩm khác (tự nhập tên bên dưới) —</option>' +
+          (state.products || []).map((p) => `<option value="${p.id}">${p.product_name}${p.item_id ? " (" + p.item_id + ")" : ""}</option>`).join("");
+        if ((state.products || []).some((p) => p.id === current)) select.value = current;
+      }
+      // Called both when picking a scene from the dropdown and when clicking
+      // "🎬 Prompt AI" on a scene row in Kịch bản AI — fills every field this
+      // builder can know for sure from real project data (lời thoại, thời
+      // lượng, sản phẩm gắn với dự án nếu là project Affiliate), so the user
+      // only has to type the few things that genuinely differ per scene
+      // (hành động, bối cảnh, mô tả hình ảnh).
+      function apApplyScene(sceneId) {
+        const scene = (state.scenes || []).find((s) => s.id === sceneId);
+        if (!scene) return;
+        if ($("#apSceneId")) $("#apSceneId").value = sceneId;
+        if ($("#apVoiceText")) $("#apVoiceText").value = scene.voice_text || "";
+        if (scene.voice_duration_sec && $("#apDuration")) {
+          $("#apDuration").value = Math.max(2, Math.round(scene.voice_duration_sec));
+        }
+        const project = activeProject();
+        const linkedProduct = project?.product_id ? (state.products || []).find((p) => p.id === project.product_id) : null;
+        if (linkedProduct) {
+          if ($("#apProductSelect")) $("#apProductSelect").value = linkedProduct.id;
+          if ($("#apProductName")) $("#apProductName").value = linkedProduct.product_name || "";
+          if ($("#apProductFacts") && !$("#apProductFacts").value) $("#apProductFacts").value = linkedProduct.key_points || "";
+        }
+        apBuildPrompt();
+        toast(`Đã điền sẵn từ ${scene.label || "scene đã chọn"}.`);
+      }
       function apInit() {
         renderAiPromptScenes();
+        renderAiPromptProducts();
         if (apInit._wired) { apBuildPrompt(); return; }
         apInit._wired = true;
         apLoadLocks();
@@ -7621,10 +7660,12 @@ Create a believable, high-retention product advertisement shot that can be edite
         ["apProductName", "apProductFacts", "apVoiceText", "apVisual", "apAction", "apCamera", "apSetting", "apLipsync", "apDuration"].forEach((id) => {
           $("#" + id)?.addEventListener("input", apBuildPrompt);
         });
-        $("#apSceneId")?.addEventListener("change", () => {
-          const scene = (state.scenes || []).find((s) => s.id === $("#apSceneId").value);
-          if (scene && $("#apVoiceText")) {
-            $("#apVoiceText").value = scene.voice_text || "";
+        $("#apSceneId")?.addEventListener("change", () => apApplyScene($("#apSceneId").value));
+        $("#apProductSelect")?.addEventListener("change", () => {
+          const product = (state.products || []).find((p) => p.id === $("#apProductSelect").value);
+          if (product) {
+            if ($("#apProductName")) $("#apProductName").value = product.product_name || "";
+            if ($("#apProductFacts")) $("#apProductFacts").value = product.key_points || "";
             apBuildPrompt();
           }
         });
