@@ -42,7 +42,9 @@ def main():
         if not ref.is_file():
             print(f"Reference voice not found: {ref}", file=sys.stderr)
             sys.exit(2)
-        audio = client.infer(text, ref_audio=str(ref), temperature=0.5)
+        # denoise=False: the reference is already Demucs-separated; VieNeu's
+        # extra denoise pass audibly flattened the timbre in A/B listening.
+        audio = client.infer(text, ref_audio=str(ref), denoise=False, temperature=0.5)
     else:
         audio = client.infer(text, voice=voice_name, temperature=0.5)
     client.save(audio, output_path)
