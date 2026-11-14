@@ -17,6 +17,7 @@ import { toSlug } from "./utils/slug.js";
 import { hashPassword, verifyPassword, generateTotpSecret, verifyTotpCode, buildTotpQrCode } from "./auth/local-auth.js";
 import { FFMPEG_BIN } from "./utils/binaries.js";
 import { getDurationSec } from "./assets/audio-tools.js";
+import { startVeoGeneration, pollVeoOperation, downloadVeoVideoFromUri } from "./video-gen/veo-client.js";
 import { fetchMedia } from "./assets/image-fetcher.js";
 import { fetchShopeeGallery, deriveShopeeItemId } from "./assets/shopee-gallery.js";
 import { deleteR2Object, downloadR2ToFile, isR2Configured, r2Uri, signedR2UploadUrl, signedR2Url, uploadFileToR2 } from "./cloud/r2-storage.js";
@@ -51,6 +52,7 @@ import {
   createAsset,
   createClip,
   createRenderJob,
+  createVideoGenJob,
   deleteClip,
   deleteSession,
   deleteAsset,
@@ -71,6 +73,7 @@ import {
   getUser,
   getUserProject,
   getRenderJob,
+  getVideoGenJob,
   isUserFile,
   listUserStoragePaths,
   listClips,
@@ -87,6 +90,7 @@ import {
   updateProject,
   setProjectReviewStatus,
   updateRenderJob,
+  updateVideoGenJob,
   updateTrack,
   updateUserSettings,
   upsertUser,
@@ -632,6 +636,122 @@ async function handleAddLibraryAsset(req: IncomingMessage, res: ServerResponse, 
     duration,
   });
   sendJson(res, 201, { ok: true, asset });
+}
+
+// Maximum reference-image upload accepted inline in the JSON body (base64).
+// A character portrait is a few hundred KB at most; this just guards against
+// someone accidentally sending something huge.
+const MAX_INLINE_REF_IMAGE_BYTES = 8 * 1024 * 1024;
+
+async function handleStartVideoGen(req: IncomingMessage, res: ServerResponse, projectId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const project = getUserProject(user.email, projectId);
+  if (!project) {
+    sendJson(res, 404, { error: "Project not found" });
+    return;
+  }
+  const body = await readJsonBody(req) as {
+    prompt?: unknown;
+    sceneId?: unknown;
+    clipId?: unknown;
+    referenceImageBase64?: unknown;
+    referenceImageMimeType?: unknown;
+    aspectRatio?: unknown;
+    durationSeconds?: unknown;
+  };
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  if (!prompt) {
+    sendJson(res, 400, { error: "Missing prompt" });
+    return;
+  }
+  const sceneId = typeof body.sceneId === "string" && body.sceneId ? body.sceneId : null;
+  const clipId = typeof body.clipId === "string" && body.clipId ? body.clipId : null;
+  const aspectRatio = body.aspectRatio === "16:9" || body.aspectRatio === "1:1" ? body.aspectRatio : "9:16";
+  const durationSeconds = typeof body.durationSeconds === "number" && body.durationSeconds > 0 ? Math.min(60, body.durationSeconds) : 8;
+
+  const job = createVideoGenJob({ projectId: project.id, sceneId, clipId, prompt });
+
+  let referenceImage: { bytes: Buffer; mimeType: string } | undefined;
+  if (typeof body.referenceImageBase64 === "string" && body.referenceImageBase64) {
+    const bytes = Buffer.from(body.referenceImageBase64, "base64");
+    if (bytes.length > MAX_INLINE_REF_IMAGE_BYTES) {
+      updateVideoGenJob(job.id, { status: "failed", error_message: "Ảnh tham chiếu quá lớn (tối đa 8MB)." });
+      sendJson(res, 413, { error: "Reference image too large", job: getVideoGenJob(job.id) });
+      return;
+    }
+    referenceImage = { bytes, mimeType: typeof body.referenceImageMimeType === "string" ? body.referenceImageMimeType : "image/png" };
+  }
+
+  try {
+    const { operationName, done } = await startVeoGeneration({ prompt, referenceImage, aspectRatio, durationSeconds });
+    const updated = updateVideoGenJob(job.id, { status: done ? "running" : "running", operation_name: operationName });
+    sendJson(res, 201, { ok: true, job: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const updated = updateVideoGenJob(job.id, { status: "failed", error_message: message.slice(0, 500) });
+    // 200, not 500 — the request itself succeeded (a job row exists); the
+    // generation attempt failed, which the frontend reads from job.status
+    // exactly the same way it would after a failed poll, no special-casing.
+    sendJson(res, 200, { ok: false, job: updated });
+  }
+}
+
+async function handlePollVideoGen(req: IncomingMessage, res: ServerResponse, jobId: string) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const job = getVideoGenJob(jobId);
+  if (!job) {
+    sendJson(res, 404, { error: "Video-gen job not found" });
+    return;
+  }
+  const project = getProject(job.project_id);
+  if (!project || project.owner_email !== user.email) {
+    sendJson(res, 403, { error: "Job does not belong to the current user" });
+    return;
+  }
+  if (job.status !== "running" || !job.operation_name) {
+    sendJson(res, 200, { ok: true, job });
+    return;
+  }
+  try {
+    const result = await pollVeoOperation(job.operation_name);
+    if (!result.done) {
+      sendJson(res, 200, { ok: true, job });
+      return;
+    }
+    if (result.errorMessage) {
+      const updated = updateVideoGenJob(job.id, { status: "failed", error_message: result.errorMessage });
+      sendJson(res, 200, { ok: true, job: updated });
+      return;
+    }
+    const targetDir = resolve(STORAGE_DIR, project.id, "video-gen");
+    await mkdir(targetDir, { recursive: true });
+    const fileName = `${job.id}.mp4`;
+    const filePath = join(targetDir, fileName);
+    if (result.videoBytes) {
+      await writeFile(filePath, result.videoBytes);
+    } else if (result.videoUri) {
+      await downloadVeoVideoFromUri(result.videoUri, filePath);
+    } else {
+      throw new Error("Veo3 operation done nhưng không có video bytes lẫn uri.");
+    }
+    const stats = await stat(filePath);
+    const asset = createAsset({
+      projectId: project.id,
+      type: "video",
+      fileName,
+      mimeType: "video/mp4",
+      filePath,
+      fileSize: stats.size,
+    });
+    const updated = updateVideoGenJob(job.id, { status: "completed", asset_id: asset.id });
+    sendJson(res, 200, { ok: true, job: updated, asset });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const updated = updateVideoGenJob(job.id, { status: "failed", error_message: message.slice(0, 500) });
+    sendJson(res, 200, { ok: true, job: updated });
+  }
 }
 
 async function handleCreateDirectAssetUpload(req: IncomingMessage, res: ServerResponse, projectId: string) {
@@ -4317,6 +4437,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const fromLibraryMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/assets\/from-library$/);
     if (req.method === "POST" && fromLibraryMatch) {
       await handleAddLibraryAsset(req, res, fromLibraryMatch[1]);
+      return;
+    }
+
+    const videoGenStartMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/video-gen$/);
+    if (req.method === "POST" && videoGenStartMatch) {
+      await handleStartVideoGen(req, res, videoGenStartMatch[1]);
+      return;
+    }
+
+    const videoGenPollMatch = url.pathname.match(/^\/api\/video-gen\/([^/]+)$/);
+    if (req.method === "GET" && videoGenPollMatch) {
+      await handlePollVideoGen(req, res, videoGenPollMatch[1]);
       return;
     }
 

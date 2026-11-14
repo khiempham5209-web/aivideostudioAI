@@ -7810,8 +7810,64 @@ A believable, high-retention product advertisement shot that can be edited direc
             button.textContent = originalText;
           }
         });
-        $("#apGenerateButton")?.addEventListener("click", () => {
-          toast("Chưa nối API Veo3 — sao chép prompt ở trên rồi dán sang Flow để tạo video, như hiện tại.");
+        function fileToBase64(file) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(",").pop());
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        }
+        $("#apGenerateButton")?.addEventListener("click", async () => {
+          if (!state.activeProjectId) return toast("Hãy chọn hoặc tạo dự án trước.");
+          const prompt = $("#apOutput")?.textContent?.trim();
+          if (!prompt) return toast("Chưa có prompt — điền thông tin cảnh ở trên trước.");
+          const button = $("#apGenerateButton");
+          button.disabled = true;
+          const originalText = button.textContent;
+          try {
+            button.textContent = "Đang gửi yêu cầu tới Veo3...";
+            const refFile = $("#apRefImage")?.files?.[0];
+            let referenceImageBase64, referenceImageMimeType;
+            if (refFile) {
+              referenceImageBase64 = await fileToBase64(refFile);
+              referenceImageMimeType = refFile.type || "image/png";
+            }
+            const durationSeconds = Number($("#apDuration")?.value || 8);
+            const sceneId = $("#apSceneId")?.value || null;
+            const data = await api(`/api/projects/${state.activeProjectId}/video-gen`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt, sceneId, aspectRatio: "9:16", durationSeconds, referenceImageBase64, referenceImageMimeType }),
+            });
+            let job = data.job;
+            if (job.status === "failed") throw new Error(job.error_message || "Tạo video thất bại.");
+            let tries = 0;
+            while (job.status === "running" || job.status === "pending") {
+              tries++;
+              button.textContent = `Đang tạo video Veo3... (${tries * 10}s)`;
+              await new Promise((r) => setTimeout(r, 10000));
+              const poll = await api(`/api/video-gen/${job.id}`);
+              job = poll.job;
+              if (job.status === "completed") {
+                if (!poll.asset) throw new Error("Job hoàn tất nhưng không có asset trả về.");
+                const track = await findOrCreateTrack("video", "Video 1");
+                await api(`/api/projects/${state.activeProjectId}/timeline/clips`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ trackId: track.id, label: "Veo3", sourceAssetId: poll.asset.id, startTime: state.timelinePlayhead || 0, duration: durationSeconds }),
+                });
+                await loadTimeline(state.activeProjectId);
+                toast("🎬 Video Veo3 đã tạo xong, đã thêm vào track Video 1 tại vị trí playhead.");
+              } else if (job.status === "failed") {
+                throw new Error(job.error_message || "Tạo video thất bại.");
+              }
+              if (tries > 60) throw new Error("Chờ quá lâu (>10 phút) — kiểm tra lại ở Hàng đợi render hoặc thử lại.");
+            }
+          } catch (error) {
+            showError(error);
+          } finally {
+            button.disabled = false;
+            button.textContent = originalText;
+          }
         });
         apBuildPrompt();
       }
