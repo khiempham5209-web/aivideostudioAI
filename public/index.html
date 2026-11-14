@@ -1711,6 +1711,18 @@
               </div>
             </div>
           </div>
+          <div class="panel" style="margin-top:16px;">
+            <div class="panel-head"><h3>Tạo Voice từ Text ngoài kịch bản</h3></div>
+            <div class="panel-body field-stack">
+              <p class="tiny">Dùng khi bạn có sẵn 1 đoạn text riêng (không nằm trong Kịch bản AI của dự án nào) và chỉ muốn tạo file giọng đọc MP3 cho đoạn đó — không đụng gì đến cảnh/kịch bản hiện có. App dùng đúng giọng + tốc độ đang chọn ở trên.</p>
+              <textarea id="adhocVoiceText" rows="8" placeholder="Dán văn bản cần đọc vào đây..."></textarea>
+              <div class="top-actions">
+                <button class="btn primary" id="adhocVoiceGenerateButton" type="button">🎙️ Tạo voice từ text này</button>
+                <a id="adhocVoiceDownloadLink" class="btn" style="display:none;" download="voice.mp3">⬇️ Tải MP3</a>
+              </div>
+              <audio id="adhocVoicePlayer" style="display:none;width:100%;margin-top:8px;" controls></audio>
+            </div>
+          </div>
         </section>
 
         <section class="page" id="media">
@@ -6350,6 +6362,44 @@
         } finally {
           $("#previewVoiceButton").disabled = false;
           $("#previewVoiceButton").textContent = "Preview giọng đọc";
+        }
+      });
+      $("#adhocVoiceGenerateButton")?.addEventListener("click", async () => {
+        const voiceId = $("#voiceName").value;
+        if (!voiceId) return toast("Hãy chọn 1 giọng trước.");
+        const text = $("#adhocVoiceText").value.trim();
+        if (!text) return toast("Dán văn bản cần đọc vào ô bên trên trước.");
+        const speed = Number($("#speed").value || 1);
+        const button = $("#adhocVoiceGenerateButton");
+        const player = $("#adhocVoicePlayer");
+        const downloadLink = $("#adhocVoiceDownloadLink");
+        button.disabled = true;
+        button.textContent = "Đang tạo giọng đọc...";
+        try {
+          const resp = await fetch("/api/voices/generate-adhoc", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ voiceId, text, speed }),
+          });
+          if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({ error: resp.statusText }));
+            throw errData;
+          }
+          const blob = await resp.blob();
+          if (state.adhocVoiceUrl) URL.revokeObjectURL(state.adhocVoiceUrl);
+          state.adhocVoiceUrl = URL.createObjectURL(blob);
+          player.src = state.adhocVoiceUrl;
+          player.volume = Math.min(1, Number($("#volume").value || 100) / 100);
+          player.style.display = "block";
+          downloadLink.href = state.adhocVoiceUrl;
+          downloadLink.style.display = "inline-block";
+          await player.play();
+          toast("Đã tạo voice từ text ngoài — nghe thử hoặc tải MP3 về.");
+        } catch (error) {
+          showError(error);
+        } finally {
+          button.disabled = false;
+          button.textContent = "🎙️ Tạo voice từ text này";
         }
       });
       $$(".timeline-tool").forEach((button) => button.addEventListener("click", () => {

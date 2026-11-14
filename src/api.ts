@@ -3380,6 +3380,56 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
+    // Standalone text-to-voice: generate a full MP3 from any pasted text,
+    // completely independent of a project's scenes/script — for when the
+    // user has an outside script they want voiced without wiring it into
+    // the scene-based pipeline at all. Unlike /api/voices/preview (capped
+    // at 220 chars, meant for a quick demo snippet), this takes the full
+    // text up to a generous cap and always returns the complete audio.
+    if (req.method === "POST" && url.pathname === "/api/voices/generate-adhoc") {
+      const user = requireUser(req, res);
+      if (!user) return;
+      const body = await readJsonBody(req);
+      const voiceId = String((body as { voiceId?: unknown }).voiceId || "");
+      const voice = getEffectiveVoiceOptions().find((item) => item.id === voiceId);
+      if (!voice) {
+        sendJson(res, 404, { error: "Voice not found" });
+        return;
+      }
+      if (voice.status !== "ready") {
+        sendJson(res, 400, { error: `Giọng "${voice.label}" cần cấu hình server riêng (${voice.source}), chưa tạo được.` });
+        return;
+      }
+      const rawText = typeof (body as { text?: unknown }).text === "string" ? (body as { text: string }).text : "";
+      const text = rawText.trim().slice(0, 8000);
+      if (!text) {
+        sendJson(res, 400, { error: "Chưa có văn bản để tạo giọng đọc." });
+        return;
+      }
+      const speed = Math.min(2, Math.max(0.5, Number((body as { speed?: unknown }).speed) || 1));
+      const adhocDir = resolve("storage", "voice-adhoc");
+      await mkdir(adhocDir, { recursive: true });
+      const textHash = createHash("sha1").update(`${voice.id}:${speed}:${text}`).digest("hex").slice(0, 16);
+      const outPath = join(adhocDir, `${textHash}.mp3`);
+      try {
+        if (!existsSync(outPath)) {
+          const client = createTtsClient(loadConfig(), { provider: voice.provider, voiceName: voice.runtimeVoiceName, speed });
+          await client.generate(text, outPath);
+        }
+        const audioBuffer = await readFile(outPath);
+        res.writeHead(200, {
+          "Content-Type": "audio/mpeg",
+          "Content-Length": String(audioBuffer.length),
+          "Content-Disposition": `attachment; filename="voice-${textHash}.mp3"`,
+          "Cache-Control": "private, max-age=86400",
+        });
+        res.end(audioBuffer);
+      } catch (error) {
+        sendJson(res, 502, { error: `Tạo giọng đọc thất bại: ${error instanceof Error ? error.message : String(error)}` });
+      }
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/templates") {
       const user = requireUser(req, res);
       if (!user) return;
