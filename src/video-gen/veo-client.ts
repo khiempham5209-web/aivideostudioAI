@@ -18,11 +18,6 @@ export interface StartVeoGenerationOptions {
   referenceImage?: VeoReferenceImage;
   aspectRatio?: "9:16" | "16:9" | "1:1";
   durationSeconds?: number;
-  /** Mute by default — the app's own TTS supplies the real voice track
-   *  separately and mixes it onto this clip afterward (see the AI Prompt
-   *  page's AUDIO block, which always asks Veo for an ambient/no-dialogue
-   *  clip unless "Khớp môi" is explicitly chosen). */
-  generateAudio?: boolean;
 }
 
 function requireClient(): GoogleGenAI {
@@ -38,13 +33,20 @@ function requireClient(): GoogleGenAI {
  *  cannot be kept across separate HTTP requests. */
 export async function startVeoGeneration(opts: StartVeoGenerationOptions): Promise<{ operationName: string; done: boolean }> {
   const ai = requireClient();
+  // generateAudio is only accepted in Vertex AI / Enterprise mode — this
+  // app uses the plain Gemini Developer API key, which rejects it outright
+  // (confirmed live: "generateAudio parameter is only supported in Gemini
+  // Enterprise Agent Platform mode, not in Gemini Developer API mode.").
+  // Veo3 on this tier always generates its own audio; the app's own TTS
+  // track still gets mixed in separately at render time (timeline-renderer
+  // mutes/replaces track audio per track settings), so this isn't a
+  // functional loss, just one fewer knob at this API tier.
   const operation = await ai.models.generateVideos({
     model: VEO_MODEL,
     prompt: opts.prompt,
     config: {
       aspectRatio: opts.aspectRatio ?? "9:16",
       durationSeconds: opts.durationSeconds ?? 8,
-      generateAudio: opts.generateAudio ?? false,
       personGeneration: "allow_adult",
       referenceImages: opts.referenceImage
         ? [{
