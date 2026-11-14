@@ -766,6 +766,22 @@ export const VOICE_OPTIONS: VoiceOption[] = [
     status: "ready",
     description: "Giong local offline (mac dinh cua VieNeu).",
   },
+  // Cloned from the owner's own voice (reference: assets/voices/minan_admin.wav,
+  // separated from the original video with Demucs). vieneu-synth.py treats
+  // "clone:<name>" as a ref_audio clone instead of a preset name.
+  {
+    id: "vieneu-minan-admin",
+    name: "minan_admin",
+    runtimeVoiceName: "clone:minan_admin",
+    label: "minan_admin",
+    gender: "female",
+    region: "north",
+    tone: "story",
+    provider: "vieneu",
+    source: "VieNeu-TTS voice clone (local, offline)",
+    status: "ready",
+    description: "Giong clone tu giong that cua chu kenh (VieNeu, local offline).",
+  },
   {
     id: "omni-female-north-warm",
     name: "omnivoice-female-north-warm",
