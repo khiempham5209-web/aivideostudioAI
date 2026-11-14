@@ -85,11 +85,77 @@ export async function cutFootageToDuration(
   ]);
 }
 
-const ASPECT_RESOLUTION: Record<"16:9" | "9:16" | "1:1", [number, number]> = {
+export const ASPECT_RESOLUTION: Record<"16:9" | "9:16" | "1:1", [number, number]> = {
   "16:9": [1920, 1080],
   "9:16": [1080, 1920],
   "1:1": [1080, 1080],
 };
+
+export interface KaraokeWord {
+  text: string;
+  /** Estimated speaking duration in seconds (proportional, not real ASR timing). */
+  durationSec: number;
+}
+
+export interface KaraokeLine {
+  start: number;
+  end: number;
+  words: KaraokeWord[];
+}
+
+function formatAssTime(seconds: number): string {
+  const cs = Math.max(0, Math.round(seconds * 100));
+  const hours = Math.floor(cs / 360000);
+  const minutes = Math.floor((cs % 360000) / 6000);
+  const secs = Math.floor((cs % 6000) / 100);
+  const centis = cs % 100;
+  const pad = (v: number, w = 2) => String(v).padStart(w, "0");
+  return `${hours}:${pad(minutes)}:${pad(secs)}.${pad(centis)}`;
+}
+
+/** ASS Dialogue text is a single line — strip anything that would break the
+ *  format (literal braces open override blocks, backslashes start tags). */
+function escapeAssText(text: string): string {
+  return text.replace(/[{}\\]/g, "");
+}
+
+/**
+ * Builds a karaoke-style .ass subtitle: one Dialogue line per caption chunk,
+ * each word wrapped in a `\k` hard-karaoke tag so libass sweeps it from the
+ * "not yet spoken" to the "spoken" color at its estimated time — burned via
+ * ffmpeg's `ass` filter (not `subtitles`+force_style, which only applies
+ * uniform styling and can't carry per-word timing tags).
+ */
+export function buildKaraokeAss(lines: KaraokeLine[], aspect: "16:9" | "9:16" | "1:1"): string {
+  const [w, h] = ASPECT_RESOLUTION[aspect];
+  const fontSize = Math.round(h * 0.026);
+  const marginV = Math.round(h * 0.05);
+  const header = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${w}`,
+    `PlayResY: ${h}`,
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    // PrimaryColour = already-spoken (stays highlighted after \k sweeps past it), yellow.
+    // SecondaryColour = not-yet-spoken (default resting color), white.
+    `Style: Caption,Arial,${fontSize},&H0000FFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,2,1,2,80,80,${marginV},1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+  ].join("\n");
+
+  const events = lines.map((line) => {
+    const text = line.words
+      .map((word) => `{\\k${Math.max(1, Math.round(word.durationSec * 100))}}${escapeAssText(word.text)}`)
+      .join(" ");
+    return `Dialogue: 0,${formatAssTime(line.start)},${formatAssTime(line.end)},Caption,,0,0,0,,${text}`;
+  }).join("\n");
+
+  return `${header}\n${events}\n`;
+}
 
 /**
  * Turn a static image into a narration-length clip with a slow Ken Burns
@@ -159,7 +225,16 @@ export async function muxAudioOntoVideo(
     "-b:a", "192k",
   ];
 
-  if (subtitlePath) {
+  if (subtitlePath && subtitlePath.toLowerCase().endsWith(".ass")) {
+    // A real .ass file (see buildKaraokeAss) already carries its own
+    // PlayResX/PlayResY and per-word \k karaoke timing — burn it as-is via
+    // the `ass` filter rather than `subtitles`+force_style, which only
+    // applies one uniform style and can't carry per-word override tags (it
+    // converts SRT text through libass's own auto-styling, discarding any
+    // control codes typed into the plain text).
+    const escapedSubtitle = resolve(subtitlePath).replace(/\\/g, "/").replace(/:/g, "\\:");
+    args.push("-vf", `ass='${escapedSubtitle}'`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23");
+  } else if (subtitlePath) {
     // Plain .srt carries no resolution info, so libass's SRT->ASS conversion
     // falls back to an internal default reference size unless told the real
     // frame size via `original_size` — without it, FontSize is computed

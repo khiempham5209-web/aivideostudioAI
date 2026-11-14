@@ -16,8 +16,9 @@ import {
 } from "../assets/audio-tools.js";
 import { indexSfxLibrary, pickSfxForScene, defaultPlayback } from "../assets/sfx-selector.js";
 import { composeTemplate } from "./template-composer.js";
-import { cutFootageToDuration, fitClipToDuration, imageToKenBurnsClip, concatVideos, muxAudioOntoVideo } from "./video-tools.js";
-import { fetchPexelsMedia, isPexelsConfigured, deriveVisualQuery } from "../assets/pexels-client.js";
+import { cutFootageToDuration, fitClipToDuration, imageToKenBurnsClip, concatVideos, muxAudioOntoVideo, buildKaraokeAss, type KaraokeLine } from "./video-tools.js";
+import { fetchPexelsMedia, isPexelsConfigured, deriveVisualQueriesBatch } from "../assets/pexels-client.js";
+import { fetchPixabayMedia, isPixabayConfigured } from "../assets/pixabay-client.js";
 import { log } from "../utils/logger.js";
 
 const TOTAL_STEPS = 8;
@@ -52,6 +53,71 @@ function formatSrtTime(seconds: number): string {
 
 function srtText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+// One-line captions: ~9 words is roughly what a single readable line holds
+// at the smaller karaoke font size before it starts crowding the frame
+// width; the char cap is just a safety net for scenes with unusually long
+// words. A whole scene's sentence burned in as one static cue reads as a
+// wall of text parked on screen for the scene's full duration instead of
+// captions that track the voice.
+const SUBTITLE_CHUNK_MAX_CHARS = 46;
+const SUBTITLE_CHUNK_MAX_WORDS = 9;
+
+interface SceneSubtitleChunk {
+  text: string;
+  start: number;
+  end: number;
+  words: Array<{ text: string; start: number; end: number }>;
+}
+
+/** Splits one scene's spoken text into short one-line caption chunks and
+ *  distributes the scene's known audio duration across them — and each
+ *  chunk's duration across its own words — proportional to character count
+ *  (a proxy for how long it takes to say). No TTS engine here returns real
+ *  word-level timestamps (every client writes an empty .srt), so this is an
+ *  estimate, but it tracks natural speech pacing far better than parking
+ *  the entire sentence on screen for the whole scene, and gives the karaoke
+ *  burn-in a per-word timing to sweep through. */
+function chunkSceneSubtitle(text: string, sceneStart: number, sceneDurationSec: number): SceneSubtitleChunk[] {
+  const words = srtText(text).split(" ").filter(Boolean);
+  if (words.length === 0 || sceneDurationSec <= 0) return [];
+  const chunkWordLists: string[][] = [];
+  let current: string[] = [];
+  let currentChars = 0;
+  for (const word of words) {
+    const wouldBeChars = currentChars + (current.length ? 1 : 0) + word.length;
+    if (current.length && (wouldBeChars > SUBTITLE_CHUNK_MAX_CHARS || current.length >= SUBTITLE_CHUNK_MAX_WORDS)) {
+      chunkWordLists.push(current);
+      current = [word];
+      currentChars = word.length;
+    } else {
+      current.push(word);
+      currentChars = wouldBeChars;
+    }
+  }
+  if (current.length) chunkWordLists.push(current);
+
+  const chunkChars = chunkWordLists.map((ws) => ws.join(" ").length);
+  const totalChars = chunkChars.reduce((sum, c) => sum + c, 0) || 1;
+  let cursor = sceneStart;
+  return chunkWordLists.map((ws, i) => {
+    const chunkDur = sceneDurationSec * (chunkChars[i] / totalChars);
+    const chunkStart = cursor;
+    const chunkEnd = chunkStart + chunkDur;
+    cursor = chunkEnd;
+
+    const wordTotalChars = ws.reduce((sum, w) => sum + w.length, 0) || 1;
+    let wordCursor = chunkStart;
+    const words = ws.map((w) => {
+      const wStart = wordCursor;
+      const wEnd = wStart + chunkDur * (w.length / wordTotalChars);
+      wordCursor = wEnd;
+      return { text: w, start: wStart, end: wEnd };
+    });
+
+    return { text: ws.join(" "), start: chunkStart, end: chunkEnd, words };
+  });
 }
 
 const VN_ONES = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
@@ -142,6 +208,16 @@ function textForTts(text: string): string {
     .replace(/…/g, "...")
     .replace(/[–—]/g, ", ")
     .replace(LOANWORD_PATTERN, (match) => LOANWORD_RESPELLINGS[match.toLowerCase()])
+    // A comma glued directly between two digit runs with no surrounding
+    // space ("3,5") is a Vietnamese decimal point, not sentence punctuation
+    // — read as "phẩy", not a pause. This must run BEFORE the standalone-
+    // digit pass below, which otherwise sees "3" and "5" as two independent
+    // \b\d+\b numbers either side of a bare "," left in the output, and a
+    // bare comma reads as a pause to any TTS engine ("ba, [pause] năm"
+    // instead of "ba phẩy năm"). A comma WITH a following space ("3, 5")
+    // is ordinary punctuation and is correctly left alone — real sentence
+    // commas should keep pausing normally.
+    .replace(/\b(\d+),(\d+)\b/g, (_m, intPart, fracPart) => `${numberToVietnameseWords(Number(intPart))} phẩy ${numberToVietnameseWords(Number(fracPart))}`)
     .replace(/\b\d+\b/g, (digits) => numberToVietnameseWords(Number(digits)))
     .replace(/\s+/g, " ")
     .trim();
@@ -387,17 +463,31 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const subtitleDir = join(outputDir, "subtitles");
   await mkdir(subtitleDir, { recursive: true });
   const subtitlePath = join(subtitleDir, "subtitle.srt");
-  const subtitleBody = script.scenes.map((scene, index) => {
+  const karaokeAssPath = join(subtitleDir, "subtitle-karaoke.ass");
+  let cueIndex = 0;
+  const karaokeLines: KaraokeLine[] = [];
+  const subtitleBody = script.scenes.flatMap((scene) => {
     const audio = sceneAudio.find((a) => a.id === scene.id)!;
     const start = sceneStarts[scene.id];
-    const end = start + audio.durationSec;
-    return [
-      String(index + 1),
-      `${formatSrtTime(start)} --> ${formatSrtTime(end)}`,
-      srtText(scene.voiceText),
-    ].join("\n");
+    const chunks = chunkSceneSubtitle(scene.voiceText, start, audio.durationSec);
+    for (const chunk of chunks) {
+      karaokeLines.push({
+        start: chunk.start,
+        end: chunk.end,
+        words: chunk.words.map((w) => ({ text: w.text, durationSec: w.end - w.start })),
+      });
+    }
+    return chunks.map((chunk) => {
+      cueIndex += 1;
+      return [
+        String(cueIndex),
+        `${formatSrtTime(chunk.start)} --> ${formatSrtTime(chunk.end)}`,
+        chunk.text,
+      ].join("\n");
+    });
   }).join("\n\n");
   await writeFile(subtitlePath, `${subtitleBody}\n`, "utf8");
+  await writeFile(karaokeAssPath, buildKaraokeAss(karaokeLines, script.aspect), "utf8");
 
   // STEP 5 — SFX selection + mix
   log.step(5, TOTAL_STEPS, "Pick + mix SFX");
@@ -450,6 +540,8 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   await mkdir(clipsDir, { recursive: true });
   const pexelsCacheDir = join(outputDir, "..", "..", "assets", "pexels-cache");
   if (isPexelsConfigured()) await mkdir(pexelsCacheDir, { recursive: true });
+  const pixabayCacheDir = join(outputDir, "..", "..", "assets", "pixabay-cache");
+  if (isPixabayConfigured()) await mkdir(pixabayCacheDir, { recursive: true });
   const FOOTAGE_DIR = options.footageDir ?? join(outputDir, "..", "..", "assets", "footage");
   const footageFiles = await listFootageFiles(FOOTAGE_DIR);
   const footageDurations = await Promise.all(footageFiles.map((file) => getDurationSec(file)));
@@ -461,6 +553,24 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const lastIdx = script.scenes.length - 1;
   const fittedClips: string[] = [];
   let footageCursor = 0;
+
+  // Batch-derive stock-search queries (shared by both Pexels and Pixabay
+  // below) for every scene that will actually need one, in as few Gemini
+  // calls as possible (see deriveVisualQueriesBatch) — the free Gemini tier
+  // this app runs against caps out at 20 requests/day, and asking for one
+  // query per scene individually blew through that in well under 30 scenes
+  // on a real 118-scene render, silently falling every remaining scene back
+  // to the AI-drawn template for the rest of the video.
+  let batchedVisualQueries: Record<string, string | null> = {};
+  if ((isPexelsConfigured() || isPixabayConfigured()) && footageFiles.length === 0) {
+    const scenesNeedingQuery = script.scenes
+      .filter((scene) => !options.footagePlan?.[scene.id]?.path && !scene.visualQuery && !existsSync(join(clipsDir, `scene-${scene.id}-fit.mp4`)))
+      .map((scene) => ({ id: scene.id, voiceText: scene.voiceText }));
+    if (scenesNeedingQuery.length > 0) {
+      batchedVisualQueries = await deriveVisualQueriesBatch(scenesNeedingQuery);
+    }
+  }
+
   for (let i = 0; i < script.scenes.length; i++) {
     const scene = script.scenes[i];
     report(`Đang dựng hình scene ${i + 1}/${script.scenes.length}`, 20 + Math.round((i / script.scenes.length) * 65));
@@ -505,31 +615,37 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
       log.info(`  scene ${scene.id}: footage ${footageIndex + 1} @ ${startSec.toFixed(2)}s → ${visualDur.toFixed(2)}s`);
       footageCursor += visualDur;
       fittedClips.push(fitClip);
-    } else if (isPexelsConfigured()) {
+    } else if (isPexelsConfigured() || isPixabayConfigured()) {
       // AI-script-generated scenes already carry an English visualQuery
       // (see prompt-to-script.ts's prompt). Manually-written/pasted scenes
       // — the common case — had none, and used to get skipped straight to
-      // the AI-drawn template as if Pexels weren't configured at all.
-      // Deriving one here from the (often Vietnamese) narration text means
-      // real stock footage is attempted regardless of how the scene's text
-      // was created, not just for the one script-entry path. Only spend the
-      // Gemini call when actually about to fetch — a REUSE hit below skips
-      // it entirely.
-      const visualQuery = existsSync(fitClip) ? null : scene.visualQuery || (await deriveVisualQuery(scene.voiceText));
-      const pexels = visualQuery ? await fetchPexelsMedia(visualQuery, script.aspect, pexelsCacheDir) : null;
+      // the AI-drawn template as if no stock source were configured at all.
+      // Falling back to the batched query (derived up front for every scene
+      // that needed one, see above) means real stock footage is attempted
+      // regardless of how the scene's text was created, not just for the
+      // one script-entry path — without spending a Gemini call per scene.
+      // Pexels is tried first (was the only source, has a slightly larger
+      // catalog in practice); Pixabay is a second free source tried only on
+      // a Pexels miss, not a replacement — it costs nothing extra to check
+      // and only widens the odds of a real match over the AI-drawn fallback.
+      const visualQuery = existsSync(fitClip) ? null : (scene.visualQuery || batchedVisualQueries[scene.id] || null);
+      const pexels = visualQuery && isPexelsConfigured() ? await fetchPexelsMedia(visualQuery, script.aspect, pexelsCacheDir) : null;
+      const pixabay = !pexels && visualQuery && isPixabayConfigured() ? await fetchPixabayMedia(visualQuery, script.aspect, pixabayCacheDir) : null;
+      const stock = pexels ?? pixabay;
+      const stockSource = pexels ? "Pexels" : "Pixabay";
       if (existsSync(fitClip)) {
-        log.info(`  scene ${scene.id}: REUSE Pexels/template clip`);
+        log.info(`  scene ${scene.id}: REUSE stock/template clip`);
         fittedClips.push(fitClip);
-      } else if (pexels?.type === "video") {
-        await cutFootageToDuration(pexels.path, 0, visualDur, fitClip, script.aspect, RENDER_FPS);
-        log.info(`  scene ${scene.id}: Pexels video "${visualQuery}" -> ${visualDur.toFixed(2)}s`);
+      } else if (stock?.type === "video") {
+        await cutFootageToDuration(stock.path, 0, visualDur, fitClip, script.aspect, RENDER_FPS);
+        log.info(`  scene ${scene.id}: ${stockSource} video "${visualQuery}" -> ${visualDur.toFixed(2)}s`);
         fittedClips.push(fitClip);
-      } else if (pexels?.type === "image") {
-        await imageToKenBurnsClip(pexels.path, visualDur, fitClip, script.aspect, RENDER_FPS);
-        log.info(`  scene ${scene.id}: Pexels photo "${visualQuery}" (Ken Burns) -> ${visualDur.toFixed(2)}s`);
+      } else if (stock?.type === "image") {
+        await imageToKenBurnsClip(stock.path, visualDur, fitClip, script.aspect, RENDER_FPS);
+        log.info(`  scene ${scene.id}: ${stockSource} photo "${visualQuery}" (Ken Burns) -> ${visualDur.toFixed(2)}s`);
         fittedClips.push(fitClip);
       } else {
-        log.info(`  scene ${scene.id}: no Pexels match for "${visualQuery ?? "(no query)"}", falling back to AI template`);
+        log.info(`  scene ${scene.id}: no stock match for "${visualQuery ?? "(no query)"}", falling back to AI template`);
         if (existsSync(rawClip)) {
           log.info(`  scene ${scene.id}: REUSE clip — delete to force re-render`);
         } else {
@@ -564,7 +680,7 @@ export async function runTemplatePipeline(scriptPath: string, options: TemplateP
   const silentVideo = join(outputDir, "video-silent.mp4");
   const videoPath = join(outputDir, "video.mp4");
   await concatVideos(fittedClips, silentVideo);
-  await muxAudioOntoVideo(silentVideo, voiceMp3, videoPath, options.burnSubtitles ? subtitlePath : undefined, script.aspect);
+  await muxAudioOntoVideo(silentVideo, voiceMp3, videoPath, options.burnSubtitles ? karaokeAssPath : undefined, script.aspect);
 
   // STEP 8 — done
   log.step(8, TOTAL_STEPS, "Done");

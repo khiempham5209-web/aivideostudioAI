@@ -114,6 +114,54 @@ export async function deriveVisualQuery(voiceText: string): Promise<string | nul
   }
 }
 
+// The free Gemini tier this app runs against caps out at just 20
+// requests/day for gemini-2.5-flash (seen directly in a real render's log:
+// RESOURCE_EXHAUSTED, quotaId GenerateRequestsPerDayPerProjectPerModel-
+// FreeTier, quotaValue "20") — one deriveVisualQuery() call per scene blew
+// through that in well under 30 scenes on a real 118-scene video, silently
+// falling every remaining scene back to the AI-drawn template for the rest
+// of the render. Batching many scenes into one Gemini call cuts total
+// requests by roughly this constant, keeping realistic-length videos inside
+// the daily cap instead of exhausting it a quarter of the way through.
+const VISUAL_QUERY_BATCH_SIZE = 30;
+
+/** Same intent as deriveVisualQuery, but for many scenes in one Gemini call
+ *  (see VISUAL_QUERY_BATCH_SIZE) — drastically fewer requests against a
+ *  tight daily quota. Returns a query (or null on no-match/failure) per
+ *  scene id; a failed batch degrades to null for just that batch's scenes,
+ *  same never-throw contract as deriveVisualQuery. */
+export async function deriveVisualQueriesBatch(
+  scenes: Array<{ id: string; voiceText: string }>,
+): Promise<Record<string, string | null>> {
+  const result: Record<string, string | null> = {};
+  const eligible = scenes.filter((s) => {
+    if (!process.env.GEMINI_API_KEY || !s.voiceText.trim()) {
+      result[s.id] = null;
+      return false;
+    }
+    return true;
+  });
+
+  for (let i = 0; i < eligible.length; i += VISUAL_QUERY_BATCH_SIZE) {
+    const batch = eligible.slice(i, i + VISUAL_QUERY_BATCH_SIZE);
+    try {
+      const list = batch.map((s, idx) => `${idx + 1}. "${s.voiceText.trim().slice(0, 300)}"`).join("\n");
+      const prompt = `For each numbered narration line below, give 2-4 concrete English keywords describing a stock photo/video that would visually match it (concrete and visual, not abstract — e.g. "person writing at desk" not "feeling overwhelmed").\n\n${list}\n\nRespond as JSON: {"queries": ["keyword keyword keyword", ...]} — exactly ${batch.length} strings, in the same order as the numbered list, one per line.`;
+      const raw = await callGemini(prompt, DEFAULT_MODEL, 60 * batch.length);
+      const parsed = JSON.parse(raw) as { queries?: unknown };
+      const queries = Array.isArray(parsed.queries) ? parsed.queries : [];
+      batch.forEach((s, idx) => {
+        const q = queries[idx];
+        result[s.id] = typeof q === "string" && q.trim() ? q.trim() : null;
+      });
+    } catch (error) {
+      console.warn(`Pexels batch visualQuery derivation failed: ${error instanceof Error ? error.message : error}`);
+      batch.forEach((s) => { result[s.id] = null; });
+    }
+  }
+  return result;
+}
+
 /**
  * Fetches one stock clip/photo for `query`, downloads it to `cacheDir`, and
  * returns its local path + type. Caches by (query, aspect) so the same
